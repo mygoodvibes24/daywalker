@@ -39,6 +39,24 @@ var skin_color: Color
 var eye_color: Color
 var marker: MeshInstance3D
 
+# Character models (baked by tools/bake_rigs.gd). The primitive bodies stay as a fallback.
+const MODEL_PATHS := {
+	"vampire": "res://assets/characters/vampire/vampire_rig.scn",
+	"werewolf": "res://assets/characters/werewolf/werewolf_rig.scn",
+	"civilian": "res://assets/characters/civilian/civilian_rig.scn",
+}
+static var _scene_cache := {} # shared PackedScenes
+static var _eye_meshes := {}
+var model: Node3D
+var model_name := ""
+var skel: Skeleton3D
+var body_mesh: MeshInstance3D
+var overlay_mat: StandardMaterial3D # the only per-enemy material: flash / burn / death tint
+var bone := {}
+var run_blend := 0.0
+var windup_blend := 0.0
+var stagger_blend := 0.0
+
 
 func _ready() -> void:
 	collision_layer = 4
@@ -76,6 +94,103 @@ func _ready() -> void:
 	marker.visible = false
 
 
+static func _model_scene(n: String) -> PackedScene:
+	if not _scene_cache.has(n):
+		var path: String = MODEL_PATHS[n]
+		_scene_cache[n] = (load(path) as PackedScene) if ResourceLoader.exists(path) else null
+	return _scene_cache[n]
+
+
+## Swap the visible body for one of the character models. False if it can't be loaded.
+func _set_model(n: String) -> bool:
+	var ps := _model_scene(n)
+	if ps == null:
+		return false
+	var inst := ps.instantiate() as Node3D
+	var sk: Skeleton3D = null
+	if inst != null:
+		sk = inst.get_node_or_null("Skeleton") as Skeleton3D
+	if sk == null or sk.get_node_or_null("Body") == null:
+		if inst != null:
+			inst.free()
+		return false
+	if model != null:
+		visual.remove_child(model)
+		model.queue_free()
+	model = inst
+	model_name = n
+	skel = sk
+	body_mesh = sk.get_node("Body")
+	visual.add_child(model)
+	bone.clear()
+	for i in skel.get_bone_count():
+		bone[skel.get_bone_name(i)] = i
+	if overlay_mat == null:
+		overlay_mat = StandardMaterial3D.new()
+		overlay_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		overlay_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		overlay_mat.albedo_color = Color(1, 1, 1, 0)
+	# glowing eyes ride the head bone
+	var r: float = model.get_meta("eye_radius", 0.011)
+	if not _eye_meshes.has(r):
+		_eye_meshes[r] = U.sphere(r)
+	var att := BoneAttachment3D.new()
+	skel.add_child(att)
+	att.bone_name = "head"
+	var head_rest: Vector3 = model.get_meta("head_rest", Vector3(0, 1.5, 0))
+	att.visible = n != "civilian"
+	for key in ["eye_l", "eye_r"]:
+		var e := U.part(att, _eye_meshes[r], eye_mat, model.get_meta(key, head_rest) - head_rest)
+		e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return true
+
+
+func _set_overlay(c: Color) -> void:
+	if body_mesh == null:
+		return
+	if c.a <= 0.01:
+		if body_mesh.material_overlay != null:
+			body_mesh.material_overlay = null # no extra pass when there is nothing to show
+		return
+	overlay_mat.albedo_color = c
+	if body_mesh.material_overlay == null:
+		body_mesh.material_overlay = overlay_mat
+
+
+func _rot(b: String, q: Quaternion) -> void:
+	skel.set_bone_pose_rotation(bone[b], q)
+
+
+## Procedural pose on the baked skeleton (rest pose is a T-pose, +Z forward).
+func _pose(delta: float, spd: float) -> void:
+	var wolf := model_name == "werewolf"
+	run_blend = lerpf(run_blend, clampf(spd / 4.0, 0.0, 1.0), minf(8.0 * delta, 1.0))
+	windup_blend = lerpf(windup_blend, 1.0 if windup_t > 0.0 else 0.0, minf(14.0 * delta, 1.0))
+	stagger_blend = lerpf(stagger_blend, 1.0 if staggered else 0.0, minf(8.0 * delta, 1.0))
+	var r := run_blend * (1.0 - stagger_blend)
+	var up := windup_blend
+	var sl := stagger_blend
+	var s := sin(phase)
+	var c := cos(phase)
+	var idle := sin(phase * 0.35) * (1.0 - r)
+	var stride := 0.75 if wolf else 0.65
+	_rot("thigh_l", Quaternion(Vector3.RIGHT, (-s * stride - 0.12) * r + 0.08 * sl))
+	_rot("thigh_r", Quaternion(Vector3.RIGHT, (s * stride - 0.12) * r - 0.1 * sl))
+	_rot("shin_l", Quaternion(Vector3.RIGHT, (0.2 + 0.9 * maxf(c, 0.0)) * r + 0.2 * sl))
+	_rot("shin_r", Quaternion(Vector3.RIGHT, (0.2 + 0.9 * maxf(-c, 0.0)) * r + 0.15 * sl))
+	var down := (1.05 if wolf else 1.25) + 0.15 * sl - 0.45 * up + idle * 0.02
+	var swing := s * 0.6 * r
+	var raise := -1.35 * up + 0.12 * sl
+	_rot("upper_l", Quaternion(Vector3.RIGHT, swing + raise) * Quaternion(Vector3.BACK, -down))
+	_rot("upper_r", Quaternion(Vector3.RIGHT, -swing + raise) * Quaternion(Vector3.BACK, down))
+	var bend := (0.55 if wolf else 0.2) + 0.9 * r + 0.5 * up
+	_rot("fore_l", Quaternion(Vector3.UP, -bend))
+	_rot("fore_r", Quaternion(Vector3.UP, bend))
+	_rot("spine", Quaternion(Vector3.RIGHT, 0.1 * r + 0.3 * sl - 0.12 * up) * Quaternion(Vector3.BACK, idle * 0.035))
+	_rot("chest", Quaternion(Vector3.UP, s * 0.14 * r) * Quaternion(Vector3.RIGHT, 0.15 * sl))
+	_rot("head", Quaternion(Vector3.RIGHT, 0.45 * sl - 0.1 * r - (0.2 if wolf else 0.0)) * Quaternion(Vector3.UP, idle * 0.08))
+
+
 func _limbs(leg_mat: Material, torso_mat: Material, arm_mat: Material) -> void:
 	U.part(visual, U.capsule(0.12, 0.9), leg_mat, Vector3(-0.13, 0.45, 0))
 	U.part(visual, U.capsule(0.12, 0.9), leg_mat, Vector3(0.13, 0.45, 0))
@@ -94,10 +209,11 @@ func _build_vampire() -> void:
 	body_mat = U.mat(body_color, 0.35, 0.1)
 	skin_mat = U.mat(skin_color, 0.5)
 	eye_mat = U.glow(eye_color, 5.0)
-	_limbs(body_mat, body_mat, body_mat)
-	U.part(visual, U.sphere(0.175), U.mat(Color(0.02, 0.02, 0.02), 0.15), Vector3(0, 1.83, -0.03), Vector3.ZERO, Vector3(1, 0.75, 1))
-	U.part(visual, U.box(Vector3(0.75, 1.35, 0.04)), U.mat(Color(0.45, 0.0, 0.05), 0.5), Vector3(0, 1.0, -0.3), Vector3(0.12, 0, 0))
-	U.part(visual, U.box(Vector3(0.6, 0.25, 0.05)), U.mat(Color(0.45, 0.0, 0.05), 0.5), Vector3(0, 1.62, -0.18), Vector3(-0.3, 0, 0))
+	if not _set_model("vampire"):
+		_limbs(body_mat, body_mat, body_mat)
+		U.part(visual, U.sphere(0.175), U.mat(Color(0.02, 0.02, 0.02), 0.15), Vector3(0, 1.83, -0.03), Vector3.ZERO, Vector3(1, 0.75, 1))
+		U.part(visual, U.box(Vector3(0.75, 1.35, 0.04)), U.mat(Color(0.45, 0.0, 0.05), 0.5), Vector3(0, 1.0, -0.3), Vector3(0.12, 0, 0))
+		U.part(visual, U.box(Vector3(0.6, 0.25, 0.05)), U.mat(Color(0.45, 0.0, 0.05), 0.5), Vector3(0, 1.62, -0.18), Vector3(-0.3, 0, 0))
 	max_hp = 40.0
 	speed = 7.6
 	damage = 8.0
@@ -112,8 +228,9 @@ func _build_civilian() -> void:
 	body_mat = U.mat(body_color, 0.9)
 	skin_mat = U.mat(skin_color, 0.6)
 	eye_mat = U.glow(eye_color, 0.0)
-	_limbs(U.mat(Color(0.15, 0.18, 0.3), 0.9), body_mat, body_mat)
-	U.part(visual, U.sphere(0.175), U.mat(Color(0.08, 0.06, 0.05), 0.9), Vector3(0, 1.84, -0.02), Vector3.ZERO, Vector3(1, 0.7, 1))
+	if not _set_model("civilian"):
+		_limbs(U.mat(Color(0.15, 0.18, 0.3), 0.9), body_mat, body_mat)
+		U.part(visual, U.sphere(0.175), U.mat(Color(0.08, 0.06, 0.05), 0.9), Vector3(0, 1.84, -0.02), Vector3.ZERO, Vector3(1, 0.7, 1))
 	max_hp = 50.0
 	speed = 5.4
 	damage = 7.0
@@ -136,14 +253,20 @@ func _start_transform() -> void:
 	eye_mat.emission = eye_color
 	eye_mat.emission_energy_multiplier = 5.0
 	var tw := create_tween().set_parallel(true)
-	tw.tween_property(visual, "scale", Vector3(1.45, 1.35, 1.45), 1.2).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 	tw.tween_property(body_mat, "albedo_color", body_color, 1.0)
 	tw.tween_property(skin_mat, "albedo_color", skin_color, 1.0)
-	wolf_parts = [
-		U.part(visual, U.cyl(0.0, 0.06, 0.2), skin_mat, Vector3(-0.1, 1.98, 0), Vector3(0, 0, 0.3)),
-		U.part(visual, U.cyl(0.0, 0.06, 0.2), skin_mat, Vector3(0.1, 1.98, 0), Vector3(0, 0, -0.3)),
-		U.part(visual, U.box(Vector3(0.14, 0.12, 0.24)), skin_mat, Vector3(0, 1.73, 0.18)),
-	]
+	if model != null and _set_model("werewolf"):
+		# the wolf model is already 2.4 m: start it man-sized and let it burst up
+		visual.scale = Vector3(0.7, 0.72, 0.7)
+		tw.tween_property(visual, "scale", Vector3.ONE, 1.2).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	else:
+		tw.tween_property(visual, "scale", Vector3(1.45, 1.35, 1.45), 1.2).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+		if model == null:
+			wolf_parts = [
+				U.part(visual, U.cyl(0.0, 0.06, 0.2), skin_mat, Vector3(-0.1, 1.98, 0), Vector3(0, 0, 0.3)),
+				U.part(visual, U.cyl(0.0, 0.06, 0.2), skin_mat, Vector3(0.1, 1.98, 0), Vector3(0, 0, -0.3)),
+				U.part(visual, U.box(Vector3(0.14, 0.12, 0.24)), skin_mat, Vector3(0, 1.73, 0.18)),
+			]
 	main.on_wolf_transform(self)
 
 
@@ -163,6 +286,10 @@ func _revert_transform() -> void:
 	for part in wolf_parts:
 		part.queue_free()
 	wolf_parts.clear()
+	eye_mat.albedo_color = eye_color
+	eye_mat.emission = eye_color
+	if model_name == "werewolf" and _set_model("civilian"):
+		visual.scale = Vector3(1.3, 1.3, 1.3)
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(visual, "scale", Vector3.ONE, 0.9).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(body_mat, "albedo_color", body_color, 0.9)
@@ -320,6 +447,16 @@ func _animate(delta: float, spd: float) -> void:
 		if flash_t > 0.0:
 			c = c.lerp(Color.WHITE, flash_t / 0.12)
 		body_mat.albedo_color = c
+	if model != null:
+		var o := Color(1, 1, 1, 0)
+		if transform_t > 0.0: # the change: dark fur colour washing off
+			o = Color(body_color.r, body_color.g, body_color.b, clampf(transform_t, 0.0, 1.0) * 0.7)
+		if burning:
+			o = Color(1.0, 0.35, 0.05, 0.4 + 0.3 * sin(phase * 3.0))
+		if flash_t > 0.0:
+			o = o.lerp(Color(1, 1, 1, 0.9), flash_t / 0.12)
+		_set_overlay(o)
+		_pose(delta, spd)
 	eye_mat.emission_energy_multiplier = (9.0 if windup_t > 0.0 else 5.0) if (kind == VAMPIRE or transformed) else 0.0
 	if staggered:
 		marker.position.y = 2.7 + sin(phase * 0.6) * 0.12
@@ -363,10 +500,16 @@ func _die(_drained: bool) -> void:
 	main.on_enemy_killed(self, _drained)
 	var tw := create_tween()
 	if kind == VAMPIRE:
+		if model != null: # turn to ash: grey, shaded overlay
+			overlay_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+			_set_overlay(Color(0.3, 0.3, 0.3, 0.05))
+			tw.tween_property(overlay_mat, "albedo_color", Color(0.3, 0.3, 0.3, 0.92), 0.25)
+			tw.parallel()
 		tw.tween_property(body_mat, "albedo_color", Color(0.25, 0.25, 0.25), 0.25)
 		tw.parallel().tween_property(skin_mat, "albedo_color", Color(0.3, 0.3, 0.3), 0.25)
 		tw.tween_property(visual, "scale", Vector3(1.4, 0.02, 1.4), 0.45)
 	else:
+		_set_overlay(Color(1, 1, 1, 0))
 		tw.tween_property(visual, "rotation:x", -1.5, 0.45).set_ease(Tween.EASE_IN)
 		tw.tween_interval(1.2)
 		tw.tween_property(visual, "scale", Vector3.ZERO, 0.4)
