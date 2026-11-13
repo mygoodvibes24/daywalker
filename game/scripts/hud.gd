@@ -14,6 +14,7 @@ var prompt_label: Label
 var announce_label: Label
 var popup_label: Label
 var help_label: Label
+var tithe_label: Label # PROGRESSION HOOK: rank + Tithe
 var vignette: ColorRect
 var frenzy_tint: ColorRect
 var start_overlay: Control
@@ -26,8 +27,8 @@ var damage_t := 0.0
 var help_t := 20.0
 var started := false
 var using_pad := false
-const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)\nRMB / Q  Blood Dash   LMB / J  blade combo\nE  bite a staggered enemy (red orb)   F  drink at the Undercroft\nMouse  look   T  rain on/off   ESC  release mouse"
-const PAD_HELP := "L-stick move   R-stick camera   LT / L3 sprint   A jump (x2)\nB / RB  Blood Dash   X / RT  blade combo\nY  bite a staggered enemy (red orb)   LB  drink at the Undercroft\nSTART  restart after death   BACK  rain on/off"
+const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)\nRMB / Q  Blood Dash   LMB / J  blade combo\nE  bite a staggered enemy (red orb) / take loot   F  drink at the Undercroft\nTAB / I  the Coat (inventory)   1 / 2  quick-use   T  rain   ESC  release mouse"
+const PAD_HELP := "L-stick move   R-stick camera   LT / L3 sprint   A jump (x2)\nB / RB  Blood Dash   X / RT  blade combo\nY  bite a staggered enemy (red orb) / take loot   LB  drink at the Undercroft\nSTART  the Coat (restart after death)   LB / R3  quick-use   BACK  rain"
 
 
 func _ready() -> void:
@@ -54,6 +55,8 @@ func _ready() -> void:
 	box.add_child(form_label)
 	dash_label = _label("", 18, Color(0.85, 0.9, 1.0))
 	box.add_child(dash_label)
+	tithe_label = _label("", 18, Color(1.0, 0.45, 0.4))
+	box.add_child(tithe_label)
 
 	clock_label = _label("", 30, Color.WHITE)
 	_pin(clock_label, 1.0, 0.0, Rect2(-344, 16, 320, 40))
@@ -76,7 +79,7 @@ func _ready() -> void:
 
 	help_label = _label(KEYS_HELP, 15, Color(0.8, 0.8, 0.8))
 	root.add_child(help_label)
-	_pin(help_label, 0.0, 1.0, Rect2(24, -110, 700, 100))
+	_pin(help_label, 0.0, 1.0, Rect2(24, -110, 760, 100))
 
 	start_overlay = _build_start()
 	over_panel = ColorRect.new()
@@ -222,6 +225,7 @@ func _process(delta: float) -> void:
 	var real_dt := delta / maxf(Engine.time_scale, 0.01)
 	var p = main.player
 	start_overlay.visible = not started
+	hp_bar.max_value = p.max_hp # PROGRESSION HOOK: ranks raise max blood
 	hp_bar.value = p.hp
 	hunger_bar.value = p.hunger
 	hunger_fill.bg_color = Color(0.45, 0.1, 0.55).lerp(Color(1.0, 0.05, 0.1), p.hunger / 100.0)
@@ -243,6 +247,12 @@ func _process(delta: float) -> void:
 	clock_label.text = "%s  %s" % [phase, main.clock_text()]
 	info_label.text = "Kills  %d\nNights survived  %d\nBlood bank  %d / %d" % [main.kills, main.night_count, main.lair_stock, main.LAIR_MAX]
 	prompt_label.text = p.prompt_text
+	if main.progression != null: # PROGRESSION HOOK
+		var lp: String = main.loot.prompt_text
+		prompt_label.text = lp if prompt_label.text == "" else (prompt_label.text + ("\n" + lp if lp != "" else ""))
+		tithe_label.text = "RANK %d     TITHE %d" % [main.progression.level, main.progression.tithe]
+		if main.progression.can_level():
+			tithe_label.text += "   ·  a rank awaits at the Undercroft"
 
 	announce_t = maxf(announce_t - real_dt, 0.0)
 	announce_label.modulate.a = clampf(announce_t, 0.0, 1.0)

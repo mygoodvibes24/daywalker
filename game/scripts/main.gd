@@ -8,6 +8,13 @@ const HudScript = preload("res://scripts/hud.gd")
 const AtmosphereScript = preload("res://scripts/atmosphere.gd")
 const Wet = preload("res://scripts/wet_materials.gd")
 const CityScript = preload("res://scripts/city.gd")
+# progression (Tithe, ranks, Vows, loot, the Coat)
+const ProgressionScript = preload("res://scripts/progression.gd")
+const InventoryScript = preload("res://scripts/inventory.gd")
+const LootScript = preload("res://scripts/loot.gd")
+const FxScript = preload("res://scripts/fx.gd")
+const InventoryUI = preload("res://scripts/ui/inventory_ui.gd")
+const LevelupUI = preload("res://scripts/ui/levelup_ui.gd")
 
 const DAY_LENGTH := 240.0 # seconds for one full day/night cycle
 const LAIR_MAX := 3
@@ -40,6 +47,13 @@ var rng := RandomNumberGenerator.new()
 var nav_region: NavigationRegion3D
 var city: Node3D # city.gd: geometry, materials, props
 var started := false
+var progression: Node # progression.gd
+var inventory: Node # inventory.gd
+var loot: Node3D # loot.gd
+var fx: Node3D # fx.gd
+var inventory_ui: CanvasLayer
+var levelup_ui: CanvasLayer
+var ui_block_until := 0 # ms; swallows the button press that closed a menu
 
 
 func _ready() -> void:
@@ -63,6 +77,7 @@ func _ready() -> void:
 	hud.main = self
 	add_child(hud)
 	hud.process_mode = Node.PROCESS_MODE_ALWAYS
+	_setup_progression() # PROGRESSION HOOK
 	_update_lighting()
 	Input.joy_connection_changed.connect(_on_joy_changed)
 	if started_once:
@@ -122,6 +137,11 @@ func _setup_input() -> void:
 	_bind("bite", [KEY_E], [], [JOY_BUTTON_Y])
 	_bind("drink", [KEY_F], [], [JOY_BUTTON_LEFT_SHOULDER])
 	_bind("restart", [KEY_R], [], [JOY_BUTTON_START])
+	# progression: interact shares E / Y with bite (the bite wins while a staggered enemy is in reach)
+	_bind("interact", [KEY_E], [], [JOY_BUTTON_Y])
+	_bind("inventory", [KEY_TAB, KEY_I], [], [JOY_BUTTON_START]) # START restarts only after death
+	_bind("quick_1", [KEY_1], [], [JOY_BUTTON_LEFT_SHOULDER]) # LB drinks bagged blood at the lair instead
+	_bind("quick_2", [KEY_2], [], [JOY_BUTTON_RIGHT_STICK])
 
 
 func _bind(action: String, keys: Array, buttons: Array = [], pad_buttons: Array = [], pad_axes: Array = []) -> void:
@@ -246,7 +266,8 @@ func _process(delta: float) -> void:
 			hud.announce("NIGHTFALL\nThe Velvet Court awakens")
 	elif not was_day and is_day():
 		lair_stock = LAIR_MAX
-		hud.announce("SUNRISE\nVampires burn. The blood bank is restocked.")
+		loot.respawn_caches() # PROGRESSION HOOK
+		hud.announce("SUNRISE\nVampires burn. The blood bank is restocked.\nCoffins and crates are full again.")
 	_update_lighting()
 	_update_spawning(delta)
 
@@ -335,6 +356,7 @@ func release_attack_token(e: Node) -> void:
 
 func on_enemy_killed(_e: Node, _drained: bool) -> void:
 	kills += 1
+	loot.on_enemy_killed(_e, _drained) # PROGRESSION HOOK: Tithe motes, item drops
 
 
 func on_wolf_transform(e: Node3D) -> void:
@@ -380,9 +402,73 @@ func perfect_dodge() -> void:
 	hud.popup("PERFECT DODGE")
 	player.dash_charges = minf(player.dash_charges + 1.0, player.MAX_DASH)
 	set_slowmo(0.3, 0.8)
+	progression.on_perfect_dodge() # PROGRESSION HOOK
 
 
 func on_player_died() -> void:
 	game_over = true
+	progression.on_death(player.global_position) # PROGRESSION HOOK: half the Tithe stays here
 	clear_slowmo()
 	hud.show_game_over()
+
+
+# ---------------------------------------------------------------- progression hooks
+## Tithe, ranks and Vows (progression.gd), the Coat (inventory.gd), loot in the world
+## (loot.gd), Vow effects (fx.gd) and their two menus. Loads user://save.json.
+func _setup_progression() -> void:
+	inventory = InventoryScript.new()
+	inventory.name = "Inventory"
+	inventory.main = self
+	add_child(inventory)
+	progression = ProgressionScript.new()
+	progression.name = "Progression"
+	progression.main = self
+	progression.inventory = inventory
+	add_child(progression)
+	progression.load_save()
+	player.hp = player.max_hp
+	inventory.equipment_changed.connect(_on_equipment_changed)
+	progression.connect_player(player)
+	fx = FxScript.new()
+	fx.name = "Fx"
+	fx.main = self
+	add_child(fx)
+	fx.connect_player(player)
+	loot = LootScript.new()
+	loot.name = "Loot"
+	loot.main = self
+	add_child(loot)
+	inventory_ui = InventoryUI.new()
+	inventory_ui.main = self
+	add_child(inventory_ui)
+	inventory_ui.closed.connect(_on_menu_closed)
+	levelup_ui = LevelupUI.new()
+	levelup_ui.main = self
+	add_child(levelup_ui)
+	levelup_ui.closed.connect(_on_menu_closed)
+	player.set_weapon_visual(inventory.weapon)
+
+
+func _on_equipment_changed() -> void:
+	progression.recompute()
+	player.set_weapon_visual(inventory.weapon)
+	progression.save()
+
+
+func _on_menu_closed() -> void:
+	ui_block_until = Time.get_ticks_msec() + 250
+
+
+func menu_open() -> bool:
+	return inventory_ui.is_open() or levelup_ui.is_open() or Time.get_ticks_msec() < ui_block_until
+
+
+func open_levelup() -> void:
+	if started and not game_over and not menu_open():
+		levelup_ui.open()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("inventory") and started and not game_over and not menu_open():
+		get_viewport().set_input_as_handled()
+		inventory_ui.open()
