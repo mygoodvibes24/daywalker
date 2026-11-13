@@ -2,6 +2,8 @@ extends CharacterBody3D
 ## Elijah "Sol" Marrow — the Daywalker. Fast movement, blade combos, the bite.
 
 const U = preload("res://scripts/util.gd")
+const SolAnim = preload("res://scripts/sol_anim.gd")
+const SOL_SCENE := "res://assets/characters/sol/sol.scn"
 
 const WALK := 7.5
 const SPRINT := 13.0
@@ -53,8 +55,9 @@ var pivot: Node3D
 var spring: SpringArm3D
 var camera: Camera3D
 var visual: Node3D
-var coat: MeshInstance3D
-var arm_pivot: Node3D
+var coat: MeshInstance3D # primitive fallback only
+var arm_pivot: Node3D # swing driver; drawn directly only by the primitive fallback
+var anim: SolAnim # procedural animator for the skinned model (null on the fallback)
 
 
 func _ready() -> void:
@@ -87,6 +90,48 @@ func _ready() -> void:
 func _build_body() -> void:
 	visual = Node3D.new()
 	add_child(visual)
+	if ResourceLoader.exists(SOL_SCENE) and _build_model():
+		return
+	_build_primitive_body()
+
+
+## The generated, skinned Sol model (1.88 m, feet at y=0, facing +Z) with the silver
+## blade in his right hand. Returns false if the asset can't be used.
+func _build_model() -> bool:
+	var scene := load(SOL_SCENE) as PackedScene
+	if scene == null:
+		return false
+	var model := scene.instantiate() as Node3D
+	var skel := model.get_node_or_null("Skeleton3D") as Skeleton3D
+	if skel == null or skel.find_bone("Hand.R") < 0:
+		model.free()
+		return false
+	visual.add_child(model)
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	anim = SolAnim.new()
+	anim.setup(skel)
+	# the blade rides the right hand bone, angled along the forearm like a gripped sword
+	var hand := BoneAttachment3D.new()
+	hand.bone_name = "Hand.R"
+	skel.add_child(hand)
+	var grip := Node3D.new()
+	grip.position = Vector3(-0.09, -0.01, 0.0)
+	grip.rotation.y = -0.96
+	hand.add_child(grip)
+	var steel := U.mat(Color(0.85, 0.88, 0.92), 0.12, 1.0)
+	U.part(grip, U.box(Vector3(0.012, 0.045, 1.0)), steel, Vector3(0, 0, 0.56))
+	U.part(grip, U.box(Vector3(0.13, 0.03, 0.03)), U.mat(Color(0.035, 0.035, 0.04), 0.6), Vector3(0, 0, 0.05))
+	U.part(grip, U.cyl(0.016, 0.016, 0.16), U.mat(Color(0.03, 0.025, 0.02), 0.7), Vector3(0, 0, -0.03), Vector3(PI / 2.0, 0, 0))
+	# arm_pivot keeps its swing math; the animator turns it into the right arm's pose
+	arm_pivot = Node3D.new()
+	arm_pivot.position = Vector3(-0.19, 1.47, -0.06)
+	visual.add_child(arm_pivot)
+	return true
+
+
+## Primitive-built fallback body (used if the generated model is missing).
+func _build_primitive_body() -> void:
 	var black := U.mat(Color(0.035, 0.035, 0.04), 0.6)
 	var leather := U.mat(Color(0.025, 0.022, 0.022), 0.25, 0.2)
 	var skin := U.mat(Color(0.33, 0.21, 0.14), 0.55)
@@ -415,8 +460,9 @@ func _process(delta: float) -> void:
 
 	var hs := Vector2(velocity.x, velocity.z).length()
 	var flare := clampf(hs / 14.0, 0.0, 1.0)
-	coat.scale = Vector3(1.0 + flare * 0.2, 1.0, 1.0 + flare * 0.35)
-	coat.rotation.x = flare * 0.22
+	if coat != null:
+		coat.scale = Vector3(1.0 + flare * 0.2, 1.0, 1.0 + flare * 0.35)
+		coat.rotation.x = flare * 0.22
 
 	if swing_t > 0.0:
 		var k := 1.0 - swing_t / 0.22
@@ -433,6 +479,13 @@ func _process(delta: float) -> void:
 		lean = 0.6
 	elif dash_t > 0.0:
 		lean = 0.35
+	if anim != null:
+		lean *= 0.4 # the skeleton bends the spine itself; keep only a light whole-body tilt
+		anim.update(delta, {
+			"speed": hs, "sprint": sprinting, "on_floor": is_on_floor(),
+			"dashing": dash_t > 0.0, "biting": bite_t > 0.0,
+			"swinging": swing_t > 0.0, "swing_rot": arm_pivot.rotation,
+		})
 	visual.rotation.x = lerpf(visual.rotation.x, lean, 12.0 * delta)
 
 	if dash_t > 0.0 or (frenzy_t > 0.0 and hs > 3.0):
