@@ -53,27 +53,54 @@ func _ready() -> void:
 	hud.main = self
 	add_child(hud)
 	_update_lighting()
+	Input.joy_connection_changed.connect(_on_joy_changed)
+
+
+func _on_joy_changed(_device: int, connected: bool) -> void:
+	hud.popup("CONTROLLER CONNECTED" if connected else "CONTROLLER DISCONNECTED")
+
+
+## Rumble every connected controller (ignored where unsupported).
+func rumble(weak: float, strong: float, seconds: float) -> void:
+	for d in Input.get_connected_joypads():
+		Input.start_joy_vibration(d, weak, strong, seconds)
 
 
 # ---------------------------------------------------------------- input
 func _setup_input() -> void:
-	_bind("move_forward", [KEY_W, KEY_UP])
-	_bind("move_back", [KEY_S, KEY_DOWN])
-	_bind("move_left", [KEY_A, KEY_LEFT])
-	_bind("move_right", [KEY_D, KEY_RIGHT])
-	_bind("jump", [KEY_SPACE])
-	_bind("sprint", [KEY_SHIFT])
-	_bind("dash", [KEY_Q], [MOUSE_BUTTON_RIGHT])
-	_bind("attack", [KEY_J], [MOUSE_BUTTON_LEFT])
-	_bind("bite", [KEY_E])
-	_bind("drink", [KEY_F])
-	_bind("restart", [KEY_R])
+	# keyboard/mouse + controller (Xbox / PlayStation / Switch Pro via standard mapping)
+	_bind("move_forward", [KEY_W, KEY_UP], [], [JOY_BUTTON_DPAD_UP], [[JOY_AXIS_LEFT_Y, -1.0]])
+	_bind("move_back", [KEY_S, KEY_DOWN], [], [JOY_BUTTON_DPAD_DOWN], [[JOY_AXIS_LEFT_Y, 1.0]])
+	_bind("move_left", [KEY_A, KEY_LEFT], [], [JOY_BUTTON_DPAD_LEFT], [[JOY_AXIS_LEFT_X, -1.0]])
+	_bind("move_right", [KEY_D, KEY_RIGHT], [], [JOY_BUTTON_DPAD_RIGHT], [[JOY_AXIS_LEFT_X, 1.0]])
+	_bind("look_left", [], [], [], [[JOY_AXIS_RIGHT_X, -1.0]])
+	_bind("look_right", [], [], [], [[JOY_AXIS_RIGHT_X, 1.0]])
+	_bind("look_up", [], [], [], [[JOY_AXIS_RIGHT_Y, -1.0]])
+	_bind("look_down", [], [], [], [[JOY_AXIS_RIGHT_Y, 1.0]])
+	_bind("jump", [KEY_SPACE], [], [JOY_BUTTON_A])
+	_bind("sprint", [KEY_SHIFT], [], [JOY_BUTTON_LEFT_STICK], [[JOY_AXIS_TRIGGER_LEFT, 1.0]])
+	_bind("dash", [KEY_Q], [MOUSE_BUTTON_RIGHT], [JOY_BUTTON_B, JOY_BUTTON_RIGHT_SHOULDER])
+	_bind("attack", [KEY_J], [MOUSE_BUTTON_LEFT], [JOY_BUTTON_X], [[JOY_AXIS_TRIGGER_RIGHT, 1.0]])
+	_bind("bite", [KEY_E], [], [JOY_BUTTON_Y])
+	_bind("drink", [KEY_F], [], [JOY_BUTTON_LEFT_SHOULDER])
+	_bind("restart", [KEY_R], [], [JOY_BUTTON_START])
 
 
-func _bind(action: String, keys: Array, buttons: Array = []) -> void:
+func _bind(action: String, keys: Array, buttons: Array = [], pad_buttons: Array = [], pad_axes: Array = []) -> void:
 	if InputMap.has_action(action):
 		return
-	InputMap.add_action(action)
+	InputMap.add_action(action, 0.25) # stick deadzone
+	for jb in pad_buttons:
+		var pb := InputEventJoypadButton.new()
+		pb.button_index = jb
+		pb.device = -1 # any controller
+		InputMap.action_add_event(action, pb)
+	for ax in pad_axes:
+		var pm := InputEventJoypadMotion.new()
+		pm.axis = ax[0]
+		pm.axis_value = ax[1]
+		pm.device = -1
+		InputMap.action_add_event(action, pm)
 	for k in keys:
 		var ev := InputEventKey.new()
 		ev.physical_keycode = k

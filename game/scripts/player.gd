@@ -195,10 +195,10 @@ func _physics_process(delta: float) -> void:
 
 	prompt_text = ""
 	if bite_target != null:
-		prompt_text = "[E]  BITE"
+		prompt_text = ("[Y]" if main.hud.using_pad else "[E]") + "  BITE"
 	elif near_lair:
 		if main.lair_stock > 0:
-			prompt_text = "[F]  DRINK BAGGED BLOOD  (%d left)" % main.lair_stock
+			prompt_text = ("[LB]" if main.hud.using_pad else "[F]") + "  DRINK BAGGED BLOOD  (%d left)" % main.lair_stock
 		else:
 			prompt_text = "BLOOD BANK EMPTY  —  restocks at sunrise"
 
@@ -288,6 +288,7 @@ func _attack() -> void:
 			hit = true
 	if hit:
 		shake = maxf(shake, 0.12 if combo < 3 else 0.28)
+		main.rumble(0.4, 0.0 if combo < 3 else 0.5, 0.08)
 		main.set_slowmo(0.06, 0.05 if combo < 3 else 0.09)
 
 
@@ -315,6 +316,7 @@ func _bite(target) -> void:
 			burn_t = 3.0
 			main.hud.popup("WEREWOLF BLOOD  +18\nRAGE  (it burns)")
 	main.set_slowmo(0.35, 0.35)
+	main.rumble(0.3, 0.6, 0.25)
 
 
 func heal(v: float) -> void:
@@ -342,6 +344,7 @@ func take_damage(amount: float, _src) -> void:
 	invuln_t = 0.4
 	shake = maxf(shake, 0.32)
 	main.hud.on_damage()
+	main.rumble(0.5, 0.8, 0.2)
 	if hp <= 0.0:
 		_die()
 
@@ -357,6 +360,13 @@ func _die() -> void:
 
 
 func _process(delta: float) -> void:
+	# controller right stick camera (unscaled so it stays responsive in slow-mo)
+	var real_dt := delta / maxf(Engine.time_scale, 0.01)
+	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
+	if look.length() > 0.0:
+		var curve := look * look.length() # finer control near center
+		cam_yaw -= curve.x * 3.0 * real_dt
+		cam_pitch = clampf(cam_pitch - curve.y * 2.0 * real_dt, -1.1, 0.35)
 	pivot.rotation = Vector3(cam_pitch, cam_yaw, 0.0)
 	if shake > 0.0:
 		camera.h_offset = randf_range(-1.0, 1.0) * shake * 0.25

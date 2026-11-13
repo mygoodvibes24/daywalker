@@ -19,11 +19,15 @@ var frenzy_tint: ColorRect
 var start_overlay: Control
 var over_panel: Control
 var over_label: Label
+var click_label: Label
 var announce_t := 0.0
 var popup_t := 0.0
 var damage_t := 0.0
 var help_t := 20.0
 var started := false
+var using_pad := false
+const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)\nRMB / Q  Blood Dash   LMB / J  blade combo\nE  bite a staggered enemy (red orb)   F  drink at the Undercroft\nMouse  look   ESC  release mouse"
+const PAD_HELP := "L-stick move   R-stick camera   LT / L3 sprint   A jump (x2)\nB / RB  Blood Dash   X / RT  blade combo\nY  bite a staggered enemy (red orb)   LB  drink at the Undercroft\nSTART  restart after death"
 
 
 func _ready() -> void:
@@ -70,7 +74,7 @@ func _ready() -> void:
 	popup_label.anchor_top = 0.6
 	popup_label.anchor_bottom = 0.6
 
-	help_label = _label("WASD move   SHIFT sprint   SPACE jump (x2)\nRMB / Q  Blood Dash   LMB / J  blade combo\nE  bite a staggered enemy (red orb)   F  drink at the Undercroft\nMouse  look   ESC  release mouse", 15, Color(0.8, 0.8, 0.8))
+	help_label = _label(KEYS_HELP, 15, Color(0.8, 0.8, 0.8))
 	root.add_child(help_label)
 	_pin(help_label, 0.0, 1.0, Rect2(24, -110, 700, 100))
 
@@ -109,7 +113,8 @@ func _build_start() -> Control:
 	story.anchor_top = 0.55
 	story.anchor_bottom = 0.55
 	var click := _centered(24, Color(1, 0.4, 0.4))
-	click.text = "CLICK TO HUNT"
+	click_label = click
+	click.text = "CLICK TO HUNT  (or press A on a controller)"
 	click.reparent(panel)
 	click.anchor_top = 0.75
 	click.anchor_bottom = 0.75
@@ -191,11 +196,18 @@ func on_damage() -> void:
 
 func show_game_over() -> void:
 	over_panel.visible = true
-	over_label.text = "YOU FELL IN PORT VESPER\nKills: %d     Nights survived: %d\n\n[R]  Rise again" % [main.kills, main.night_count]
+	over_label.text = "YOU FELL IN PORT VESPER\nKills: %d     Nights survived: %d\n\n[R] / START  Rise again" % [main.kills, main.night_count]
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not started and (event is InputEventKey or event is InputEventMouseButton) and event.is_pressed():
+	var pad := event is InputEventJoypadButton or (event is InputEventJoypadMotion and absf((event as InputEventJoypadMotion).axis_value) > 0.5)
+	if pad != using_pad and (pad or event is InputEventKey or event is InputEventMouseButton):
+		using_pad = pad
+		help_label.text = PAD_HELP if pad else KEYS_HELP
+		click_label.text = "PRESS A TO HUNT" if pad else "CLICK TO HUNT  (or press A on a controller)"
+		if started:
+			help_t = maxf(help_t, 6.0)
+	if not started and (event is InputEventKey or event is InputEventMouseButton or event is InputEventJoypadButton) and event.is_pressed():
 		started = true
 
 

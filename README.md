@@ -21,15 +21,21 @@ cd ../build/web && python3 -m http.server 8060   # then open http://localhost:80
 The web export uses the single-threaded template, so any static host works (no special headers needed).
 
 ## Controls
-| Action | Key |
-|---|---|
-| Move / Sprint | WASD / Shift |
-| Jump (double jump) | Space |
-| Blood Dash (3 charges, phase through enemies) | Right mouse / Q |
-| Blade combo (3-hit) | Left mouse / J |
-| Bite a staggered enemy (red orb above head) | E |
-| Drink bagged blood at the Undercroft | F |
-| Restart after death | R |
+Plug in or pair an Xbox, PlayStation or Switch Pro controller and **press any button** (browsers only detect a controller after a button press).
+
+| Action | Controller | Keyboard / Mouse |
+|---|---|---|
+| Move | Left stick / D-pad | WASD |
+| Camera | Right stick | Mouse |
+| Sprint | LT (hold) or L3 | Shift |
+| Jump (double jump) | A / Cross | Space |
+| Blood Dash (3 charges, phase through enemies) | B / Circle or RB | Right mouse / Q |
+| Blade combo (3-hit) | X / Square or RT | Left mouse / J |
+| Bite a staggered enemy (red orb above head) | Y / Triangle | E |
+| Drink bagged blood at the Undercroft | LB | F |
+| Restart after death | Start / Options | R |
+
+Controllers vibrate on hits, bites and damage (where the browser supports it).
 
 ## What's in the prototype
 - **Day/night cycle** (4 min). By day vampires burn and the Pack walks among you as civilians; at night the Velvet Court hunts and wolves transform. Every 3rd night is a **full moon**, when wolves get bigger and meaner.
