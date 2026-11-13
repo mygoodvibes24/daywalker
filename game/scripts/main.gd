@@ -5,6 +5,7 @@ const U = preload("res://scripts/util.gd")
 const PlayerScript = preload("res://scripts/player.gd")
 const EnemyScript = preload("res://scripts/enemy.gd")
 const HudScript = preload("res://scripts/hud.gd")
+const CityScript = preload("res://scripts/city.gd")
 
 const DAY_LENGTH := 240.0 # seconds for one full day/night cycle
 const LAIR_MAX := 3
@@ -34,6 +35,7 @@ var window_mat: StandardMaterial3D
 var lamp_mat: StandardMaterial3D
 var rng := RandomNumberGenerator.new()
 var nav_region: NavigationRegion3D
+var city: Node3D # city.gd: geometry, materials, props
 var started := false
 
 
@@ -162,103 +164,22 @@ func _build_environment() -> void:
 
 
 func _build_city() -> void:
-	var asphalt := U.mat(Color(0.09, 0.09, 0.1), 0.35, 0.1) # wet street
-	var walk := U.mat(Color(0.28, 0.27, 0.26), 0.9)
-	window_mat = U.glow(Color(1.0, 0.75, 0.4), 0.0)
-	var wall_mats: Array[StandardMaterial3D] = [
-		U.mat(Color(0.22, 0.2, 0.19), 0.9),
-		U.mat(Color(0.3, 0.22, 0.18), 0.9),
-		U.mat(Color(0.16, 0.17, 0.2), 0.8),
-		U.mat(Color(0.35, 0.33, 0.3), 0.9),
-	]
-	var neons: Array[Color] = [Color(1, 0.1, 0.4), Color(0.1, 0.9, 1), Color(0.8, 0.1, 1), Color(1, 0.15, 0.1)]
-
-	# ground
-	var ground := StaticBody3D.new()
-	add_child(ground)
-	var gcol := CollisionShape3D.new()
-	var gshape := BoxShape3D.new()
-	gshape.size = Vector3(240, 1, 240)
-	gcol.shape = gshape
-	gcol.position.y = -0.5
-	ground.add_child(gcol)
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(240, 240)
-	U.part(ground, plane, asphalt, Vector3.ZERO)
-
-	# city blocks (plaza in the middle is left open)
-	for i in range(-4, 4):
-		for j in range(-4, 4):
-			var cx := i * GRID + GRID * 0.5
-			var cz := j * GRID + GRID * 0.5
-			if absf(cx) < GRID and absf(cz) < GRID:
-				continue
-			# sidewalk: a thin visual slab with no collider, so nobody snags on a curb
-			U.part(self, U.box(Vector3(13, 0.06, 13)), walk, Vector3(cx, 0.03, cz))
-			var far := clampf(Vector2(cx, cz).length() / 90.0, 0.0, 1.0)
-			var count := rng.randi_range(1, 2)
-			for b in range(count):
-				var w := rng.randf_range(5.0, 11.0) if count == 1 else rng.randf_range(4.5, 5.5)
-				var d := rng.randf_range(6.0, 11.0)
-				var h := rng.randf_range(7.0, 16.0) + far * rng.randf_range(4.0, 26.0)
-				var ox := 0.0 if count == 1 else (-3.0 if b == 0 else 3.0)
-				var pos := Vector3(cx + ox, h * 0.5, cz)
-				var bld := U.static_box(self, Vector3(w, h, d), pos, wall_mats[rng.randi() % wall_mats.size()])
-				# lit window bands
-				var y := 3.0
-				while y < h - 1.5:
-					if rng.randf() < 0.6:
-						U.part(bld, U.box(Vector3(w * 0.8, 0.9, d + 0.06)), window_mat, Vector3(0, y - h * 0.5, 0))
-					y += 3.2
-				# rooftop neon
-				if rng.randf() < 0.45:
-					var neon := U.glow(neons[rng.randi() % neons.size()], 3.0)
-					U.part(bld, U.box(Vector3(w * 0.7, 0.35, 0.15)), neon, Vector3(0, h * 0.5 - 0.8, d * 0.5 + 0.1))
-
-	# boundary walls
-	var edge := 4.0 * GRID + 2.0
-	for s in [-1.0, 1.0]:
-		U.static_box(self, Vector3(2, 30, edge * 2.0), Vector3(s * edge, 15, 0), null)
-		U.static_box(self, Vector3(edge * 2.0, 30, 2), Vector3(0, 15, s * edge), null)
-
-	# street lamps around the plaza
-	lamp_mat = U.glow(Color(1, 0.8, 0.5), 0.2)
-	var post := U.mat(Color(0.05, 0.05, 0.05), 0.4, 0.6)
-	for k in range(6):
-		var a := k * TAU / 6.0 + 0.5
-		var p := Vector3(cos(a) * 15.0, 0, sin(a) * 15.0)
-		U.part(self, U.cyl(0.08, 0.12, 4.5), post, p + Vector3(0, 2.25, 0))
-		U.part(self, U.sphere(0.3), lamp_mat, p + Vector3(0, 4.6, 0))
-		var l := OmniLight3D.new()
-		l.position = p + Vector3(0, 4.3, 0)
-		l.omni_range = 13.0
-		l.light_color = Color(1, 0.75, 0.45)
-		add_child(l)
-		lamps.append(l)
+	city = CityScript.new()
+	city.name = "City"
+	add_child(city)
+	city.build()
+	window_mat = city.window_mat
+	lamp_mat = city.lamp_mat
+	lamps = city.lamps
 
 
 func _build_lair() -> void:
-	# The Undercroft entrance: a sunken stone ring in the cathedral plaza.
-	var stone := U.mat(Color(0.32, 0.3, 0.28), 0.95)
-	var dark := U.mat(Color(0.0, 0.0, 0.0), 1.0)
+	# The Undercroft entrance: an old stone well-head in the cathedral plaza.
 	var root := Node3D.new()
+	root.name = "Undercroft"
 	root.position = lair_pos
 	add_child(root)
-	U.part(root, U.cyl(2.6, 2.8, 0.5), stone, Vector3(0, 0.25, 0))
-	var ring := StaticBody3D.new()
-	root.add_child(ring)
-	var ring_col := CollisionShape3D.new()
-	var ring_shape := CylinderShape3D.new()
-	ring_shape.radius = 2.8
-	ring_shape.height = 0.5
-	ring_col.shape = ring_shape
-	ring_col.position.y = 0.25
-	ring.add_child(ring_col)
-	U.part(root, U.cyl(2.0, 2.0, 0.52), dark, Vector3(0, 0.26, 0))
-	U.part(root, U.cyl(1.0, 1.0, 0.54), U.glow(Color(0.8, 0.0, 0.05), 2.5), Vector3(0, 0.27, 0))
-	for k in range(4):
-		var a := k * TAU / 4.0 + PI / 4.0
-		U.static_box(root, Vector3(0.6, 3.5, 0.6), Vector3(cos(a) * 3.2, 1.75, sin(a) * 3.2), stone)
+	city.build_lair(root)
 	var light := OmniLight3D.new()
 	light.position = Vector3(0, 1.5, 0)
 	light.light_color = Color(1, 0.1, 0.1)
