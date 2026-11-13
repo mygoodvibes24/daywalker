@@ -16,6 +16,13 @@ const BITE_RANGE := 2.6
 const SUN_HEAL := 1.0 # HP/s in daylight while Hunger is low and out of combat
 const GHOST_POOL := 6
 
+# progression hooks: progression.gd / fx.gd listen to these
+signal attacked(combo: int, fwd: Vector3)
+signal hit_enemy(enemy: Node, dmg: float)
+signal bit_enemy(enemy: Node, blood: int)
+signal dashed(dir: Vector3)
+signal hurt(amount: float, src)
+
 var main
 var max_hp := 100.0
 var hp := 100.0
@@ -50,6 +57,8 @@ var ghosts: Array[Node3D] = []
 var ghost_mats: Array[StandardMaterial3D] = []
 var ghost_tweens: Array = []
 var ghost_next := 0
+var bite_ready := false # a staggered enemy is in bite reach (the bite owns E / Y then)
+var weapon_visual: Node3D # set_weapon_visual()
 
 var pivot: Node3D
 var spring: SpringArm3D
@@ -198,9 +207,10 @@ func _physics_process(delta: float) -> void:
 		spd *= 1.3
 	if frenzy_t > 0.0:
 		spd *= 1.25
+	spd *= 1.0 + stat("speed") # PROGRESSION HOOK
 
 	# Blood Dash (recharges faster in sunlight)
-	dash_charges = minf(dash_charges + delta / (0.7 if day else 1.1), MAX_DASH)
+	dash_charges = minf(dash_charges + delta / (0.7 if day else 1.1) * (1.0 + stat("dash_rate")), MAX_DASH) # PROGRESSION HOOK
 	if Input.is_action_just_pressed("dash") and dash_charges >= 1.0 and bite_t <= 0.0:
 		dash_charges -= 1.0
 		dash_t = DASH_TIME
@@ -208,6 +218,7 @@ func _physics_process(delta: float) -> void:
 		invuln_t = maxf(invuln_t, DASH_TIME + 0.12)
 		dash_dir = dir.normalized() if dir.length() > 0.1 else _forward()
 		collision_mask = 1 # phase through enemies
+		dashed.emit(dash_dir)
 
 	# jump / double jump
 	if is_on_floor():
@@ -244,6 +255,7 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("attack") and attack_cd <= 0.0 and bite_t <= 0.0 and Time.get_ticks_msec() >= attack_block_until:
 		_attack()
 	var bite_target = _nearest_enemy(BITE_RANGE, 1)
+	bite_ready = bite_target != null
 	if Input.is_action_just_pressed("bite") and bite_t <= 0.0 and bite_target != null:
 		_bite(bite_target)
 	var near_lair: bool = global_position.distance_to(main.lair_pos) < 3.5
@@ -302,7 +314,7 @@ func _timers(delta: float) -> void:
 		hunger = maxf(hunger - 0.6 * delta, 0.0)
 	# Daywalker: stay human and the sun slowly heals you (out of combat)
 	if hunger < 30.0 and main.daylight() > 0.3 and since_hurt > 4.0:
-		hp = minf(hp + SUN_HEAL * delta, max_hp)
+		hp = minf(hp + SUN_HEAL * (1.0 + stat("sun_heal")) * delta, max_hp) # PROGRESSION HOOK
 	if hp <= 0.0:
 		_die()
 
@@ -315,7 +327,69 @@ func damage_mult() -> float:
 		m *= 1.25
 	if frenzy_t > 0.0:
 		m *= 2.0
+	# PROGRESSION HOOK: rank, Vows and charms
+	m *= 1.0 + stat("dmg")
+	if main != null and not main.is_day():
+		m *= 1.0 + stat("night_dmg")
 	return m
+
+
+# ---------------------------------------------------------------- progression hooks
+## A stat from progression.gd (rank + Vows + equipment); 0 when there is none.
+func stat(key: String) -> float:
+	if main == null or main.get("progression") == null:
+		return 0.0
+	return main.progression.stat(key)
+
+
+## The equipped blade's numbers: {dmg, spd, reach}. Sol's own silver blade is 14 / 1.0 / 0.
+func weapon_stats() -> Dictionary:
+	if main == null or main.get("progression") == null:
+		return {"dmg": 14.0, "spd": 1.0, "reach": 0.0}
+	return main.progression.weapon_stats()
+
+
+## Extra damage against a kind of enemy (silver vs the Pack, sun-steel vs the Court).
+func _vs_mult(e) -> float:
+	return 1.0 + (stat("vs_vamp") if e.kind == 0 else stat("vs_wolf"))
+
+
+func _bite_mult() -> float:
+	return 1.0 + stat("bite_heal")
+
+
+## Show the equipped weapon in Sol's hand. Hides the default blade mesh and puts the
+## item's blade (items/weapon_visual.gd — swap in a real sword model there) in its place.
+func set_weapon_visual(item: Dictionary) -> void:
+	if weapon_visual != null and is_instance_valid(weapon_visual):
+		weapon_visual.queue_free()
+		weapon_visual = null
+	var blade := _find_blade_mesh()
+	if blade == null:
+		return
+	var size: Vector3 = (blade.mesh as BoxMesh).size
+	blade.visible = false
+	weapon_visual = preload("res://scripts/items/weapon_visual.gd").build(item, size.x)
+	blade.get_parent().add_child(weapon_visual)
+	# the default blade box is centred on its length; the new one starts at the hilt
+	weapon_visual.transform = blade.transform
+	weapon_visual.position = blade.position - blade.transform.basis.z * (size.z * 0.5)
+
+
+## The default blade: a node tagged "blade" / named "Blade" if the body provides one,
+## otherwise the long thin box mesh in Sol's hand.
+func _find_blade_mesh() -> MeshInstance3D:
+	if visual == null:
+		return null
+	for n in visual.find_children("*", "MeshInstance3D", true, false):
+		if n.name == "Blade" or n.has_meta("blade"):
+			return n
+	for n in visual.find_children("*", "MeshInstance3D", true, false):
+		if n.get_parent() == weapon_visual or (weapon_visual != null and weapon_visual.is_ancestor_of(n)):
+			continue
+		if n.mesh is BoxMesh and (n.mesh as BoxMesh).size.z > 0.9 and (n.mesh as BoxMesh).size.x < 0.06:
+			return n
+	return null
 
 
 ## staggered: 1 = only staggered enemies, -1 = skip staggered ones, 0 = any.
@@ -347,8 +421,12 @@ func _attack() -> void:
 		facing = atan2(tt.x, tt.z)
 		visual.rotation.y = facing
 	var fwd := _forward()
-	var dmg := (14.0 if combo < 3 else 28.0) * damage_mult()
-	var reach := 2.7 if combo < 3 else 3.3
+	# PROGRESSION HOOK: the equipped blade sets damage, swing speed and reach
+	var w := weapon_stats()
+	attack_cd /= maxf(w.spd, 0.3)
+	var dmg: float = w.dmg * (1.0 if combo < 3 else 2.0 * (1.0 + stat("finisher"))) * damage_mult()
+	var reach: float = (2.7 if combo < 3 else 3.3) + w.reach
+	attacked.emit(combo, fwd)
 	var hit := false
 	for e in main.enemies_root.get_children():
 		if e.dead or (e.staggered and e != target):
@@ -357,7 +435,9 @@ func _attack() -> void:
 		to.y = 0.0
 		var d := to.length()
 		if d < reach and (d < 0.9 or fwd.dot(to / d) > 0.3):
-			e.take_hit(dmg, to.normalized() if d > 0.01 else fwd)
+			var hd: float = dmg * _vs_mult(e)
+			e.take_hit(hd, to.normalized() if d > 0.01 else fwd)
+			hit_enemy.emit(e, hd)
 			hit = true
 	if hit:
 		shake = maxf(shake, 0.12 if combo < 3 else 0.28)
@@ -374,22 +454,23 @@ func _bite(target) -> void:
 	var blood: int = target.drain()
 	match blood:
 		0:
-			heal(40.0)
+			heal(40.0 * _bite_mult())
 			add_hunger(24.0)
 			main.hud.popup("HUMAN BLOOD  +40\nthe hunger grows")
 		1:
-			heal(25.0)
+			heal(25.0 * _bite_mult())
 			add_hunger(10.0)
 			speed_boost_t = 6.0
 			main.hud.popup("VAMPIRE BLOOD  +25\nSPEED UP")
 		2:
-			heal(18.0)
+			heal(18.0 * _bite_mult())
 			add_hunger(14.0)
 			rage_t = 7.0
 			burn_t = 3.0
 			main.hud.popup("WEREWOLF BLOOD  +18\nRAGE  (it burns)")
 	main.set_slowmo(0.35, 0.35)
 	main.rumble(0.3, 0.6, 0.25)
+	bit_enemy.emit(target, blood)
 
 
 func heal(v: float) -> void:
@@ -399,7 +480,7 @@ func heal(v: float) -> void:
 func add_hunger(v: float) -> void:
 	hunger = minf(hunger + v, 100.0)
 	if hunger >= 100.0 and frenzy_t <= 0.0:
-		frenzy_t = 8.0
+		frenzy_t = 8.0 * (1.0 + stat("frenzy_time")) # PROGRESSION HOOK
 		main.hud.announce("FRENZY\nThe beast is loose")
 
 
@@ -413,7 +494,9 @@ func take_damage(amount: float, _src) -> void:
 		return
 	if frenzy_t > 0.0:
 		amount *= 0.5
+	amount *= maxf(1.0 + stat("dmg_taken"), 0.2) # PROGRESSION HOOK
 	hp -= amount
+	hurt.emit(amount, _src)
 	since_hurt = 0.0
 	invuln_t = 0.4
 	shake = maxf(shake, 0.32)

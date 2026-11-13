@@ -1,7 +1,13 @@
 extends SceneTree
 ## Headless smoke test: godot --headless -s res://tests/smoke_test.gd
 
+const SMOKE_SAVE := "user://smoke_save.json"
+
 func _initialize() -> void:
+	# never touch the player's real save; start from a fresh one
+	load("res://scripts/progression.gd").save_path = SMOKE_SAVE
+	if FileAccess.file_exists(SMOKE_SAVE):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SMOKE_SAVE))
 	var main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame
@@ -74,7 +80,14 @@ func _initialize() -> void:
 	_pad_axis(JOY_AXIS_TRIGGER_LEFT, 1.0)
 	ok = _check("left trigger -> sprint", Input.is_action_pressed("sprint")) and ok
 	_pad_axis(JOY_AXIS_TRIGGER_LEFT, 0.0)
+	await process_frame
+	ok = _check("pad START opens the Coat", main.inventory_ui.visible and paused) and ok
+	main.inventory_ui.close() # START opened the Coat during the button sweep
+	main.levelup_ui.close()
 	ok = await _gameplay_checks(main) and ok
+	ok = await _progression_checks(main) and ok
+	if FileAccess.file_exists(SMOKE_SAVE):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SMOKE_SAVE))
 	print("SMOKE TEST: ", "PASS" if ok else "FAIL")
 	quit(0 if ok else 1)
 
@@ -234,4 +247,141 @@ func _gameplay_checks(main) -> bool:
 	ok = _check("combo spares the staggered enemy", weak.staggered and not weak.dead) and ok
 	main.clear_slowmo()
 	_clear_enemies(main)
+	return ok
+
+
+## Tithe, ranks, Vows, loot, the Coat, save/load and the death drop.
+func _progression_checks(main) -> bool:
+	var ItemDB = load("res://scripts/items/item_db.gd")
+	var p = main.player
+	var prog = main.progression
+	var inv = main.inventory
+	var loot = main.loot
+	var ok := true
+	main.time_of_day = 0.9
+	main.night_count = 1
+	main.spawn_timer = 9999.0
+	_clear_enemies(main)
+	p.dead = false
+	p.frenzy_t = 0.0
+	p.burn_t = 0.0
+	p.global_position = Vector3(10.0, 0.1, 10.0)
+	p.velocity = Vector3.ZERO
+
+	# a kill grants Tithe (motes fly to Sol)
+	var t0: int = prog.tithe
+	var v = _spawn(main, 0, Vector3(10.0, 0.5, 11.0))
+	for i in 3: await physics_frame
+	ok = _check("drained kills pay more", prog.kill_value(v, true) > prog.kill_value(v, false)) and ok
+	v._die(false)
+	for i in 120: await physics_frame
+	ok = _check("a kill grants Tithe (+%d)" % (prog.tithe - t0), prog.tithe - t0 == prog.KILL_TITHE.vampire) and ok
+	_clear_enemies(main)
+
+	# levelling up costs Tithe and raises max blood
+	prog.tithe = 1000
+	var hp0: float = p.max_hp
+	var cost: int = prog.next_cost()
+	ok = _check("rank 2 is cheap (%d), rank 14 costs more" % cost, cost <= 40 and prog.cost_for(14) > cost * 10) and ok
+	ok = _check("level up", prog.level_up()) and ok
+	ok = _check("level up spends Tithe and raises max blood", prog.level == 2 and prog.tithe == 1000 - cost and p.max_hp == hp0 + prog.PER_LEVEL.max_hp) and ok
+	ok = _check("level up offers 3 Vows", prog.vow_choices.size() == 3) and ok
+	ok = _check("no second rank before a Vow is chosen", not prog.can_level()) and ok
+
+	# a Vow applies
+	prog.vow_choices = ["thick_blood"]
+	var hp1: float = p.max_hp
+	prog.choose_vow("thick_blood")
+	ok = _check("Vow Thick Blood adds 25 max blood", p.max_hp == hp1 + 25.0 and "thick_blood" in prog.vows) and ok
+	ok = _check("at least 12 Vows and 30 items", prog.VOWS.size() >= 12 and ItemDB.ITEMS.size() >= 30) and ok
+
+	# a drop spawns with a rarity and a beam
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var entry: Dictionary = loot.spawn_item(ItemDB.random_item(rng, true, true), Vector3(12.0, 0.1, 10.0))
+	ok = _check("a drop spawns with a rarity (%s)" % ItemDB.RARITY_NAMES[entry.inst.r], entry.inst.r >= 0 and entry.inst.r <= 3 and is_instance_valid(entry.node) and entry.node.get_child_count() >= 3) and ok
+	var legend: int = 0
+	for i in 400:
+		if ItemDB.roll_rarity(rng, true, true, 0.0) == 3:
+			legend += 1
+	var legend_day: int = 0
+	for i in 400:
+		if ItemDB.roll_rarity(rng, false, false, 0.0) == 3:
+			legend_day += 1
+	ok = _check("full moons drop better loot (%d vs %d legendary)" % [legend, legend_day], legend > legend_day) and ok
+
+	# picking up adds it to the coat
+	var bag0: int = inv.bag.size()
+	p.global_position = Vector3(12.0, 0.1, 10.5)
+	var near = loot.nearest_item(p.global_position)
+	ok = _check("pickup in range", near != null and loot.pick_up(near)) and ok
+	ok = _check("pickup adds to the inventory", inv.bag.size() == bag0 + 1 or ItemDB.is_stackable(entry.inst)) and ok
+
+	# equipping a blade changes damage
+	var hits: Array = []
+	var rec := func(_e, d): hits.append(d)
+	p.hit_enemy.connect(rec)
+	var target = _spawn(main, 0, Vector3(12.0, 0.5, 11.6))
+	for i in 3: await physics_frame
+	target.max_hp = 1e6
+	target.hp = 1e6
+	p.facing = 0.0
+	p.combo_t = 0.0
+	p.attack_cd = 0.0
+	p._attack()
+	inv.add(ItemDB.make("foundry_cleaver", 2))
+	inv.equip_from_bag(inv.bag.size() - 1)
+	p.combo_t = 0.0
+	p._attack()
+	p.hit_enemy.disconnect(rec)
+	main.clear_slowmo()
+	ok = _check("equipping a blade changes damage (%s)" % str(hits), hits.size() == 2 and hits[1] > hits[0] and inv.weapon.id == "foundry_cleaver") and ok
+	ok = _check("blade visual follows the weapon", p.weapon_visual != null or p._find_blade_mesh() == null) and ok
+	_clear_enemies(main)
+
+	# a quick-use vial heals
+	inv.quick[0] = ItemDB.make("blood_vial", 0, 2)
+	p.hp = 40.0
+	ok = _check("quick-use vial heals", inv.use_quick(0) and p.hp == 75.0 and inv.quick[0].n == 1) and ok
+
+	# save then load round-trips
+	inv.add(ItemDB.make("eclipse_coin", 3))
+	inv.equip_from_bag(inv.bag.size() - 1)
+	prog.tithe = 321
+	ok = _check("save written", prog.save()) and ok
+	var before: Dictionary = prog.to_dict()
+	prog.reset()
+	ok = _check("reset clears progression", prog.level == 1 and prog.tithe == 0 and inv.weapon.id == "marrow_silver") and ok
+	prog.load_save()
+	var after: Dictionary = prog.to_dict()
+	ok = _check("save/load round-trips", JSON.stringify(before) == JSON.stringify(after) and prog.level == 2 and inv.weapon.id == "foundry_cleaver" and inv.charms[0].id == "eclipse_coin") and ok
+
+	# death drops half the Tithe where Sol fell; walking back recovers it
+	var fall := Vector3(14.0, 0.1, 14.0)
+	prog.tithe = 200
+	prog.on_death(fall)
+	ok = _check("death drops half the Tithe", prog.tithe == 100 and int(prog.death_drop.amount) == 100) and ok
+	loot._refresh_death_marker()
+	ok = _check("death drop has a beam", loot.death_marker != null) and ok
+	p.global_position = fall + Vector3(0.5, 0, 0)
+	for i in 3: await physics_frame
+	ok = _check("death drop is recoverable", prog.tithe == 200 and prog.death_drop.is_empty() and loot.death_marker == null) and ok
+	prog.tithe = 50
+	prog.on_death(fall)
+	prog.on_death(fall + Vector3(5, 0, 0))
+	ok = _check("dying again before recovering loses the first drop", int(prog.death_drop.amount) == 12 and prog.tithe == 13) and ok
+
+	# caches open and restock at sunrise
+	var c = loot.caches[0]
+	ok = _check("~20 caches placed", loot.caches.size() >= 18) and ok
+	loot.open_cache(c)
+	ok = _check("cache opens", c.opened) and ok
+	loot.respawn_caches()
+	ok = _check("caches restock at sunrise", not c.opened) and ok
+	# the inventory and Vigil menus pause the world
+	main.ui_block_until = 0
+	main.inventory_ui.open()
+	ok = _check("the Coat pauses the world", paused and main.inventory_ui.visible) and ok
+	main.inventory_ui.close()
+	ok = _check("closing the Coat resumes", not paused) and ok
 	return ok

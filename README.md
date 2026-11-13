@@ -39,8 +39,13 @@ Plug in or pair an Xbox, PlayStation or Switch Pro controller and **press any bu
 | Blood Dash (3 charges, phase through enemies) | B / Circle or RB | Right mouse / Q |
 | Blade combo (3-hit) | X / Square or RT | Left mouse / J |
 | Bite a staggered enemy (red orb above head) | Y / Triangle | E |
+| Interact: take loot, open a coffin / crate, keep vigil at the Undercroft (the bite wins when a staggered enemy is in reach) | Y / Triangle | E |
 | Drink bagged blood at the Undercroft | LB | F |
+| Quick-use slot 1 / 2 (vials, flares) | LB (away from the Undercroft) / R3 | 1 / 2 |
+| The Coat (inventory; pauses the game) | Start / Options | Tab or I |
+| In the Coat: equip / use / drop / close | A / Y / X / B | Click or Enter / U / X or Del / Tab, I or Esc |
 | Restart after death | Start / Options | R |
+| Rain on/off | Back / Share | T |
 
 Controllers vibrate on hits, bites and damage (where the browser supports it).
 
@@ -51,3 +56,11 @@ Controllers vibrate on hits, bites and damage (where the browser supports it).
 - **Perfect dodge.** Dash through (or out of) an enemy's strike to trigger bullet-time and refund a dash. Strikes are committed when the wind-up starts, so you can also just sidestep them.
 - **Enemies hunt properly.** They path around buildings, and only two attack at once while the rest circle you.
 - **The Undercroft**, Sol's lair entrance in the cathedral plaza, with a blood bank that restocks at sunrise.
+
+## Progression
+- **Tithe** is the blood-essence currency. Every kill bursts into red motes that fly to you when you're close (vampire 8, Pack civilian 12, werewolf 25, full-moon wolf 40; draining with a bite pays 50% more). Your total is on the HUD.
+- **Communion ranks.** Offer Tithe at the Undercroft (**Keep Vigil**) to rise a rank, up to 15. Rank 2 costs 25 Tithe and the price climbs steadily. Every rank adds max blood, damage, dash recharge and bite healing.
+- **Vows.** Each new rank offers three random Vows (17 in all), passive perks such as *Crimson Wake* (your dash leaves a burning blood trail), *Sidestep Sacrament* (perfect dodges heal), *Communion Ward* (bites make you untouchable for a moment), *Crescent Rite* (the third combo hit throws a blood wave), *Sunward* and *The Long Night*.
+- **Loot.** Kills drop items more often at night and on full moons, and 20 **cold coffins and smuggler crates** on the sidewalks restock at sunrise. Every dropped item stands in a light beam coloured by rarity: **Street** (white), **Blooded** (green), **Hallowed** (blue) and **Eclipse** (purple with a gold core). Eclipse items carry unique effects.
+- **The Coat** holds 24 items plus 1 blade, 3 gris-gris charms and 2 quick-use slots. There are 35 items: 15 blades (sabers, machetes, cane-swords, cleavers, longblades, kukris; each has its own damage, speed, reach and a special such as silver against wolves, sun-steel against vampires or lifesteal), 17 charms (gris-gris, rosaries, fangs, medals, bones, candles, mirrors), and blood vials and Dawn Flares (a UV burst that burns vampires) for quick use.
+- **Saving.** Rank, Tithe, Vows and the Coat are saved to `user://save.json` when you rank up, change equipment and return to the lair. If you die you keep your progression, but half your carried Tithe stays where you fell under a crimson beam. Walk back to it to recover it. Die again first and it's gone.
