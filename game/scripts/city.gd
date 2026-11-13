@@ -2038,6 +2038,16 @@ func _build_props() -> void:
 				meshes = [[_trash_mesh(), bag, true]]
 		var xfs: Array = props[kind]
 		var cols: Array = prop_cols[kind]
+		# generated (GLB) models replace the procedural stand-ins where we have them
+		var glb: Dictionary = PropsScript._load_prop(GLB_PROPS[kind]) if GLB_PROPS.has(kind) else {}
+		if not glb.is_empty():
+			# the generated models are dense (7k-27k triangles), so thin the small clutter
+			var step: int = GLB_THIN.get(kind, 1)
+			var kept: Array = []
+			for k in range(0, xfs.size(), step):
+				kept.append(xfs[k])
+			_glb_multimeshes(kind, glb, kept)
+			continue
 		for entry in meshes:
 			var mm := MultiMesh.new()
 			mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -2055,6 +2065,39 @@ func _build_props() -> void:
 			var big: bool = kind == "sedan" or kind == "van" or kind == "dumpster"
 			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if big and entry[2] else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(mmi)
+
+
+const PropsScript = preload("res://scripts/props.gd")
+const GLB_PROPS := {"sedan": "sedan", "hydrant": "hydrant", "newsbox": "news_box", "dumpster": "dumpster", "trash": "trash_pile"}
+const GLB_THIN := {"trash": 6, "newsbox": 3, "hydrant": 2, "dumpster": 2}
+const PROP_CELL := 40.0 # instances are bucketed into cells so off-screen ones are culled
+
+
+func _glb_multimeshes(kind: String, glb: Dictionary, xfs: Array) -> void:
+	var cells := {}
+	for xf: Transform3D in xfs:
+		var key := Vector2i(floori(xf.origin.x / PROP_CELL), floori(xf.origin.z / PROP_CELL))
+		if not cells.has(key):
+			cells[key] = []
+		cells[key].append(xf)
+	var big: bool = kind == "sedan" or kind == "dumpster"
+	for key in cells.keys():
+		var list: Array = cells[key]
+		for part in glb.meshes:
+			var mm := MultiMesh.new()
+			mm.transform_format = MultiMesh.TRANSFORM_3D
+			mm.mesh = part[0]
+			mm.instance_count = list.size()
+			for k in list.size():
+				var xf: Transform3D = list[k]
+				mm.set_instance_transform(k, Transform3D(xf.basis.orthonormalized(), xf.origin) * part[1])
+			var mmi := MultiMeshInstance3D.new()
+			mmi.name = "Glb_%s_%d_%d" % [kind, key.x, key.y]
+			mmi.multimesh = mm
+			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if big else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mmi.visibility_range_end = 120.0 if big else 60.0
+			add_child(mmi)
+	print("city props: %d x %s (generated model)" % [xfs.size(), kind])
 
 
 static func _mesh_of(bt: Batch) -> ArrayMesh:
