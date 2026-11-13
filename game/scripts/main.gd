@@ -5,6 +5,7 @@ const U = preload("res://scripts/util.gd")
 const PlayerScript = preload("res://scripts/player.gd")
 const EnemyScript = preload("res://scripts/enemy.gd")
 const HudScript = preload("res://scripts/hud.gd")
+const PropsScript = preload("res://scripts/props.gd")
 
 const DAY_LENGTH := 240.0 # seconds for one full day/night cycle
 const LAIR_MAX := 3
@@ -46,6 +47,7 @@ func _ready() -> void:
 	_build_environment()
 	_build_city()
 	_build_lair()
+	PropsScript.scatter(self, rng)
 	_bake_navigation()
 	enemies_root = Node3D.new()
 	enemies_root.name = "Enemies"
