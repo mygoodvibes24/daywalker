@@ -17,7 +17,12 @@ var kills := 0
 var lair_stock := LAIR_MAX
 var game_over := false
 var spawn_timer := 4.0
-var timescale_until := 0
+var slowmo_effects: Array = [] # [{scale, until_ms}] — the lowest active scale wins
+var attack_tokens := {} # enemies currently allowed to strike
+const MAX_ATTACKERS := 2
+
+## Survives scene reloads so "Rise again" skips the title screen.
+static var started_once := false
 
 var sun: DirectionalLight3D
 var env: Environment
@@ -28,20 +33,20 @@ var lamps: Array[OmniLight3D] = []
 var window_mat: StandardMaterial3D
 var lamp_mat: StandardMaterial3D
 var rng := RandomNumberGenerator.new()
+var nav_region: NavigationRegion3D
+var started := false
 
 
 func _ready() -> void:
 	rng.randomize()
 	Engine.time_scale = 1.0
-	var url_query := ""
-	if OS.has_feature("web"):
-		url_query = str(JavaScriptBridge.eval("window.location.search", true))
-	if "--night" in OS.get_cmdline_user_args() or "night" in url_query:
+	if "--night" in OS.get_cmdline_user_args() or _url_flag("night"):
 		time_of_day = 0.74 # debug: start right before nightfall
 	_setup_input()
 	_build_environment()
 	_build_city()
 	_build_lair()
+	_bake_navigation()
 	enemies_root = Node3D.new()
 	enemies_root.name = "Enemies"
 	add_child(enemies_root)
@@ -52,8 +57,36 @@ func _ready() -> void:
 	hud = HudScript.new()
 	hud.main = self
 	add_child(hud)
+	hud.process_mode = Node.PROCESS_MODE_ALWAYS
 	_update_lighting()
 	Input.joy_connection_changed.connect(_on_joy_changed)
+	if started_once:
+		start_game()
+	else:
+		get_tree().paused = true # the world waits behind the title screen
+
+
+## Called by the HUD on the first click / key / button (and right away after a restart).
+func start_game() -> void:
+	if started:
+		return
+	started = true
+	started_once = true
+	get_tree().paused = false
+	hud.started = true
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	player.block_attack()
+
+
+## True if the page URL has ?name or &name (or name=...) as its own parameter.
+func _url_flag(name: String) -> bool:
+	if not OS.has_feature("web"):
+		return false
+	var q := str(JavaScriptBridge.eval("window.location.search", true)).trim_prefix("?")
+	for part in q.split("&", false):
+		if part.split("=")[0] == name:
+			return true
+	return false
 
 
 func _on_joy_changed(_device: int, connected: bool) -> void:
@@ -160,7 +193,8 @@ func _build_city() -> void:
 			var cz := j * GRID + GRID * 0.5
 			if absf(cx) < GRID and absf(cz) < GRID:
 				continue
-			U.static_box(self, Vector3(13, 0.25, 13), Vector3(cx, 0.125, cz), walk)
+			# sidewalk: a thin visual slab with no collider, so nobody snags on a curb
+			U.part(self, U.box(Vector3(13, 0.06, 13)), walk, Vector3(cx, 0.03, cz))
 			var far := clampf(Vector2(cx, cz).length() / 90.0, 0.0, 1.0)
 			var count := rng.randi_range(1, 2)
 			for b in range(count):
@@ -168,7 +202,7 @@ func _build_city() -> void:
 				var d := rng.randf_range(6.0, 11.0)
 				var h := rng.randf_range(7.0, 16.0) + far * rng.randf_range(4.0, 26.0)
 				var ox := 0.0 if count == 1 else (-3.0 if b == 0 else 3.0)
-				var pos := Vector3(cx + ox, h * 0.5 + 0.25, cz)
+				var pos := Vector3(cx + ox, h * 0.5, cz)
 				var bld := U.static_box(self, Vector3(w, h, d), pos, wall_mats[rng.randi() % wall_mats.size()])
 				# lit window bands
 				var y := 3.0
@@ -211,6 +245,15 @@ func _build_lair() -> void:
 	root.position = lair_pos
 	add_child(root)
 	U.part(root, U.cyl(2.6, 2.8, 0.5), stone, Vector3(0, 0.25, 0))
+	var ring := StaticBody3D.new()
+	root.add_child(ring)
+	var ring_col := CollisionShape3D.new()
+	var ring_shape := CylinderShape3D.new()
+	ring_shape.radius = 2.8
+	ring_shape.height = 0.5
+	ring_col.shape = ring_shape
+	ring_col.position.y = 0.25
+	ring.add_child(ring_col)
 	U.part(root, U.cyl(2.0, 2.0, 0.52), dark, Vector3(0, 0.26, 0))
 	U.part(root, U.cyl(1.0, 1.0, 0.54), U.glow(Color(0.8, 0.0, 0.05), 2.5), Vector3(0, 0.27, 0))
 	for k in range(4):
@@ -227,9 +270,27 @@ func _build_lair() -> void:
 	sign.font_size = 72
 	sign.modulate = Color(0.9, 0.2, 0.2)
 	sign.outline_size = 12
-	sign.position = Vector3(0, 4.2, 0)
+	sign.position = Vector3(0, 4.6, 0)
 	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	root.add_child(sign)
+
+
+## Bake a navmesh from the generated city so enemies path around buildings.
+func _bake_navigation() -> void:
+	var nm := NavigationMesh.new()
+	nm.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
+	nm.geometry_collision_mask = 1
+	nm.agent_radius = 0.5
+	nm.agent_height = 1.75
+	nm.agent_max_climb = 0.25
+	var edge := 4.0 * GRID + 1.0
+	nm.filter_baking_aabb = AABB(Vector3(-edge, -1.0, -edge), Vector3(edge * 2.0, 4.0, edge * 2.0))
+	var src := NavigationMeshSourceGeometryData3D.new()
+	NavigationServer3D.parse_source_geometry_data(nm, src, self)
+	NavigationServer3D.bake_from_source_geometry_data(nm, src)
+	nav_region = NavigationRegion3D.new()
+	nav_region.navigation_mesh = nm
+	add_child(nav_region)
 
 
 # ---------------------------------------------------------------- time
@@ -242,7 +303,7 @@ func daylight() -> float:
 
 
 func is_full_moon() -> bool:
-	return not is_day() and night_count % 3 == 1
+	return not is_day() and night_count > 0 and night_count % 3 == 0 # nights 3, 6, 9...
 
 
 func clock_text() -> String:
@@ -251,11 +312,10 @@ func clock_text() -> String:
 
 
 func _process(delta: float) -> void:
-	if Time.get_ticks_msec() >= timescale_until and Engine.time_scale != 1.0:
-		Engine.time_scale = 1.0
+	_update_slowmo()
 	if game_over:
 		if Input.is_action_just_pressed("restart"):
-			Engine.time_scale = 1.0
+			clear_slowmo()
 			get_tree().reload_current_scene()
 		return
 	var was_day := is_day()
@@ -311,8 +371,16 @@ func _update_spawning(delta: float) -> void:
 	else:
 		spawn_timer = 1.6 if is_full_moon() else 2.4
 		cap = mini(6 + night_count * 2, 14)
-	if enemies_root.get_child_count() < cap:
+	if living_enemies() < cap:
 		spawn_enemy()
+
+
+func living_enemies() -> int:
+	var n := 0
+	for e in enemies_root.get_children():
+		if not e.dead:
+			n += 1
+	return n
 
 
 func spawn_enemy() -> void:
@@ -330,15 +398,37 @@ func spawn_enemy() -> void:
 
 func _road_point_near(center: Vector3) -> Vector3:
 	var best := Vector3(0, 0.5, -60)
-	for attempt in range(16):
+	var best_score := INF
+	for attempt in range(24):
 		var along := rng.randf_range(-76.0, 76.0)
 		var lane := rng.randi_range(-3, 3) * GRID + rng.randf_range(-2.0, 2.0)
 		var p := Vector3(lane, 0.5, along) if rng.randf() < 0.5 else Vector3(along, 0.5, lane)
 		var dist := p.distance_to(center)
-		best = p
 		if dist > 18.0 and dist < 45.0:
 			return p
+		# fallback: never closer than 18 m; otherwise the one nearest the 18–45 m band
+		var score := (18.0 - dist) * 100.0 if dist <= 18.0 else dist - 45.0
+		if score < best_score:
+			best_score = score
+			best = p
 	return best
+
+
+## Attack tokens: only a couple of enemies may strike at once, the rest circle.
+func request_attack_token(e: Node) -> bool:
+	for k in attack_tokens.keys():
+		if not is_instance_valid(k) or k.dead:
+			attack_tokens.erase(k)
+	if attack_tokens.has(e):
+		return true
+	if attack_tokens.size() >= MAX_ATTACKERS:
+		return false
+	attack_tokens[e] = true
+	return true
+
+
+func release_attack_token(e: Node) -> void:
+	attack_tokens.erase(e)
 
 
 func on_enemy_killed(_e: Node, _drained: bool) -> void:
@@ -360,18 +450,37 @@ func drink_from_lair() -> void:
 	hud.popup("BAGGED BLOOD  +45  (hunger eased)")
 
 
+## Each slow-motion effect runs for its own real-time duration; the slowest
+## active one wins, so a short hit-stop inside bullet-time ends on time.
 func set_slowmo(scale: float, real_seconds: float) -> void:
-	Engine.time_scale = minf(Engine.time_scale, scale) if Time.get_ticks_msec() < timescale_until else scale
-	timescale_until = maxi(timescale_until, Time.get_ticks_msec() + int(real_seconds * 1000.0))
+	slowmo_effects.append({"scale": scale, "until": Time.get_ticks_msec() + int(real_seconds * 1000.0)})
+	_update_slowmo()
+
+
+func clear_slowmo() -> void:
+	slowmo_effects.clear()
+	Engine.time_scale = 1.0
+
+
+func _update_slowmo() -> void:
+	var now := Time.get_ticks_msec()
+	var scale := 1.0
+	for i in range(slowmo_effects.size() - 1, -1, -1):
+		var fx: Dictionary = slowmo_effects[i]
+		if now >= fx.until:
+			slowmo_effects.remove_at(i)
+		else:
+			scale = minf(scale, fx.scale)
+	Engine.time_scale = scale
 
 
 func perfect_dodge() -> void:
 	hud.popup("PERFECT DODGE")
-	player.dash_charges = minf(player.dash_charges + 1.0, 3.0)
+	player.dash_charges = minf(player.dash_charges + 1.0, player.MAX_DASH)
 	set_slowmo(0.3, 0.8)
 
 
 func on_player_died() -> void:
 	game_over = true
-	Engine.time_scale = 1.0
+	clear_slowmo()
 	hud.show_game_over()

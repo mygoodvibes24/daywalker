@@ -22,21 +22,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Cache Godot + web templates
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-web-nothreads
       - name: Install Godot + web export templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
         run: |
           base=https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable
+          mkdir -p ~/godot
           wget -q $base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
-          unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip -d ~/godot
           wget -q $base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
           dest=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
           mkdir -p $dest
           unzip -qj Godot_v${GODOT_VERSION}-stable_export_templates.tpz 'templates/web_nothreads_*' 'templates/version.txt' -d $dest
+          rm Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+      - name: Import project
+        working-directory: game
+        run: ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless --import .
+      - name: Smoke test
+        working-directory: game
+        run: ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless -s res://tests/smoke_test.gd
       - name: Export Web build
+        working-directory: game
         run: |
-          mkdir -p build/web
-          cd game
-          ../Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless --import . || true
-          ../Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless --export-release "Web" ../build/web/index.html
+          mkdir -p ../build/web
+          ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless --export-release "Web" ../build/web/index.html
           test -f ../build/web/index.wasm
       - uses: actions/upload-pages-artifact@v3
         with:

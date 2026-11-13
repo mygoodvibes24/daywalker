@@ -22,6 +22,13 @@ var knockback := Vector3.ZERO
 var flash_t := 0.0
 var burning := false
 var phase := 0.0
+var agent: NavigationAgent3D
+var repath_t := 0.0
+var avoid_frames := 99 # physics frames since the last avoidance callback
+var strike_dir := Vector3.FORWARD # locked when the wind-up starts
+var orbit_sign := 1.0
+var wolf_parts: Array[Node3D] = []
+var human_stats := {}
 
 var visual: Node3D
 var body_mat: StandardMaterial3D
@@ -51,6 +58,20 @@ func _ready() -> void:
 	else:
 		_build_civilian()
 	hp = max_hp
+	human_stats = {"max_hp": max_hp, "speed": speed, "damage": damage, "range": attack_range, "body": body_color, "skin": skin_color, "eye": eye_color}
+	orbit_sign = 1.0 if randf() < 0.5 else -1.0
+	agent = NavigationAgent3D.new()
+	agent.path_desired_distance = 1.0
+	agent.target_desired_distance = 1.2
+	agent.radius = 0.5
+	agent.height = 1.8
+	agent.avoidance_enabled = true
+	agent.neighbor_distance = 6.0
+	agent.max_neighbors = 8
+	agent.time_horizon_agents = 0.8
+	agent.max_speed = 12.0
+	add_child(agent)
+	agent.velocity_computed.connect(_on_safe_velocity)
 	marker = U.part(self, U.sphere(0.16), U.glow(Color(1, 0.05, 0.05), 5.0), Vector3(0, 2.7, 0))
 	marker.visible = false
 
@@ -101,6 +122,7 @@ func _build_civilian() -> void:
 func _start_transform() -> void:
 	transformed = true
 	transform_t = 1.4
+	_clear_combat_state()
 	var full: bool = main.is_full_moon()
 	max_hp = 160.0 if full else 110.0
 	hp = max_hp
@@ -117,10 +139,43 @@ func _start_transform() -> void:
 	tw.tween_property(visual, "scale", Vector3(1.45, 1.35, 1.45), 1.2).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 	tw.tween_property(body_mat, "albedo_color", body_color, 1.0)
 	tw.tween_property(skin_mat, "albedo_color", skin_color, 1.0)
-	U.part(visual, U.cyl(0.0, 0.06, 0.2), skin_mat, Vector3(-0.1, 1.98, 0), Vector3(0, 0, 0.3))
-	U.part(visual, U.cyl(0.0, 0.06, 0.2), skin_mat, Vector3(0.1, 1.98, 0), Vector3(0, 0, -0.3))
-	U.part(visual, U.box(Vector3(0.14, 0.12, 0.24)), skin_mat, Vector3(0, 1.73, 0.18))
+	wolf_parts = [
+		U.part(visual, U.cyl(0.0, 0.06, 0.2), skin_mat, Vector3(-0.1, 1.98, 0), Vector3(0, 0, 0.3)),
+		U.part(visual, U.cyl(0.0, 0.06, 0.2), skin_mat, Vector3(0.1, 1.98, 0), Vector3(0, 0, -0.3)),
+		U.part(visual, U.box(Vector3(0.14, 0.12, 0.24)), skin_mat, Vector3(0, 1.73, 0.18)),
+	]
 	main.on_wolf_transform(self)
+
+
+## Sunrise: the wolf shrinks back into a person with civilian stats.
+func _revert_transform() -> void:
+	transformed = false
+	transform_t = 1.0
+	_clear_combat_state()
+	max_hp = human_stats.max_hp
+	hp = max_hp
+	speed = human_stats.speed
+	damage = human_stats.damage
+	attack_range = human_stats.range
+	body_color = human_stats.body
+	skin_color = human_stats.skin
+	eye_color = human_stats.eye
+	for part in wolf_parts:
+		part.queue_free()
+	wolf_parts.clear()
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(visual, "scale", Vector3.ONE, 0.9).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(body_mat, "albedo_color", body_color, 0.9)
+	tw.tween_property(skin_mat, "albedo_color", skin_color, 0.9)
+
+
+func _clear_combat_state() -> void:
+	staggered = false
+	stagger_t = 0.0
+	windup_t = 0.0
+	if marker != null:
+		marker.visible = false
+	main.release_attack_token(self)
 
 
 func _physics_process(delta: float) -> void:
@@ -136,6 +191,8 @@ func _physics_process(delta: float) -> void:
 	var day: bool = main.is_day()
 	if kind == WEREWOLF and not transformed and not day:
 		_start_transform()
+	elif kind == WEREWOLF and transformed and day and transform_t <= 0.0:
+		_revert_transform()
 	burning = kind == VAMPIRE and main.daylight() > 0.15
 	if burning:
 		hp -= 20.0 * delta
@@ -152,28 +209,97 @@ func _physics_process(delta: float) -> void:
 			staggered = false
 			marker.visible = false
 			hp = max_hp * 0.45
+			flash_t = 0.12 # "recovered" flash: the bite window is gone
 	elif player != null and not player.dead:
 		var to: Vector3 = player.global_position - global_position
 		to.y = 0.0
 		var dist := to.length()
-		if dist > 0.01:
-			visual.rotation.y = lerp_angle(visual.rotation.y, atan2(to.x, to.z), 10.0 * delta)
+		var look := to
 		if windup_t > 0.0:
+			look = strike_dir # committed: the strike goes where he was
 			windup_t -= delta
-			if windup_t <= 0.0 and dist < attack_range + 0.7:
-				player.take_damage(damage, self)
-		elif dist > attack_range:
-			hvel = to / dist * speed
-		elif attack_cd <= 0.0:
-			windup_t = 0.38 if kind == VAMPIRE else 0.45
-			attack_cd = 1.1 if kind == VAMPIRE else 1.3
+			if windup_t <= 0.0:
+				_resolve_strike(player)
+		else:
+			var token: bool = dist < attack_range + 4.0 and main.request_attack_token(self)
+			if not token and dist >= attack_range + 4.0:
+				main.release_attack_token(self)
+			if token and dist <= attack_range:
+				if attack_cd <= 0.0:
+					strike_dir = to / dist if dist > 0.01 else Vector3(sin(visual.rotation.y), 0, cos(visual.rotation.y))
+					windup_t = 0.38 if kind == VAMPIRE else 0.45
+					attack_cd = 1.1 if kind == VAMPIRE else 1.3
+			elif not token and dist < 5.5:
+				hvel = _circle(to, dist) # wait for a turn: ring the player
+			else:
+				hvel = _chase(player.global_position, to, dist, delta)
+		if look.length() > 0.01:
+			visual.rotation.y = lerp_angle(visual.rotation.y, atan2(look.x, look.z), 10.0 * delta)
+	else:
+		main.release_attack_token(self)
 
+	_move(hvel, delta)
+	_animate(delta, hvel.length())
+
+
+## Path along the navmesh; straight in when close.
+func _chase(goal: Vector3, to: Vector3, dist: float, delta: float) -> Vector3:
+	if dist < 3.0 or agent == null:
+		return to / dist * speed
+	repath_t -= delta
+	if repath_t <= 0.0:
+		repath_t = 0.25
+		agent.target_position = goal
+	var nxt := agent.get_next_path_position() - global_position
+	nxt.y = 0.0
+	if nxt.length() < 0.05:
+		return to / dist * speed if agent.is_navigation_finished() else Vector3.ZERO
+	return nxt.normalized() * speed
+
+
+func _circle(to: Vector3, dist: float) -> Vector3:
+	var radial := to / maxf(dist, 0.01)
+	var tangent := Vector3(-radial.z, 0.0, radial.x) * orbit_sign
+	var err := clampf(dist - 3.8, -1.0, 1.0)
+	return (tangent + radial * err * 1.5).normalized() * speed * 0.45
+
+
+func _resolve_strike(player) -> void:
+	main.release_attack_token(self)
+	var to: Vector3 = player.global_position - global_position
+	to.y = 0.0
+	var dist := to.length()
+	var in_arc := dist < attack_range + 0.7 and (dist < 0.6 or strike_dir.dot(to / dist) > 0.5)
+	if in_arc:
+		player.take_damage(damage, self) # a dash in progress counts as a perfect dodge there
+	elif dist < attack_range + 4.0 and player.dashed_recently():
+		main.perfect_dodge() # he dashed out of a strike that was coming
+
+
+func _move(hvel: Vector3, delta: float) -> void:
+	var desired := hvel
+	avoid_frames += 1
+	if agent != null and avoid_frames <= 2:
+		agent.velocity = desired # steering comes back through _on_safe_velocity
+		return
+	if agent != null:
+		agent.velocity = desired # (re)start the avoidance callbacks
+	_apply_velocity(desired, delta)
+
+
+func _on_safe_velocity(safe: Vector3) -> void:
+	avoid_frames = 0
+	if dead:
+		return
+	_apply_velocity(safe, get_physics_process_delta_time())
+
+
+func _apply_velocity(hvel: Vector3, delta: float) -> void:
 	hvel += knockback
 	knockback = knockback.move_toward(Vector3.ZERO, 25.0 * delta)
 	velocity.x = hvel.x
 	velocity.z = hvel.z
 	move_and_slide()
-	_animate(delta, hvel.length())
 
 
 func _animate(delta: float, spd: float) -> void:
@@ -208,6 +334,7 @@ func take_hit(amount: float, dir: Vector3) -> void:
 	hp -= amount
 	flash_t = 0.12
 	windup_t = 0.0
+	main.release_attack_token(self)
 	knockback = dir * (6.0 if kind == VAMPIRE and not transformed else 3.0)
 	if hp <= max_hp * 0.25:
 		staggered = true
@@ -228,6 +355,9 @@ func _die(_drained: bool) -> void:
 		return
 	dead = true
 	marker.visible = false
+	main.release_attack_token(self)
+	if agent != null:
+		agent.avoidance_enabled = false
 	collision_layer = 0
 	collision_mask = 0
 	main.on_enemy_killed(self, _drained)

@@ -11,6 +11,8 @@ const DASH_SPEED := 34.0
 const DASH_TIME := 0.16
 const MAX_DASH := 3.0
 const BITE_RANGE := 2.6
+const SUN_HEAL := 1.0 # HP/s in daylight while Hunger is low and out of combat
+const GHOST_POOL := 6
 
 var main
 var max_hp := 100.0
@@ -39,6 +41,13 @@ var sprinting := false
 var prompt_text := ""
 var cam_yaw := 0.0
 var cam_pitch := -0.25
+var since_dash := 99.0 # game seconds since the last Blood Dash started
+var since_hurt := 99.0
+var attack_block_until := 0 # ms; swallows the click that captures the mouse
+var ghosts: Array[Node3D] = []
+var ghost_mats: Array[StandardMaterial3D] = []
+var ghost_tweens: Array = []
+var ghost_next := 0
 
 var pivot: Node3D
 var spring: SpringArm3D
@@ -114,6 +123,8 @@ func _build_body() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.is_pressed() and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		get_viewport().set_input_as_handled()
+		block_attack()
 	elif event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var mm := event as InputEventMouseMotion
 		cam_yaw -= mm.relative.x * 0.0025
@@ -148,6 +159,7 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("dash") and dash_charges >= 1.0 and bite_t <= 0.0:
 		dash_charges -= 1.0
 		dash_t = DASH_TIME
+		since_dash = 0.0
 		invuln_t = maxf(invuln_t, DASH_TIME + 0.12)
 		dash_dir = dir.normalized() if dir.length() > 0.1 else _forward()
 		collision_mask = 1 # phase through enemies
@@ -184,9 +196,9 @@ func _physics_process(delta: float) -> void:
 	visual.rotation.y = lerp_angle(visual.rotation.y, facing, 16.0 * delta)
 
 	# actions
-	if Input.is_action_just_pressed("attack") and attack_cd <= 0.0 and bite_t <= 0.0:
+	if Input.is_action_just_pressed("attack") and attack_cd <= 0.0 and bite_t <= 0.0 and Time.get_ticks_msec() >= attack_block_until:
 		_attack()
-	var bite_target = _nearest_enemy(BITE_RANGE, true)
+	var bite_target = _nearest_enemy(BITE_RANGE, 1)
 	if Input.is_action_just_pressed("bite") and bite_t <= 0.0 and bite_target != null:
 		_bite(bite_target)
 	var near_lair: bool = global_position.distance_to(main.lair_pos) < 3.5
@@ -203,6 +215,16 @@ func _physics_process(delta: float) -> void:
 			prompt_text = "BLOOD BANK EMPTY  —  restocks at sunrise"
 
 
+## Ignore attack input briefly (the click that starts the game or grabs the mouse).
+func block_attack() -> void:
+	attack_block_until = Time.get_ticks_msec() + 200
+
+
+## True if Sol started a Blood Dash within the last `window` game seconds.
+func dashed_recently(window: float = 0.22) -> bool:
+	return since_dash <= window
+
+
 func _forward() -> Vector3:
 	return Vector3(sin(facing), 0.0, cos(facing))
 
@@ -213,6 +235,8 @@ func _timers(delta: float) -> void:
 		if dash_t <= 0.0:
 			collision_mask = 1 | 4
 	invuln_t = maxf(invuln_t - delta, 0.0)
+	since_dash += delta
+	since_hurt += delta
 	attack_cd = maxf(attack_cd - delta, 0.0)
 	combo_t = maxf(combo_t - delta, 0.0)
 	swing_t = maxf(swing_t - delta, 0.0)
@@ -231,9 +255,9 @@ func _timers(delta: float) -> void:
 			main.hud.popup("The frenzy fades...")
 	else:
 		hunger = maxf(hunger - 0.6 * delta, 0.0)
-	# Daywalker: stay human and the sun heals you
-	if hunger < 30.0 and main.daylight() > 0.3:
-		hp = minf(hp + 2.5 * delta, max_hp)
+	# Daywalker: stay human and the sun slowly heals you (out of combat)
+	if hunger < 30.0 and main.daylight() > 0.3 and since_hurt > 4.0:
+		hp = minf(hp + SUN_HEAL * delta, max_hp)
 	if hp <= 0.0:
 		_die()
 
@@ -249,11 +273,12 @@ func damage_mult() -> float:
 	return m
 
 
-func _nearest_enemy(max_dist: float, staggered_only: bool):
+## staggered: 1 = only staggered enemies, -1 = skip staggered ones, 0 = any.
+func _nearest_enemy(max_dist: float, staggered: int):
 	var best = null
 	var best_d := max_dist
 	for e in main.enemies_root.get_children():
-		if e.dead or (staggered_only and not e.staggered):
+		if e.dead or (staggered == 1 and not e.staggered) or (staggered == -1 and e.staggered):
 			continue
 		var d: float = e.global_position.distance_to(global_position)
 		if d < best_d:
@@ -268,7 +293,10 @@ func _attack() -> void:
 	attack_cd = 0.22 if combo < 3 else 0.4
 	swing_t = 0.22
 	lunge_t = 0.08
-	var target = _nearest_enemy(5.0, false)
+	# soft-lock prefers fighting enemies, so you don't kill the one you meant to bite
+	var target = _nearest_enemy(5.0, -1)
+	if target == null:
+		target = _nearest_enemy(5.0, 1)
 	if target != null:
 		var tt: Vector3 = target.global_position - global_position
 		facing = atan2(tt.x, tt.z)
@@ -278,8 +306,8 @@ func _attack() -> void:
 	var reach := 2.7 if combo < 3 else 3.3
 	var hit := false
 	for e in main.enemies_root.get_children():
-		if e.dead:
-			continue
+		if e.dead or (e.staggered and e != target):
+			continue # a staggered enemy only dies to a swing aimed at it
 		var to: Vector3 = e.global_position - global_position
 		to.y = 0.0
 		var d := to.length()
@@ -341,6 +369,7 @@ func take_damage(amount: float, _src) -> void:
 	if frenzy_t > 0.0:
 		amount *= 0.5
 	hp -= amount
+	since_hurt = 0.0
 	invuln_t = 0.4
 	shake = maxf(shake, 0.32)
 	main.hud.on_damage()
@@ -413,17 +442,40 @@ func _process(delta: float) -> void:
 			_spawn_ghost()
 
 
+## After-images come from a small pool of 3-mesh silhouettes (cheap on web GPUs).
+func _build_ghosts() -> void:
+	var body := U.capsule(0.22, 1.85)
+	var coat_mesh := U.cyl(0.26, 0.5, 1.3)
+	var head := U.sphere(0.17)
+	for i in range(GHOST_POOL):
+		var m := StandardMaterial3D.new()
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		var g := Node3D.new()
+		g.top_level = true
+		g.visible = false
+		for part in [[body, Vector3(0, 0.95, 0)], [coat_mesh, Vector3(0, 0.98, -0.02)], [head, Vector3(0, 1.85, 0)]]:
+			var mi := U.part(g, part[0], m, part[1])
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(g)
+		ghosts.append(g)
+		ghost_mats.append(m)
+		ghost_tweens.append(null)
+
+
 func _spawn_ghost() -> void:
-	var g: Node3D = visual.duplicate()
-	var m := StandardMaterial3D.new()
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	if ghosts.is_empty():
+		_build_ghosts()
+	var i := ghost_next
+	ghost_next = (ghost_next + 1) % GHOST_POOL
+	var g := ghosts[i]
+	var m := ghost_mats[i]
+	if ghost_tweens[i] != null:
+		(ghost_tweens[i] as Tween).kill()
 	m.albedo_color = Color(0.7, 0.0, 0.05, 0.4) if (frenzy_t > 0.0 or rage_t > 0.0) else Color(0.08, 0.06, 0.12, 0.45)
-	for mi in g.find_children("*", "MeshInstance3D", true, false):
-		(mi as MeshInstance3D).material_override = m
-		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	main.add_child(g)
 	g.global_transform = visual.global_transform
-	var tw := g.create_tween()
+	g.visible = true
+	var tw := create_tween()
 	tw.tween_property(m, "albedo_color:a", 0.0, 0.25)
-	tw.tween_callback(g.queue_free)
+	tw.tween_callback(g.hide)
+	ghost_tweens[i] = tw

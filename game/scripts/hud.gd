@@ -112,6 +112,12 @@ func _build_start() -> Control:
 	story.reparent(panel)
 	story.anchor_top = 0.55
 	story.anchor_bottom = 0.55
+	if DisplayServer.is_touchscreen_available() and OS.has_feature("web"):
+		var note := _centered(20, Color(1, 0.85, 0.4))
+		note.text = "Best on a desktop browser with keyboard + mouse or a controller.\nTouch controls are not supported yet."
+		note.reparent(panel)
+		note.anchor_top = 0.88
+		note.anchor_bottom = 0.88
 	var click := _centered(24, Color(1, 0.4, 0.4))
 	click_label = click
 	click.text = "CLICK TO HUNT  (or press A on a controller)"
@@ -208,19 +214,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		if started:
 			help_t = maxf(help_t, 6.0)
 	if not started and (event is InputEventKey or event is InputEventMouseButton or event is InputEventJoypadButton) and event.is_pressed():
-		started = true
+		get_viewport().set_input_as_handled()
+		main.start_game()
 
 
 func _process(delta: float) -> void:
 	var real_dt := delta / maxf(Engine.time_scale, 0.01)
 	var p = main.player
-	if started or Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		started = true
-		start_overlay.visible = false
+	start_overlay.visible = not started
 	hp_bar.value = p.hp
 	hunger_bar.value = p.hunger
 	hunger_fill.bg_color = Color(0.45, 0.1, 0.55).lerp(Color(1.0, 0.05, 0.1), p.hunger / 100.0)
-	var form := "DAYWALKER  (sunlight heals you)"
+	var form := "DAYWALKER  (sunlight heals you)" if main.daylight() > 0.3 else "DAYWALKER"
 	if p.frenzy_t > 0.0:
 		form = "FRENZY  %.0fs" % p.frenzy_t
 	elif p.hunger >= 60.0:
@@ -233,10 +238,10 @@ func _process(delta: float) -> void:
 	if p.rage_t > 0.0:
 		buffs += "  RAGE"
 	form_label.text = form + buffs
-	dash_label.text = "DASH  %d / 3" % int(p.dash_charges)
+	dash_label.text = "DASH  %d / %d" % [int(p.dash_charges), int(p.MAX_DASH)]
 	var phase := "DAY" if main.is_day() else ("FULL MOON" if main.is_full_moon() else "NIGHT")
 	clock_label.text = "%s  %s" % [phase, main.clock_text()]
-	info_label.text = "Kills  %d\nNights survived  %d\nBlood bank  %d / %d" % [main.kills, main.night_count, main.lair_stock, 3]
+	info_label.text = "Kills  %d\nNights survived  %d\nBlood bank  %d / %d" % [main.kills, main.night_count, main.lair_stock, main.LAIR_MAX]
 	prompt_label.text = p.prompt_text
 
 	announce_t = maxf(announce_t - real_dt, 0.0)

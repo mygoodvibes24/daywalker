@@ -3,6 +3,8 @@
 Reviewed: commit `faa2cbc` (Godot 4.3 prototype + STORY_BIBLE v0.1), 2026-11-13.
 Method: read every script line by line, ran the headless smoke test, wrote two throwaway probe scripts (curbs, pathing, slow-motion, spawns, node counts), exported the web build and played it in headless Chromium at 1280x720 and phone size (390x844). Details are in the Evidence section at the end.
 
+> **Fix status (update, 2026-11-13):** bugs 1–8, 10, 11, 13, 14 and 16–22 are fixed, and each critical or high bug has a regression check in `game/tests/smoke_test.gd`. Attack tokens (at most 2 enemies strike at once, the rest circle) and a gentler, out-of-combat-only sun heal (1 HP/s) from section 4 are also in. Still open: 9 (frenzy has no downside, which is a design decision), 12 (phone layout: the title screen now says "best on desktop" on touch devices), 15 (only a white "recovered" flash so far), and everything in sections 4–8 beyond that. Bug 21: CI now caches Godot, fails on import errors and runs the smoke test, but it still deploys from this feature branch on purpose so the playable build stays current.
+
 ---
 
 ## 1. Verdict
