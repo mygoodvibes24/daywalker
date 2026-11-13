@@ -69,7 +69,7 @@ func _ready() -> void:
 	add_child(col)
 	_build_body()
 	pivot = Node3D.new()
-	pivot.position.y = 1.65
+	pivot.position.y = 1.8 # a touch higher: reads the street and the lights better
 	add_child(pivot)
 	spring = SpringArm3D.new()
 	spring.spring_length = 4.8

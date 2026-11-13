@@ -5,6 +5,8 @@ const U = preload("res://scripts/util.gd")
 const PlayerScript = preload("res://scripts/player.gd")
 const EnemyScript = preload("res://scripts/enemy.gd")
 const HudScript = preload("res://scripts/hud.gd")
+const AtmosphereScript = preload("res://scripts/atmosphere.gd")
+const Wet = preload("res://scripts/wet_materials.gd")
 
 const DAY_LENGTH := 240.0 # seconds for one full day/night cycle
 const LAIR_MAX := 3
@@ -26,6 +28,7 @@ static var started_once := false
 
 var sun: DirectionalLight3D
 var env: Environment
+var atmo: Node3D # lighting, fog, sky, rain and post FX (atmosphere.gd)
 var player: CharacterBody3D
 var hud: CanvasLayer
 var enemies_root: Node3D
@@ -146,24 +149,18 @@ func _bind(action: String, keys: Array, buttons: Array = [], pad_buttons: Array 
 
 # ---------------------------------------------------------------- world
 func _build_environment() -> void:
-	var we := WorldEnvironment.new()
-	env = Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.fog_enabled = true
-	env.fog_density = 0.011
-	we.environment = env
-	add_child(we)
-	sun = DirectionalLight3D.new()
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 60.0
-	add_child(sun)
+	# sky, fog, sun/moon, rain and the film look; quality tier follows the renderer
+	atmo = AtmosphereScript.new()
+	atmo.name = "Atmosphere"
+	atmo.main = self
+	add_child(atmo)
+	env = atmo.env
+	sun = atmo.sun
 
 
 func _build_city() -> void:
-	var asphalt := U.mat(Color(0.09, 0.09, 0.1), 0.35, 0.1) # wet street
-	var walk := U.mat(Color(0.28, 0.27, 0.26), 0.9)
+	var asphalt := Wet.asphalt() # wet street with puddles
+	var walk := Wet.paving()
 	window_mat = U.glow(Color(1.0, 0.75, 0.4), 0.0)
 	var wall_mats: Array[StandardMaterial3D] = [
 		U.mat(Color(0.22, 0.2, 0.19), 0.9),
@@ -335,29 +332,13 @@ func _process(delta: float) -> void:
 
 func _update_lighting() -> void:
 	var d := daylight()
-	var night_sky := Color(0.02, 0.025, 0.06) if not is_full_moon() else Color(0.05, 0.04, 0.08)
-	var dusk := Color(0.55, 0.3, 0.25)
-	var noon := Color(0.42, 0.48, 0.56) # overcast, rain-soaked
-	var sky := night_sky.lerp(dusk, clampf(d * 3.0, 0.0, 1.0)).lerp(noon, clampf((d - 0.3) / 0.7, 0.0, 1.0))
-	env.background_color = sky
-	env.fog_light_color = sky
-	env.ambient_light_color = Color(0.35, 0.4, 0.6).lerp(Color(0.7, 0.72, 0.78), d)
-	env.ambient_light_energy = 0.35 + d * 0.3
 	var angle := (time_of_day - 0.25) * TAU
 	if d > 0.0:
 		sun.rotation = Vector3(-clampf(angle, 0.2, PI - 0.2), 0.6, 0)
-		sun.light_color = Color(1.0, 0.6, 0.4).lerp(Color(1.0, 0.96, 0.9), d)
-		sun.light_energy = 0.25 + d * 0.85
 	else:
-		sun.rotation = Vector3(-0.9, -0.7, 0)
-		sun.light_color = Color(0.55, 0.65, 1.0)
-		sun.light_energy = 0.45 if is_full_moon() else 0.25
-	var night_amt := 1.0 - clampf(d * 2.0, 0.0, 1.0)
-	window_mat.emission_energy_multiplier = night_amt * 1.6
-	lamp_mat.emission_energy_multiplier = 0.2 + night_amt * 4.0
-	for l in lamps:
-		l.light_energy = night_amt * 2.2
-		l.visible = night_amt > 0.02
+		sun.rotation = Vector3(-0.9, -0.7, 0) # the moon
+	# colours, fog, lamps, windows and the full-moon look live in atmosphere.gd
+	atmo.update_lighting(d, 1.0 - clampf(d * 2.0, 0.0, 1.0), is_full_moon())
 
 
 # ---------------------------------------------------------------- enemies

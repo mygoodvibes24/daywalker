@@ -26,8 +26,8 @@ var damage_t := 0.0
 var help_t := 20.0
 var started := false
 var using_pad := false
-const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)\nRMB / Q  Blood Dash   LMB / J  blade combo\nE  bite a staggered enemy (red orb)   F  drink at the Undercroft\nMouse  look   ESC  release mouse"
-const PAD_HELP := "L-stick move   R-stick camera   LT / L3 sprint   A jump (x2)\nB / RB  Blood Dash   X / RT  blade combo\nY  bite a staggered enemy (red orb)   LB  drink at the Undercroft\nSTART  restart after death"
+const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)\nRMB / Q  Blood Dash   LMB / J  blade combo\nE  bite a staggered enemy (red orb)   F  drink at the Undercroft\nMouse  look   T  rain on/off   ESC  release mouse"
+const PAD_HELP := "L-stick move   R-stick camera   LT / L3 sprint   A jump (x2)\nB / RB  Blood Dash   X / RT  blade combo\nY  bite a staggered enemy (red orb)   LB  drink at the Undercroft\nSTART  restart after death   BACK  rain on/off"
 
 
 func _ready() -> void:
