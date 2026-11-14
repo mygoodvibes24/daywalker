@@ -27,6 +27,8 @@ const ROWS := [
 	["Master", "Master volume", "slider", 0.0, 1.0, 0.05, "%d%%", 100.0],
 	["Music", "Music volume", "slider", 0.0, 1.0, 0.05, "%d%%", 100.0],
 	["SFX", "Effects volume", "slider", 0.0, 1.0, 0.05, "%d%%", 100.0],
+	["Voice", "Voice volume", "slider", 0.0, 1.0, 0.05, "%d%%", 100.0],
+	["subtitles", "Subtitles", "choice", ["Off", "On"]],
 ]
 
 var first_focus: Control
@@ -95,6 +97,7 @@ func _static_value(key: String) -> Variant:
 		"mouse_sensitivity": return SettingsScript.mouse_sensitivity
 		"pad_sensitivity": return SettingsScript.pad_sensitivity
 		"invert_y": return SettingsScript.invert_y
+		"subtitles": return SettingsScript.subtitles
 	return 0
 
 

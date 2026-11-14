@@ -33,6 +33,7 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_build_ui()
 	buttons[0].grab_focus.call_deferred()
+	Audio.set_music("menu"); Dialogue.start_menu_banter() # AUDIO HOOK (starts after the first click on the web)
 	var tw := create_tween()
 	tw.tween_property(fade, "color:a", 0.0, 1.6).set_trans(Tween.TRANS_SINE)
 
@@ -82,6 +83,7 @@ func _build_ui() -> void:
 		b.custom_minimum_size = Vector2(300, 0)
 		b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		b.pressed.connect(e[1])
+		b.focus_entered.connect(Audio.play.bind("ui_hover", -9.0, 0.05)); b.pressed.connect(Audio.play.bind("ui_click", -3.0, 0.0)) # AUDIO HOOK
 		menu_box.add_child(b)
 		buttons.append(b)
 	for i in buttons.size(): # wrap around with up / down
@@ -190,6 +192,7 @@ func _on_start() -> void:
 	if state == "loading":
 		return
 	state = "loading"
+	Dialogue.stop_menu_banter(); Audio.set_music("", 1.2) # AUDIO HOOK
 	for b in buttons:
 		b.disabled = true
 		b.release_focus()

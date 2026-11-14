@@ -204,6 +204,7 @@ func _update_motes(delta: float, p) -> void:
 			motes.remove_at(i)
 	if gained > 0:
 		main.progression.add_tithe(gained)
+		Audio.play("tithe_collect", -8.0, 0.15) # AUDIO HOOK
 
 
 # ---------------------------------------------------------------- ground items
@@ -238,6 +239,7 @@ func spawn_item(inst: Dictionary, pos: Vector3) -> Dictionary:
 		(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var entry := {"node": root, "inst": inst.duplicate(), "spin": spin, "phase": rng.randf() * TAU}
 	ground_items.append(entry)
+	Audio.on_loot_dropped(r, root.global_position) # AUDIO HOOK
 	return entry
 
 
@@ -275,6 +277,7 @@ func pick_up(entry: Dictionary) -> bool:
 	var inst: Dictionary = entry.inst
 	var label := ItemDB.display_name(inst) + ("  x%d" % inst.n if inst.get("n", 1) > 1 else "")
 	main.hud.popup("%s  ·  %s" % [label.to_upper(), ItemDB.RARITY_NAMES[inst.r].to_upper()])
+	Audio.on_loot_picked(int(inst.r)) # AUDIO HOOK
 	_remove_item(entry)
 	return true
 
@@ -378,6 +381,7 @@ func open_cache(c: Dictionary) -> void:
 		var side: Vector3 = c.node.global_transform.basis.x * (1.0 if k == 0 else -1.0)
 		spawn_item(ItemDB.random_item(rng, night, main.is_full_moon(), luck), c.pos + side * 1.1)
 	main.hud.popup("THE " + ("COFFIN" if c.coffin else "CRATE") + " GIVES UP ITS SECRETS")
+	Audio.play("loot_pickup", 0.0, 0.0) # AUDIO HOOK
 
 
 ## Sunrise: every cache is sealed and stocked again.
