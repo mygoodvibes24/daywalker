@@ -832,6 +832,13 @@ func _sol() -> void:
 	# the whetstone in his right hand
 	if pose.stone != null:
 		U.part(pose.stone, U.box(Vector3(0.14, 0.035, 0.06)), U.mat(Color(0.36, 0.33, 0.3), 0.9), Vector3(-0.1, -0.05, 0.0))
+	if pose.modular:
+		# the modular hero has separate fist meshes (no metallic hands to fix); the blade he is
+		# honing lies on the bench, so his own sword stays out of the fist
+		var blade := model.find_child("Blade", true, false) as Node3D
+		if blade != null:
+			blade.visible = false
+		return
 	_fix_hands(model)
 
 

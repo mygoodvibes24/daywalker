@@ -1,0 +1,38 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://cuk3m3lsc2uw5"
+path.s3tc="res://.godot/imported/sol_mod_sword_cleaver_NormalGL_7e78ec60-4812-4a76-85a3-5420d12d1a4e.png-2a31f8b0d948e2455ac3cad9a3fff13b.s3tc.ctex"
+metadata={
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
+}
+generator_parameters={
+"md5": "0122a65e2d776d9ba5680fb2af98d135"
+}
+
+[deps]
+
+source_file="res://assets/characters/sol/sol_mod_sword_cleaver_NormalGL_7e78ec60-4812-4a76-85a3-5420d12d1a4e.png"
+dest_files=["res://.godot/imported/sol_mod_sword_cleaver_NormalGL_7e78ec60-4812-4a76-85a3-5420d12d1a4e.png-2a31f8b0d948e2455ac3cad9a3fff13b.s3tc.ctex"]
+
+[params]
+
+compress/mode=2
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=1
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=1024
+detect_3d/compress_to=1

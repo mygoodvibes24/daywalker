@@ -18,16 +18,34 @@ var stroke_from := 0.02 # x along the blade (Sol's right is -x)
 var stroke_to := -0.30
 var left_hand := Vector3(0.24, 0.0, 0.0) # y/z filled from bench_top/bench_near
 
+## The modular rig (sol_modular.scn) uses auto-rig bone names and non-identity rest bases;
+## its bones are mapped to the names used here, and rotations are applied in character space.
+const MODULAR_NAMES := {
+	"Hips": "Hips", "Spine": "Spine02", "Chest": "Spine01", "Neck": "neck", "Head": "Head",
+	"UpperArm.L": "LeftArm", "ForeArm.L": "LeftForeArm", "Hand.L": "LeftHand",
+	"UpperArm.R": "RightArm", "ForeArm.R": "RightForeArm", "Hand.R": "RightHand",
+	"Thigh.L": "LeftUpLeg", "Shin.L": "LeftLeg", "Foot.L": "LeftFoot",
+	"Thigh.R": "RightUpLeg", "Shin.R": "RightLeg", "Foot.R": "RightFoot",
+}
+var modular := false
+
 
 func setup(s: Skeleton3D) -> void:
 	skel = s
-	for i in skel.get_bone_count():
-		bi[skel.get_bone_name(i)] = i
+	modular = skel.find_bone("LeftArm") >= 0 and skel.find_bone("UpperArm.L") < 0
+	if modular:
+		for k in MODULAR_NAMES:
+			var i := skel.find_bone(MODULAR_NAMES[k])
+			if i >= 0:
+				bi[k] = i
+	else:
+		for i in skel.get_bone_count():
+			bi[skel.get_bone_name(i)] = i
 	if bi.has("Hips"):
 		hips_rest = skel.get_bone_rest(bi["Hips"]).origin
 	if bi.has("Hand.R"):
 		var att := BoneAttachment3D.new()
-		att.bone_name = "Hand.R"
+		att.bone_name = skel.get_bone_name(bi["Hand.R"])
 		skel.add_child(att)
 		stone = Node3D.new()
 		att.add_child(stone)
@@ -47,8 +65,18 @@ func _has(names: Array) -> bool:
 
 
 func _rot(bone: String, q: Quaternion) -> void:
-	if bi.has(bone):
-		skel.set_bone_pose_rotation(bi[bone], q)
+	if not bi.has(bone):
+		return
+	var b: int = bi[bone]
+	if modular:
+		# q is about character axes (+X left, +Y up, +Z forward): carry it into the parent's
+		# rest frame and apply it on top of the bone's rest rotation
+		var par := skel.get_bone_parent(b)
+		var pb := skel.get_bone_global_rest(par).basis.orthonormalized() if par >= 0 else Basis()
+		var local := pb.inverse() * Basis(q) * pb * skel.get_bone_rest(b).basis.orthonormalized()
+		skel.set_bone_pose_rotation(b, local.get_rotation_quaternion())
+	else:
+		skel.set_bone_pose_rotation(b, q)
 
 
 func _pose(time: float) -> void:

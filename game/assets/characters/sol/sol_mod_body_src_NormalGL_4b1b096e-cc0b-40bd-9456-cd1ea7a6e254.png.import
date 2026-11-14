@@ -1,0 +1,38 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://blmw1x4r640vf"
+path.s3tc="res://.godot/imported/sol_mod_body_src_NormalGL_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.png-c982b4bec4371f1f6ee1e661d1ebc7de.s3tc.ctex"
+metadata={
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
+}
+generator_parameters={
+"md5": "a1b0335158d0bb4141d769043b25b73f"
+}
+
+[deps]
+
+source_file="res://assets/characters/sol/sol_mod_body_src_NormalGL_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.png"
+dest_files=["res://.godot/imported/sol_mod_body_src_NormalGL_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.png-c982b4bec4371f1f6ee1e661d1ebc7de.s3tc.ctex"]
+
+[params]
+
+compress/mode=2
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=1
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=2048
+detect_3d/compress_to=1

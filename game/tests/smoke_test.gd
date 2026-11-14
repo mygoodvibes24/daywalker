@@ -86,6 +86,7 @@ func _initialize() -> void:
 	main.levelup_ui.close()
 	ok = await _gameplay_checks(main) and ok
 	ok = await _progression_checks(main) and ok
+	ok = await _coat_checks(main) and ok
 	ok = await _menu_checks(main) and ok
 	if FileAccess.file_exists(SMOKE_SAVE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SMOKE_SAVE))
@@ -269,7 +270,10 @@ func _progression_checks(main) -> bool:
 	p.global_position = Vector3(10.0, 0.1, 10.0)
 	p.velocity = Vector3.ZERO
 
-	# a kill grants Tithe (motes fly to Sol)
+	# a kill grants Tithe (motes fly to Sol); motes still in flight from earlier checks don't count
+	for m in loot.motes:
+		m.node.queue_free()
+	loot.motes.clear()
 	var t0: int = prog.tithe
 	var v = _spawn(main, 0, Vector3(10.0, 0.5, 11.0))
 	for i in 3: await physics_frame
@@ -385,6 +389,46 @@ func _progression_checks(main) -> bool:
 	ok = _check("the Coat pauses the world", paused and main.inventory_ui.visible) and ok
 	main.inventory_ui.close()
 	ok = _check("closing the Coat resumes", not paused) and ok
+	return ok
+
+
+## The modular hero's trenchcoat: spring bones swing out when Sol runs and settle when he stops.
+func _coat_checks(main) -> bool:
+	var p = main.player
+	var sim = p.visual.find_child("CoatSim", true, false)
+	if sim == null:
+		print("  --   coat checks skipped (no modular model)")
+		return true
+	var ok := true
+	main.inventory_ui.close()
+	main.levelup_ui.close()
+	main.clear_slowmo()
+	_clear_enemies(main)
+	p.dead = false
+	p.hp = p.max_hp
+	p.global_position = Vector3(10.0, 0.1, 10.0)
+	p.velocity = Vector3.ZERO
+	for i in 120: await physics_frame
+	var still: float = sim.swing_amount()
+	_pad_axis(JOY_AXIS_LEFT_Y, -1.0)
+	var run_max := 0.0
+	for i in 45:
+		await physics_frame
+		run_max = maxf(run_max, sim.swing_amount())
+	_pad_axis(JOY_AXIS_LEFT_Y, 0.0)
+	var run_motion: float = sim.motion_amount()
+	for i in 240: await physics_frame
+	var settled: float = sim.swing_amount()
+	var still_motion: float = sim.motion_amount()
+	ok = _check("coat bones swing when running (%.3f rad vs %.3f standing)" % [run_max, still], run_max > still + 0.12) and ok
+	ok = _check("coat settles after stopping (%.3f rad, cloth %.3f m/s, was %.2f)" % [settled, still_motion, run_motion], absf(settled - still) < 0.06 and still_motion < run_motion * 0.06) and ok
+	# with the idle clip frozen too, the cloth comes fully to rest
+	p.mod_anim.tree.active = false
+	for i in 150: await physics_frame
+	var rest_motion: float = sim.motion_amount()
+	p.mod_anim.tree.active = true
+	ok = _check("coat comes to rest on a still body (%.4f m/s)" % rest_motion, rest_motion < 0.02) and ok
+	ok = _check("modular model animates with clips", p.mod_anim != null and p.mod_anim.tree != null and p.mod_anim.tree.active) and ok
 	return ok
 
 
