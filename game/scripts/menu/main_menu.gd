@@ -147,6 +147,7 @@ func _show(which: String) -> void:
 		return
 	last_focus = get_viewport().gui_get_focus_owner()
 	state = which
+	Dialogue.stop_menu_banter() # AUDIO HOOK: no chatter over the settings screens
 	menu_box.visible = false
 	options.visible = which == "options"
 	controls.visible = which == "controls"
@@ -156,6 +157,7 @@ func _back() -> void:
 	if state != "options" and state != "controls":
 		return
 	state = "menu"
+	Dialogue.start_menu_banter() # AUDIO HOOK
 	options.visible = false
 	controls.visible = false
 	menu_box.visible = true

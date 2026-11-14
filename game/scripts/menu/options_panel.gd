@@ -43,7 +43,7 @@ func _init() -> void:
 	add_theme_stylebox_override("panel", sb)
 	custom_minimum_size = Vector2(620, 0)
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 3)
+	col.add_theme_constant_override("separation", 2)
 	add_child(col)
 	var t := S.title("OPTIONS", 34, S.TEXT)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -54,7 +54,7 @@ func _init() -> void:
 		if row[0] == "#":
 			var h := S.label(row[1], 14, S.CRIMSON.lightened(0.25), 3)
 			h.add_theme_font_override("font", S.serif())
-			h.custom_minimum_size = Vector2(0, 26)
+			h.custom_minimum_size = Vector2(0, 22)
 			h.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 			col.add_child(h)
 			continue
@@ -110,7 +110,7 @@ func _set_value(key: String, v: Variant) -> void:
 func _row(col: VBoxContainer, row: Array) -> Control:
 	var key: String = row[0]
 	var h := HBoxContainer.new()
-	h.custom_minimum_size = Vector2(0, 34)
+	h.custom_minimum_size = Vector2(0, 31)
 	h.add_theme_constant_override("separation", 14)
 	col.add_child(h)
 	var l := S.label(row[1], 17, S.TEXT, 3)
@@ -166,7 +166,7 @@ func _slider(h: HBoxContainer, key: String, row: Array, l: Label) -> Control:
 
 func _choice(h: HBoxContainer, key: String, names: Array, l: Label) -> Control:
 	var b := S.button("", 16)
-	b.custom_minimum_size = Vector2(294, 30)
+	b.custom_minimum_size = Vector2(294, 28)
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	b.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var allowed: Array = range(names.size())
