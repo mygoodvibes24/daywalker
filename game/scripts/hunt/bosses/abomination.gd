@@ -82,6 +82,6 @@ func _on_half() -> void:
 	if rider.model != null:
 		var tw := create_tween()
 		tw.tween_property(rider.model, "scale", rider.model.scale * 1.35, 1.2).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
-	HFx.shockwave(get_parent(), global_position, 12.0, aura_color, 0.8)
+	HFx.shockwave(main, global_position, 12.0, aura_color, 0.8)
 	if director != null:
 		director.boss_phase_text(self, "THE COURT HALF AWAKENS")

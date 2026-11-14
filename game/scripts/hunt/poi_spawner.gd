@@ -59,11 +59,15 @@ static func generate(seed_: int, city) -> Array:
 		var t = spots[k]
 		spots[k] = spots[s]
 		spots[s] = t
+	# round-robin over the pool so every kind of site gets placed before any gets its extras
 	var wanted: Array = []
+	var most := 0
 	for type in Cfg.POI_TYPES:
-		for i in int(Cfg.POI_TYPES[type].n):
-			wanted.append(type)
-	# combat sites first so they get the best spread
+		most = maxi(most, int(Cfg.POI_TYPES[type].n))
+	for i in most:
+		for type in Cfg.POI_TYPES:
+			if i < int(Cfg.POI_TYPES[type].n):
+				wanted.append(type)
 	var bosses: Array = Cfg.FIELD_BOSSES.duplicate()
 	for k in range(bosses.size() - 1, 0, -1):
 		var s := rng.randi_range(0, k)
@@ -76,7 +80,9 @@ static func generate(seed_: int, city) -> Array:
 			var p: Vector3 = spots[idx]
 			var ok := true
 			for o in out:
-				if o.pos.distance_to(p) < MIN_SPACING:
+				# two camps of enemies need a block between them; a chapel or cart can sit next door
+				var calm: bool = type in ["chapel", "merchant"] or o.type in ["chapel", "merchant"]
+				if o.pos.distance_to(p) < (MIN_SPACING if not calm else 19.0):
 					ok = false
 					break
 			if ok:

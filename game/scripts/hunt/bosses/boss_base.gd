@@ -124,8 +124,8 @@ func _ready() -> void:
 		visual.scale = Vector3.ONE * 0.2
 		var tw := create_tween()
 		tw.tween_property(visual, "scale", Vector3.ONE, 1.1).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
-		HFx.puff(get_parent(), global_position + Vector3(0, 1.2, 0), aura_color, 18, 0.28, 4.0)
-		HFx.shockwave(get_parent(), global_position, 9.0, aura_color, 0.7)
+		HFx.puff(main, global_position + Vector3(0, 1.2, 0), aura_color, 18, 0.28, 4.0)
+		HFx.shockwave(main, global_position, 9.0, aura_color, 0.7)
 
 
 static func _model_scene(n: String) -> PackedScene:
@@ -280,24 +280,24 @@ func _start_attack(a: Dictionary, p) -> void:
 	state_t = float(a.get("windup", 0.6)) * windup_mult
 	match a.type:
 		"swipe":
-			HFx.circle_telegraph(get_parent(), global_position + dir * a.range * 0.45, a.range * 0.75, state_t, Color(1.0, 0.2, 0.05))
+			HFx.circle_telegraph(main, global_position + dir * a.range * 0.45, a.range * 0.75, state_t, Color(1.0, 0.2, 0.05))
 		"slam":
 			var tgt: Vector3 = global_position if a.get("self", false) else p.global_position
 			atk["target"] = tgt
 			atk["lock"] = true
 			facing = atan2(dir.x, dir.z)
-			HFx.circle_telegraph(get_parent(), tgt, a.radius, state_t + a.get("leap", 0.0), Color(1.0, 0.1, 0.05))
+			HFx.circle_telegraph(main, tgt, a.radius, state_t + a.get("leap", 0.0), Color(1.0, 0.1, 0.05))
 		"dash":
 			atk["dir"] = dir
 			atk["lock"] = true
 			facing = atan2(dir.x, dir.z)
-			HFx.line_telegraph(get_parent(), global_position, dir, a.length, 2.6, state_t, Color(1.0, 0.05, 0.15))
+			HFx.line_telegraph(main, global_position, dir, a.length, 2.6, state_t, Color(1.0, 0.05, 0.15))
 		"bolts":
-			HFx.puff(get_parent(), global_position + Vector3(0, body_height * 0.7, 0), aura_color, 6, 0.12, 1.2)
+			HFx.puff(main, global_position + Vector3(0, body_height * 0.7, 0), aura_color, 6, 0.12, 1.2)
 		"howl":
-			HFx.circle_telegraph(get_parent(), global_position, 6.0, state_t, Color(1.0, 0.6, 0.1))
+			HFx.circle_telegraph(main, global_position, 6.0, state_t, Color(1.0, 0.6, 0.1))
 		"blink":
-			HFx.puff(get_parent(), global_position + Vector3(0, 1.2, 0), aura_color, 14, 0.22, 2.5)
+			HFx.puff(main, global_position + Vector3(0, 1.2, 0), aura_color, 14, 0.22, 2.5)
 			visual.visible = false
 			collision_layer = 0
 			invuln_t = 1.0
@@ -333,7 +333,7 @@ func _execute(p) -> void:
 			_fire_bolts(p)
 			_recover()
 		"howl":
-			HFx.shockwave(get_parent(), global_position, 10.0, aura_color, 0.6)
+			HFx.shockwave(main, global_position, 10.0, aura_color, 0.6)
 			p.shake = maxf(p.shake, 0.4)
 			main.rumble(0.3, 0.5, 0.4)
 			if director != null:
@@ -387,8 +387,8 @@ func _act(delta: float, p) -> Vector3:
 
 func _impact(p) -> void:
 	var c: Vector3 = global_position
-	HFx.shockwave(get_parent(), c, atk.radius * 1.15, aura_color, 0.4)
-	HFx.puff(get_parent(), c + Vector3(0, 0.3, 0), Color(0.35, 0.3, 0.28), 12, 0.25, atk.radius)
+	HFx.shockwave(main, c, atk.radius * 1.15, aura_color, 0.4)
+	HFx.puff(main, c + Vector3(0, 0.3, 0), Color(0.35, 0.3, 0.28), 12, 0.25, atk.radius)
 	var d := Vector2(p.global_position.x - c.x, p.global_position.z - c.z).length()
 	if d < atk.radius and p.global_position.y < c.y + 2.0:
 		_hurt(p, atk.dmg)
@@ -417,7 +417,7 @@ func _reappear(p) -> void:
 	var to := _to_player(p)
 	facing = atan2(to.x, to.z)
 	visual.rotation.y = facing
-	HFx.puff(get_parent(), global_position + Vector3(0, 1.2, 0), aura_color, 14, 0.22, 2.5)
+	HFx.puff(main, global_position + Vector3(0, 1.2, 0), aura_color, 14, 0.22, 2.5)
 	var then: Dictionary = atk.get("then", {"type": "swipe", "windup": 0.45, "range": 3.0, "dmg": 16.0, "recover": 0.5, "cd": 0.8})
 	_start_attack(then, p)
 
@@ -447,7 +447,7 @@ func _fire_bolts(p) -> void:
 		mi.mesh = _bolt_mesh
 		mi.material_override = _bolt_mat
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		get_parent().add_child(mi)
+		main.add_child(mi)
 		mi.global_position = origin
 		bolts.append({"node": mi, "vel": dir * atk.get("bolt_speed", 15.0), "t": 0.0, "dmg": atk.dmg})
 
@@ -510,8 +510,8 @@ func _die(drained: bool) -> void:
 	main.release_attack_token(self)
 	main.on_enemy_killed(self, drained)
 	died.emit(self)
-	HFx.puff(get_parent(), global_position + Vector3(0, 1.5, 0), aura_color, 22, 0.3, 4.5)
-	HFx.shockwave(get_parent(), global_position, 10.0, aura_color, 0.8)
+	HFx.puff(main, global_position + Vector3(0, 1.5, 0), aura_color, 22, 0.3, 4.5)
+	HFx.shockwave(main, global_position, 10.0, aura_color, 0.8)
 	var tw := create_tween()
 	tw.tween_property(overlay, "albedo_color", Color(0.05, 0.0, 0.0, 0.95), 0.6)
 	tw.parallel().tween_property(visual, "rotation:x", -1.3 if kind == 1 else 0.0, 0.9).set_ease(Tween.EASE_IN)

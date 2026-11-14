@@ -19,6 +19,7 @@ var cam_from := Vector3.ZERO
 var cam_to := Vector3.ZERO
 var dressing := {}
 var slammed := false
+var tw: Tween
 
 
 ## Build the dressing for every deployment point (they're part of the city in any Hunt).
@@ -51,7 +52,7 @@ func play(p: Dictionary, dressings: Dictionary) -> void:
 	cam.current = true
 	var pos: Vector3 = p.pos
 	var side := Vector3(face.z, 0, -face.x)
-	var tw := create_tween()
+	tw = create_tween()
 	match p.type:
 		"subway":
 			dur = 3.0
@@ -122,6 +123,8 @@ func finish() -> void:
 	if not playing:
 		return
 	playing = false
+	if tw != null and tw.is_valid():
+		tw.kill()
 	var pl = main.player
 	pl.global_position = Vector3(pl.global_position.x, 0.15, pl.global_position.z)
 	pl.set_physics_process(true)

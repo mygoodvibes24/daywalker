@@ -590,6 +590,22 @@ func _revive() -> void:
 	p.invuln_t = 3.0
 	p.velocity = Vector3.ZERO
 	p.visual.rotation.x = 0.0
+	# he comes to a few metres away from where he fell (and from whatever killed him):
+	# the Lost Tithe stays behind, to be fought back for
+	var from: Vector3 = p.global_position
+	var away := Vector3.ZERO
+	for e in main.enemies_root.get_children():
+		if not e.dead and e.global_position.distance_to(from) < 15.0:
+			away += (from - e.global_position).normalized()
+	if away.length() < 0.1:
+		away = ring.center - from
+	away.y = 0.0
+	away = away.normalized() if away.length() > 0.01 else Vector3(1, 0, 0)
+	var to := from + away * 8.0
+	var nav_map: RID = get_world_3d().navigation_map
+	if NavigationServer3D.map_get_iteration_id(nav_map) > 0:
+		to = NavigationServer3D.map_get_closest_point(nav_map, to)
+	p.global_position = Vector3(to.x, from.y + 0.2, to.z)
 	var ma = p.get("mod_anim")
 	if ma != null:
 		ma.dead = false
