@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://djyag5t16nfrg"
+path="res://.godot/imported/hydrant_ORM_ccf7286f-7b7a-4f92-9151-c6cbf1740a62.jpg-174a7f95697d995aeb699bb7d7d7c35d.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/props/hydrant_ORM_ccf7286f-7b7a-4f92-9151-c6cbf1740a62.jpg"
+dest_files=["res://.godot/imported/hydrant_ORM_ccf7286f-7b7a-4f92-9151-c6cbf1740a62.jpg-174a7f95697d995aeb699bb7d7d7c35d.ctex"]
 
 [params]
 

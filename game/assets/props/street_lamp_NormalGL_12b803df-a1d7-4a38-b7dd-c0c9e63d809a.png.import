@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b5bjnok7nk8as"
+path="res://.godot/imported/street_lamp_NormalGL_12b803df-a1d7-4a38-b7dd-c0c9e63d809a.png-57ab62a1c70dce34d4c6f7018210a695.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/props/street_lamp_NormalGL_12b803df-a1d7-4a38-b7dd-c0c9e63d809a.png"
+dest_files=["res://.godot/imported/street_lamp_NormalGL_12b803df-a1d7-4a38-b7dd-c0c9e63d809a.png-57ab62a1c70dce34d4c6f7018210a695.ctex"]
 
 [params]
 

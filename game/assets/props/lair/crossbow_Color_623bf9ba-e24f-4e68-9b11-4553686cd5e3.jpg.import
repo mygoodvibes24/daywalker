@@ -3,25 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cngn21gcoosck"
-path.s3tc="res://.godot/imported/crossbow_Color_623bf9ba-e24f-4e68-9b11-4553686cd5e3.jpg-f3f177203a38a8b607508fc33092424e.s3tc.ctex"
+path="res://.godot/imported/crossbow_Color_623bf9ba-e24f-4e68-9b11-4553686cd5e3.jpg-f3f177203a38a8b607508fc33092424e.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
-"vram_texture": true
-}
-generator_parameters={
-"md5": "6eb11bf79be230cc66ab0fb1b1f504a2"
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/props/lair/crossbow_Color_623bf9ba-e24f-4e68-9b11-4553686cd5e3.jpg"
-dest_files=["res://.godot/imported/crossbow_Color_623bf9ba-e24f-4e68-9b11-4553686cd5e3.jpg-f3f177203a38a8b607508fc33092424e.s3tc.ctex"]
+dest_files=["res://.godot/imported/crossbow_Color_623bf9ba-e24f-4e68-9b11-4553686cd5e3.jpg-f3f177203a38a8b607508fc33092424e.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.85
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0

@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ximnp5q2alh7"
+path="res://.godot/imported/angel_ORM_18ceb336-f8b6-4c48-985f-7d6186d8bc21.jpg-60f5951a03338164983e116b0a870265.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/props/angel_ORM_18ceb336-f8b6-4c48-985f-7d6186d8bc21.jpg"
+dest_files=["res://.godot/imported/angel_ORM_18ceb336-f8b6-4c48-985f-7d6186d8bc21.jpg-60f5951a03338164983e116b0a870265.ctex"]
 
 [params]
 

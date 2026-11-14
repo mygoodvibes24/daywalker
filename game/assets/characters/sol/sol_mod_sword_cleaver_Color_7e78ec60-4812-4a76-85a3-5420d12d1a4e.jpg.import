@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://td7g46ls6tmf"
+path="res://.godot/imported/sol_mod_sword_cleaver_Color_7e78ec60-4812-4a76-85a3-5420d12d1a4e.jpg-076511ec14d9a06d8b1a38ac4f1c50c4.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_sword_cleaver_Color_7e78ec60-4812-4a76-85a3-5420d12d1a4e.jpg"
+dest_files=["res://.godot/imported/sol_mod_sword_cleaver_Color_7e78ec60-4812-4a76-85a3-5420d12d1a4e.jpg-076511ec14d9a06d8b1a38ac4f1c50c4.ctex"]
 
 [params]
 

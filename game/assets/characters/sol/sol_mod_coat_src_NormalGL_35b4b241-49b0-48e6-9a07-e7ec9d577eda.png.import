@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dvsjfkh817ha4"
+path="res://.godot/imported/sol_mod_coat_src_NormalGL_35b4b241-49b0-48e6-9a07-e7ec9d577eda.png-2d09a88565284ab0a0872f85ed67c5da.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_coat_src_NormalGL_35b4b241-49b0-48e6-9a07-e7ec9d577eda.png"
+dest_files=["res://.godot/imported/sol_mod_coat_src_NormalGL_35b4b241-49b0-48e6-9a07-e7ec9d577eda.png-2d09a88565284ab0a0872f85ed67c5da.ctex"]
 
 [params]
 

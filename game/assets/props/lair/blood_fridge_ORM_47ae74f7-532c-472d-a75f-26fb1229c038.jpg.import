@@ -3,25 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d3cgu8d8n4y06"
-path.s3tc="res://.godot/imported/blood_fridge_ORM_47ae74f7-532c-472d-a75f-26fb1229c038.jpg-41e8e0d49dff1d4165cda44e883af83e.s3tc.ctex"
+path="res://.godot/imported/blood_fridge_ORM_47ae74f7-532c-472d-a75f-26fb1229c038.jpg-41e8e0d49dff1d4165cda44e883af83e.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
-"vram_texture": true
-}
-generator_parameters={
-"md5": "64241eaa7641c9ba98ca96a14e0058e8"
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/props/lair/blood_fridge_ORM_47ae74f7-532c-472d-a75f-26fb1229c038.jpg"
-dest_files=["res://.godot/imported/blood_fridge_ORM_47ae74f7-532c-472d-a75f-26fb1229c038.jpg-41e8e0d49dff1d4165cda44e883af83e.s3tc.ctex"]
+dest_files=["res://.godot/imported/blood_fridge_ORM_47ae74f7-532c-472d-a75f-26fb1229c038.jpg-41e8e0d49dff1d4165cda44e883af83e.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.85
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
@@ -34,5 +30,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
+process/size_limit=512
 detect_3d/compress_to=0

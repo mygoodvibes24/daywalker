@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cc7e26wv1m74m"
+path="res://.godot/imported/sol_mod_body_src_Color_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.jpg-35251c61968bcf4150b99d3ec6523fc3.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_body_src_Color_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.jpg"
+dest_files=["res://.godot/imported/sol_mod_body_src_Color_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.jpg-35251c61968bcf4150b99d3ec6523fc3.ctex"]
 
 [params]
 

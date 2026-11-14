@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ce07wnnjwnmmq"
+path="res://.godot/imported/sol_mod_hand_src_NormalGL_a94f08b2-ced1-440b-9819-29ad52f06a61.png-cac756ed9a53bf15d39538def6f84859.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_hand_src_NormalGL_a94f08b2-ced1-440b-9819-29ad52f06a61.png"
+dest_files=["res://.godot/imported/sol_mod_hand_src_NormalGL_a94f08b2-ced1-440b-9819-29ad52f06a61.png-cac756ed9a53bf15d39538def6f84859.ctex"]
 
 [params]
 

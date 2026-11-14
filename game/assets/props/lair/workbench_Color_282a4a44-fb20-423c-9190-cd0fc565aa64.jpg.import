@@ -3,25 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cf8bbsfhpp55a"
-path.s3tc="res://.godot/imported/workbench_Color_282a4a44-fb20-423c-9190-cd0fc565aa64.jpg-49b9ca3415614d5fc85f61d63f3d2d27.s3tc.ctex"
+path="res://.godot/imported/workbench_Color_282a4a44-fb20-423c-9190-cd0fc565aa64.jpg-49b9ca3415614d5fc85f61d63f3d2d27.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
-"vram_texture": true
-}
-generator_parameters={
-"md5": "2002427c00745d525ebc1fc42a85d8fd"
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/props/lair/workbench_Color_282a4a44-fb20-423c-9190-cd0fc565aa64.jpg"
-dest_files=["res://.godot/imported/workbench_Color_282a4a44-fb20-423c-9190-cd0fc565aa64.jpg-49b9ca3415614d5fc85f61d63f3d2d27.s3tc.ctex"]
+dest_files=["res://.godot/imported/workbench_Color_282a4a44-fb20-423c-9190-cd0fc565aa64.jpg-49b9ca3415614d5fc85f61d63f3d2d27.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.85
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0

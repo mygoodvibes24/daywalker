@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://csgj8v5mn1h8n"
+path="res://.godot/imported/vampire_ORM_436fe4d5-33d0-42b1-9d24-4f48c243ca4e.jpg-23bc90902d2eaeee41d48afec489de61.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/characters/vampire/vampire_ORM_436fe4d5-33d0-42b1-9d24-4f48c243ca4e.jpg"
+dest_files=["res://.godot/imported/vampire_ORM_436fe4d5-33d0-42b1-9d24-4f48c243ca4e.jpg-23bc90902d2eaeee41d48afec489de61.ctex"]
 
 [params]
 

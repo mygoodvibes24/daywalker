@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://boihbc0wlgpsp"
+path="res://.godot/imported/gothic_arch_Color_46061886-f36c-4244-b02b-5b40f81f55c1.jpg-6cad67cf54508d32c686c6e5af6a32c4.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/props/gothic_arch_Color_46061886-f36c-4244-b02b-5b40f81f55c1.jpg"
+dest_files=["res://.godot/imported/gothic_arch_Color_46061886-f36c-4244-b02b-5b40f81f55c1.jpg-6cad67cf54508d32c686c6e5af6a32c4.ctex"]
 
 [params]
 

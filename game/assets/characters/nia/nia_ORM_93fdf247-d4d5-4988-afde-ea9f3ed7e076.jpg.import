@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://m3ipr4swjbjn"
+path="res://.godot/imported/nia_ORM_93fdf247-d4d5-4988-afde-ea9f3ed7e076.jpg-a3baadec1907c4c44cdd0db789c3730e.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/characters/nia/nia_ORM_93fdf247-d4d5-4988-afde-ea9f3ed7e076.jpg"
+dest_files=["res://.godot/imported/nia_ORM_93fdf247-d4d5-4988-afde-ea9f3ed7e076.jpg-a3baadec1907c4c44cdd0db789c3730e.ctex"]
 
 [params]
 

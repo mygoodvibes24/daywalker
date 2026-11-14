@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d280gxyiffk15"
+path="res://.godot/imported/dumpster_NormalGL_09450469-8886-4346-9ece-2f4f6c4220cc.png-64b0cddf32cdc4f2cb255e10f64fe1b0.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/props/dumpster_NormalGL_09450469-8886-4346-9ece-2f4f6c4220cc.png"
+dest_files=["res://.godot/imported/dumpster_NormalGL_09450469-8886-4346-9ece-2f4f6c4220cc.png-64b0cddf32cdc4f2cb255e10f64fe1b0.ctex"]
 
 [params]
 

@@ -184,6 +184,32 @@ func start() -> void:
 
 func _on_deployed() -> void:
 	_enter("explore")
+	if "--debugcamp" in OS.get_cmdline_user_args() or main._url_flag("debugcamp"):
+		debug_view_camp()
+
+
+## Debug / screenshots (--debugcamp / ?debugcamp): stand Sol 22 m from the nearest enemy camp,
+## looking at it, outside its aggro range.
+func debug_view_camp() -> void:
+	var p = main.player
+	var best = null
+	for poi in pois:
+		if poi.type == "camp" and (best == null or poi.distance_to(p.global_position) < best.distance_to(p.global_position)):
+			best = poi
+	if best == null:
+		return
+	var c: Vector3 = best.global_position
+	var dir := Vector3(-c.x, 0.0, -c.z).normalized()
+	var to := c + dir * 22.0
+	var nav_map: RID = get_world_3d().navigation_map
+	if NavigationServer3D.map_get_iteration_id(nav_map) > 0:
+		to = NavigationServer3D.map_get_closest_point(nav_map, to)
+	var look := Vector3(c.x - to.x, 0.0, c.z - to.z).normalized()
+	var yaw := atan2(-look.x, -look.z)
+	p.global_position = Vector3(to.x, 0.2, to.z)
+	p.velocity = Vector3.ZERO
+	p.cam_yaw = yaw
+	p.facing = atan2(look.x, look.z)
 
 
 func _set_arena(d: int) -> void:

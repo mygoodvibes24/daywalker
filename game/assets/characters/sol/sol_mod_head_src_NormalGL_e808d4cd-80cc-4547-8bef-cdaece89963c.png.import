@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dsq8ilsav6npa"
+path="res://.godot/imported/sol_mod_head_src_NormalGL_e808d4cd-80cc-4547-8bef-cdaece89963c.png-09dc9cd917b2028c58588371e448ff5d.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_head_src_NormalGL_e808d4cd-80cc-4547-8bef-cdaece89963c.png"
+dest_files=["res://.godot/imported/sol_mod_head_src_NormalGL_e808d4cd-80cc-4547-8bef-cdaece89963c.png-09dc9cd917b2028c58588371e448ff5d.ctex"]
 
 [params]
 

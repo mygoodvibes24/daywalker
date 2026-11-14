@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dxelqnb4y2kws"
+path="res://.godot/imported/sol_mod_sword_sabre_ORM_81bc0e33-6d84-4263-a1fc-5a5c7ea78fe1.jpg-01774baceea5f4a03efda7bfb8a7210e.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_sword_sabre_ORM_81bc0e33-6d84-4263-a1fc-5a5c7ea78fe1.jpg"
+dest_files=["res://.godot/imported/sol_mod_sword_sabre_ORM_81bc0e33-6d84-4263-a1fc-5a5c7ea78fe1.jpg-01774baceea5f4a03efda7bfb8a7210e.ctex"]
 
 [params]
 

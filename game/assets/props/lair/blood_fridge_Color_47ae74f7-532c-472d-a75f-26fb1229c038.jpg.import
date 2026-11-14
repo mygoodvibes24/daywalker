@@ -3,25 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://duyer287kcr6e"
-path.s3tc="res://.godot/imported/blood_fridge_Color_47ae74f7-532c-472d-a75f-26fb1229c038.jpg-2e7b255ba03ca92181113e3e123b2be0.s3tc.ctex"
+path="res://.godot/imported/blood_fridge_Color_47ae74f7-532c-472d-a75f-26fb1229c038.jpg-2e7b255ba03ca92181113e3e123b2be0.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
-"vram_texture": true
-}
-generator_parameters={
-"md5": "77a0adab7ddd6a982054c749cc1e4dcd"
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://assets/props/lair/blood_fridge_Color_47ae74f7-532c-472d-a75f-26fb1229c038.jpg"
-dest_files=["res://.godot/imported/blood_fridge_Color_47ae74f7-532c-472d-a75f-26fb1229c038.jpg-2e7b255ba03ca92181113e3e123b2be0.s3tc.ctex"]
+dest_files=["res://.godot/imported/blood_fridge_Color_47ae74f7-532c-472d-a75f-26fb1229c038.jpg-2e7b255ba03ca92181113e3e123b2be0.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.85
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0

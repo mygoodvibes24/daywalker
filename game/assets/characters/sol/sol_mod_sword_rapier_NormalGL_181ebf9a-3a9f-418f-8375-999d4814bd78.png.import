@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cs17akxg0q60q"
+path="res://.godot/imported/sol_mod_sword_rapier_NormalGL_181ebf9a-3a9f-418f-8375-999d4814bd78.png-369f179688b0bb984cf12da1cb909789.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_sword_rapier_NormalGL_181ebf9a-3a9f-418f-8375-999d4814bd78.png"
+dest_files=["res://.godot/imported/sol_mod_sword_rapier_NormalGL_181ebf9a-3a9f-418f-8375-999d4814bd78.png-369f179688b0bb984cf12da1cb909789.ctex"]
 
 [params]
 

@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://fhhxfwu3djc3"
+path="res://.godot/imported/sedan_Color_11726ea5-6ace-4542-93ed-9cac8ebf1985.jpg-dc7a736fd518d34fccb630be3a4324f1.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/props/sedan_Color_11726ea5-6ace-4542-93ed-9cac8ebf1985.jpg"
+dest_files=["res://.godot/imported/sedan_Color_11726ea5-6ace-4542-93ed-9cac8ebf1985.jpg-dc7a736fd518d34fccb630be3a4324f1.ctex"]
 
 [params]
 

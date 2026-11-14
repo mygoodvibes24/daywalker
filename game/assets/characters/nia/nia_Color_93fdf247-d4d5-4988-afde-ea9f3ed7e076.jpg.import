@@ -3,10 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bdss64uyi4o30"
+path="res://.godot/imported/nia_Color_93fdf247-d4d5-4988-afde-ea9f3ed7e076.jpg-684beb47bf3c9a503c6b8f65c956010f.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/characters/nia/nia_Color_93fdf247-d4d5-4988-afde-ea9f3ed7e076.jpg"
+dest_files=["res://.godot/imported/nia_Color_93fdf247-d4d5-4988-afde-ea9f3ed7e076.jpg-684beb47bf3c9a503c6b8f65c956010f.ctex"]
 
 [params]
 

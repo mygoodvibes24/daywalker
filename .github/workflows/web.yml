@@ -43,8 +43,16 @@ jobs:
           unzip -qj Godot_v${GODOT_VERSION}-stable_export_templates.tpz 'templates/web_nothreads_*' 'templates/version.txt' -d $dest
           rm Godot_v${GODOT_VERSION}-stable_export_templates.tpz
       - name: Import project
+        # .godot/ is not committed, so this is always a fresh import with the .import settings
+        # in the repo (web-safe Lossy/WebP character and prop textures, ETC2/ASTC enabled).
         working-directory: game
-        run: ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless --import .
+        run: |
+          rm -rf .godot
+          ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless --import .
+          if grep -rl "compress/mode=2" --include=*.import assets/characters assets/props; then
+            echo "::error::VRAM-compressed character/prop textures do not load on phone browsers; use Lossy"
+            exit 1
+          fi
       - name: Smoke test
         working-directory: game
         run: ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless -s res://tests/smoke_test.gd
@@ -54,6 +62,16 @@ jobs:
           mkdir -p ../build/web
           ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless --export-release "Web" ../build/web/index.html
           test -f ../build/web/index.wasm
+      - name: Cache-bust the game data
+        # Pages serves everything with max-age=600; give each deploy's .pck its own name so
+        # players never run a new index.html against a stale cached .pck (or the reverse).
+        working-directory: build/web
+        run: |
+          v=${GITHUB_SHA::10}
+          mv index.pck index-$v.pck
+          sed -i "s/\"executable\":\"index\",/\"executable\":\"index\",\"mainPack\":\"index-$v.pck\",/; s/\"index.pck\":/\"index-$v.pck\":/" index.html
+          grep -q "\"mainPack\":\"index-$v.pck\"" index.html
+          ls -la
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build/web
