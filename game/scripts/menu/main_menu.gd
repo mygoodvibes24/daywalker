@@ -10,6 +10,9 @@ const S = preload("res://scripts/ui/ui_style.gd")
 const OptionsPanel = preload("res://scripts/menu/options_panel.gd")
 const ControlsPanel = preload("res://scripts/menu/controls_panel.gd")
 const MainScript = preload("res://scripts/main.gd")
+const HubPanel = preload("res://scripts/hunt/hub_panel.gd") # the Undercroft hub before a Hunt
+const HuntDirector = preload("res://scripts/hunt/hunt_director.gd")
+const HuntMeta = preload("res://scripts/hunt/hunt_meta.gd")
 const GAME_SCENE := "res://scenes/main.tscn"
 
 var ui: CanvasLayer
@@ -17,11 +20,12 @@ var menu_box: Control # the title + buttons column
 var buttons: Array[Button] = []
 var options: Control
 var controls: Control
+var hub: Control # Start -> the Undercroft: loadout, record, "Begin the Hunt"
 var fade: ColorRect
 var loading: Label
 var hint: Label
 var using_pad := false
-var state := "menu" # menu, options, controls, loading
+var state := "menu" # menu, hub, options, controls, loading
 var load_threaded := false
 var last_focus: Control
 var load_t := 0.0
@@ -33,6 +37,9 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_build_ui()
 	buttons[0].grab_focus.call_deferred()
+	if HuntMeta.return_to_hub: # back from a Hunt's results screen
+		HuntMeta.return_to_hub = false
+		_show.call_deferred("hub")
 	var tw := create_tween()
 	tw.tween_property(fade, "color:a", 0.0, 1.6).set_trans(Tween.TRANS_SINE)
 
@@ -74,7 +81,7 @@ func _build_ui() -> void:
 	var gap := Control.new()
 	gap.custom_minimum_size = Vector2(0, 46)
 	menu_box.add_child(gap)
-	var entries := [["Start", _on_start], ["Controls", _show.bind("controls")], ["Options", _show.bind("options")]]
+	var entries := [["Start", _show.bind("hub")], ["Controls", _show.bind("controls")], ["Options", _show.bind("options")]]
 	if not OS.has_feature("web"):
 		entries.append(["Quit", func(): get_tree().quit()])
 	for e in entries:
@@ -97,18 +104,25 @@ func _build_ui() -> void:
 	hint.offset_top = -46
 	root.add_child(hint)
 
-	for which in ["options", "controls"]:
+	for which in ["options", "controls", "hub"]:
 		var center := CenterContainer.new()
 		center.set_anchors_preset(Control.PRESET_FULL_RECT)
 		center.visible = false
 		root.add_child(center)
-		var p: PanelContainer = OptionsPanel.new() if which == "options" else ControlsPanel.new()
+		var p: PanelContainer
+		match which:
+			"options": p = OptionsPanel.new()
+			"controls": p = ControlsPanel.new()
+			_: p = HubPanel.new()
 		center.add_child(p)
 		p.back.connect(_back)
 		if which == "options":
 			options = center
-		else:
+		elif which == "controls":
 			controls = center
+		else:
+			hub = center
+			p.begin.connect(_begin_hunt)
 
 	loading = S.label("Loading...", 22, MS.BONE, 4)
 	loading.add_theme_font_override("font", S.serif())
@@ -148,14 +162,18 @@ func _show(which: String) -> void:
 	menu_box.visible = false
 	options.visible = which == "options"
 	controls.visible = which == "controls"
+	hub.visible = which == "hub"
+	if which == "hub":
+		hub.get_child(0).first_focus.grab_focus.call_deferred()
 
 
 func _back() -> void:
-	if state != "options" and state != "controls":
+	if state != "options" and state != "controls" and state != "hub":
 		return
 	state = "menu"
 	options.visible = false
 	controls.visible = false
+	hub.visible = false
 	menu_box.visible = true
 	var f: Control = last_focus if is_instance_valid(last_focus) else buttons[0]
 	f.grab_focus.call_deferred()
@@ -182,10 +200,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif get_viewport().gui_get_focus_owner() == null and (event.is_action_pressed("ui_down") or event.is_action_pressed("ui_up") or event.is_action_pressed("ui_accept")):
 		# keyboard / pad wakes focus again after the mouse wandered off
 		get_viewport().set_input_as_handled()
-		(buttons[0] if state == "menu" else (options if state == "options" else controls).get_child(0).first_focus).grab_focus()
+		(buttons[0] if state == "menu" else ({"options": options, "controls": controls, "hub": hub}[state] as Control).get_child(0).first_focus).grab_focus()
 
 
 # ---------------------------------------------------------------- start the game
+## The hub's "Begin the Hunt": main.tscn starts a Hunt (hunt_director.gd) instead of free roam.
+func _begin_hunt() -> void:
+	HuntDirector.requested = true
+	hub.visible = false
+	state = "menu"
+	_on_start()
+
+
 func _on_start() -> void:
 	if state == "loading":
 		return

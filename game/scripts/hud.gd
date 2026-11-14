@@ -252,7 +252,7 @@ func _process(delta: float) -> void:
 		prompt_label.text = lp if prompt_label.text == "" else (prompt_label.text + ("\n" + lp if lp != "" else ""))
 		tithe_label.text = "RANK %d     TITHE %d" % [main.progression.level, main.progression.tithe]
 		if main.progression.can_level():
-			tithe_label.text += "   ·  a rank awaits at the Undercroft"
+			tithe_label.text += "   ·  a rank awaits at " + ("a chapel" if main.get("hunt") != null else "the Undercroft")
 
 	announce_t = maxf(announce_t - real_dt, 0.0)
 	announce_label.modulate.a = clampf(announce_t, 0.0, 1.0)

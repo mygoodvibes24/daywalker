@@ -16,6 +16,7 @@ const FxScript = preload("res://scripts/fx.gd")
 const InventoryUI = preload("res://scripts/ui/inventory_ui.gd")
 const LevelupUI = preload("res://scripts/ui/levelup_ui.gd")
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
+const HuntDirector = preload("res://scripts/hunt/hunt_director.gd") # HUNT HOOK
 
 const DAY_LENGTH := 240.0 # seconds for one full day/night cycle
 const LAIR_MAX := 3
@@ -56,6 +57,7 @@ var inventory_ui: CanvasLayer
 var levelup_ui: CanvasLayer
 var pause_menu: CanvasLayer # Esc: Resume / Options / Controls / Quit to Menu
 var ui_block_until := 0 # ms; swallows the button press that closed a menu
+var hunt: Node3D = null # HUNT HOOK: hunt_director.gd while a Hunt runs (null in free roam)
 
 
 func _ready() -> void:
@@ -67,6 +69,7 @@ func _ready() -> void:
 	_build_environment()
 	_build_city()
 	_build_lair()
+	_setup_hunt() # HUNT HOOK: POIs and deployment points, before the navmesh bake
 	_bake_navigation()
 	enemies_root = Node3D.new()
 	enemies_root.name = "Enemies"
@@ -101,6 +104,19 @@ func start_game() -> void:
 	hud.started = true
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	player.block_attack()
+	if hunt != null:
+		hunt.start() # HUNT HOOK: run-scoped reset, hub loadout, the Descent
+
+
+## HUNT HOOK: a Hunt runs when the hub asked for one (or --hunt / --shorthunt / ?hunt).
+func _setup_hunt() -> void:
+	if not HuntDirector.wanted(self):
+		return
+	hunt = HuntDirector.new()
+	hunt.name = "Hunt"
+	hunt.main = self
+	add_child(hunt)
+	hunt.build_world()
 
 
 ## True if the page URL has ?name or &name (or name=...) as its own parameter.
@@ -246,6 +262,8 @@ func daylight() -> float:
 
 
 func is_full_moon() -> bool:
+	if hunt != null:
+		return hunt.is_full_moon() # HUNT HOOK
 	return not is_day() and night_count > 0 and night_count % 3 == 0 # nights 3, 6, 9...
 
 
@@ -257,9 +275,12 @@ func clock_text() -> String:
 func _process(delta: float) -> void:
 	_update_slowmo()
 	if game_over:
-		if Input.is_action_just_pressed("restart"):
+		if Input.is_action_just_pressed("restart") and hunt == null: # HUNT HOOK: the results screen decides
 			clear_slowmo()
 			get_tree().reload_current_scene()
+		return
+	if hunt != null:
+		_update_lighting() # HUNT HOOK: the director drives the clock and the spawning
 		return
 	var was_day := is_day()
 	time_of_day = fmod(time_of_day + delta / DAY_LENGTH, 1.0)
@@ -411,6 +432,9 @@ func perfect_dodge() -> void:
 
 
 func on_player_died() -> void:
+	if hunt != null:
+		hunt.on_player_died() # HUNT HOOK: revive charge or the end of the Hunt
+		return
 	game_over = true
 	progression.on_death(player.global_position) # PROGRESSION HOOK: half the Tithe stays here
 	clear_slowmo()
