@@ -18,12 +18,19 @@ extends SkeletonModifier3D
 @export var max_correction := deg_to_rad(70.0)
 var amount := 1.0
 var _bone := -1
+var _socket: Node3D
+
+
+func _ready() -> void:
+	_socket = get_parent().get_node_or_null("HandR/Blade") as Node3D
 
 
 func _process_modification() -> void:
 	var sk := get_skeleton()
 	if sk == null or amount <= 0.001:
 		return
+	if _socket != null and not _socket.is_visible_in_tree():
+		return # no sword in the hand (the menu's bench pose hides it): leave the wrist alone
 	if _bone < 0:
 		_bone = sk.find_bone(bone_name)
 		if _bone < 0:
