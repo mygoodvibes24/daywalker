@@ -39,3 +39,23 @@ imports at a 1024 px size limit.
 **trash_pile.glb**
 - Prompt: A realistic pile of several bulging black plastic garbage bags heaped against an old weathered wooden slatted crate, wet glossy plastic, grimy, tied tops, street trash
 - Negative: cartoon, toy, stylized, base, plinth, pedestal, ground plane, floor tile, text, logos
+
+## Plaza set pieces (Undercroft entrance)
+
+Two more models were generated on 2026-11-13 with Higgsfield, using Tripo
+text-to-3D (textured, PBR). They are dense, so the game uses them only at the
+cathedral plaza: one arch and two angels at the Undercroft entrance. Their
+2048 px colour, normal and ORM maps are imported VRAM-compressed at a 1024 px
+size limit. The job IDs were not recorded; the Tripo model IDs below are taken
+from the node and texture names inside each GLB.
+
+| File | Triangles | Tripo model ID |
+| --- | --- | --- |
+| `angel.glb` | 11396 | 18ceb336-f8b6-4c48-985f-7d6186d8bc21 |
+| `gothic_arch.glb` | 19506 | 46061886-f36c-4244-b02b-5b40f81f55c1 |
+
+**angel.glb**
+- Prompt (summary; the exact text was not recorded): a weathered weeping-angel statue on a pedestal
+
+**gothic_arch.glb**
+- Prompt (summary; the exact text was not recorded): an ornate gothic stone arch with pinnacles over a stair entrance

@@ -347,38 +347,6 @@ func _stone_textures() -> Array:
 	return [_tex(S, S, Image.FORMAT_RGB8, alb), _tex(S, S, Image.FORMAT_L8, rough), _normal_tex(S, S, hgt, 3.0)]
 
 
-## Old Quarter cobbles from cellular noise: 2 m tile.
-func _cobble_textures() -> Array:
-	var S := 256
-	var fn := FastNoiseLite.new()
-	fn.seed = 31
-	fn.noise_type = FastNoiseLite.TYPE_CELLULAR
-	fn.frequency = 0.055
-	fn.fractal_type = FastNoiseLite.FRACTAL_NONE
-	fn.cellular_return_type = FastNoiseLite.RETURN_DISTANCE2_SUB
-	var edge_img := fn.get_seamless_image(S, S, false, false, 0.1, true)
-	edge_img.convert(Image.FORMAT_L8)
-	var edges := edge_img.get_data()
-	fn.cellular_return_type = FastNoiseLite.RETURN_CELL_VALUE
-	var cell_img := fn.get_seamless_image(S, S, false, false, 0.1, true)
-	cell_img.convert(Image.FORMAT_L8)
-	var cells := cell_img.get_data()
-	var fine := _noise_img(S, 0.15, 32, 2)
-	var alb := PackedByteArray(); alb.resize(S * S * 3)
-	var rough := PackedByteArray(); rough.resize(S * S)
-	var hgt := PackedFloat32Array(); hgt.resize(S * S)
-	for p in S * S:
-		var e := edges[p] / 255.0
-		var cv := cells[p] / 255.0
-		var f := fine[p] / 255.0
-		var stone := clampf((e - 0.08) * 6.0, 0.0, 1.0)
-		var k := (0.55 + cv * 0.45 + (f - 0.5) * 0.2) * (0.35 + stone * 0.65)
-		_put(alb, p * 3, 0.42 * k, 0.4 * k, 0.37 * k)
-		rough[p] = int(lerpf(0.15, 0.55 + f * 0.25, stone) * 255.0) # wet gaps
-		hgt[p] = sqrt(stone) * 0.9 + f * 0.15
-	return [_tex(S, S, Image.FORMAT_RGB8, alb), _tex(S, S, Image.FORMAT_L8, rough), _normal_tex(S, S, hgt, 3.0)]
-
-
 ## Concrete sidewalk slabs with joints: 1.5 m tile.
 func _sidewalk_textures() -> Array:
 	var S := 128
@@ -1113,7 +1081,6 @@ func _make_materials() -> void:
 	M["concrete"] = _surface_mat(conc, 4.0)
 	M["trim"] = _surface_mat(conc, 6.0, 0.7)
 	M["sidewalk"] = _surface_mat(_sidewalk_textures(), 1.5)
-	M["cobble"] = _surface_mat(_cobble_textures(), 2.0)
 	M["asphalt"] = preload("res://scripts/wet_materials.gd").asphalt() # shared wet-street shader (puddles, rain ripples)
 	M["metal"] = _flat_mat(0.45, 0.5)
 	M["paint"] = _flat_mat(0.5)
@@ -1442,9 +1409,9 @@ func _district(cx: float, cz: float) -> String:
 func _build_block(cx: float, cz: float) -> void:
 	ck = _chunk_of(cx, cz)
 	var dist := _district(cx, cz)
-	var walk_col := Color(1, 1, 1) if dist != "quarter" else Color(0.92, 0.88, 0.82)
+	var walk_col := Color(1, 1, 1) if dist != "quarter" else Color(0.72, 0.66, 0.6)
 	_slab(cx - GRID * 0.5 + ROAD_HALF, cz - GRID * 0.5 + ROAD_HALF, cx + GRID * 0.5 - ROAD_HALF, cz + GRID * 0.5 - ROAD_HALF,
-		"sidewalk" if dist != "quarter" else "cobble", walk_col, Color(0.62, 0.6, 0.57))
+		"sidewalk" if dist != "quarter" else "cobble_fan", walk_col, Color(0.62, 0.6, 0.57))
 	# split the lot into parcels
 	var L := LOT
 	var parcels: Array = []
@@ -2019,7 +1986,7 @@ func _alley_floor(c: Vector3, along: Vector3, w: float, length: float) -> void:
 	var a := c - along * length * 0.5
 	var b := c + along * length * 0.5
 	var y := Vector3(0, WALK_TOP + 0.004, 0)
-	var bt := _b("cobble" if _district(c.x, c.z) == "quarter" else "sidewalk")
+	var bt := _b("cobble_fan" if _district(c.x, c.z) == "quarter" else "sidewalk")
 	var hw := across * w * 0.5
 	bt.quad(a - hw + y, a + hw + y, b + hw + y, b - hw + y, Vector3.UP, Color(0.42, 0.4, 0.38))
 	for k in rng.randi_range(1, 3):
@@ -2682,7 +2649,7 @@ func _build_streets() -> void:
 					# the lantern washes the facade behind it
 					_wall_glow(Vector3(px, 0.0, pz) + across * lside * (FACADE - 0.04), -across * lside, 7.0, 7.5)
 				# telephone poles and sagging wires on the outer, older streets
-				if (absf(s) == 60.0 or absf(s) == 80.0) and absf(mid) < lim:
+				if ((absf(s) == 60.0 or absf(s) == 80.0) and absf(mid) < lim) or (a == 0 and axis == 0 and mid > 20.0 and mid < 70.0):
 					_pole_span(Vector3(px, 0.0, pz) - along * GRID * 0.5 - across * (ROAD_HALF + 0.4), along)
 
 
