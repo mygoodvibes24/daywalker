@@ -9,7 +9,7 @@ extends SceneTree
 ##   sol_mod_coat_src.glb      the open leather trenchcoat on its own
 ##   sol_mod_head_src.glb      a detailed head-and-neck bust
 ##   sol_mod_hand_src.glb      a right fist in a sword grip (mirrored for the left hand)
-##   sol_mod_boot_src.glb      one combat boot (mirrored for the other foot)
+##   sol_mod_boot_src.glb      (optional) one combat boot, mirrored for the other foot
 ##   sol_mod_sword_<name>.glb  four swords
 ## The Tripo parts face +X, are 1 unit tall and are fitted here; nothing is hand-placed in an editor.
 ##
@@ -19,8 +19,8 @@ extends SceneTree
 ##       Body                 skinned body; head, hands (and boots, if replaced) cut away
 ##       Coat                 skinned coat: upper half on spine/shoulder/arm bones, skirt on the spring bones
 ##       Head (BoneAttachment3D) -> HeadMesh, Glasses
-##       Hand.R / Hand.L      fists; Hand.R holds Blade -> the sword scene
-##       Foot.L / Foot.R      (only if USE_BOOT_MODEL)
+##       HandR / HandL        fists; HandR holds Blade -> the sword scene
+##       FootL / FootR        (only if USE_BOOT_MODEL)
 ##     AnimationPlayer        clips: idle, run, sprint (looped), slash, slash_back, hit, death, jump
 ##     CoatSim                scripts/coat_sim.gd
 ## and the four sword scenes sol_sword_<name>.scn (origin = the grip, blade along +Z, flat facing +-X).
@@ -45,6 +45,9 @@ const SWORDS := {
 	"cleaver": [D + "sol_mod_sword_cleaver.glb", 0.82],
 	"rapier": [D + "sol_mod_sword_rapier.glb", 1.12],
 }
+## The body's own boots won the side-by-side (same texture set as the trousers, no seam at the
+## ankle); the separate boot model is kept out of the repo (see CREDITS.md). Set true and put
+## sol_mod_boot_src.glb back to try it again.
 const USE_BOOT_MODEL := false
 
 # ---- fitting constants (metres, skeleton space: +Y up, +Z forward, +X = Sol's left)
@@ -54,6 +57,7 @@ const HEAD_OFF := Vector3(-0.02, 1.699, -0.005)
 const HEAD_CUT := -0.47 # bust units: everything below is cut (shirt, shoulders)
 const HAND_SCALE := 0.15
 const HAND_WRIST := Vector3(0.0, -0.3, 0.0) # point of the fist mesh (units) placed on the wrist joint
+const FIST_TWIST := -50.0 # degrees about the forearm: turns the knuckles (and blade) more forward
 const GRIP_IN_FIST := Vector3(0.02, 0.17, 0.0) # sword grip centre in fist-mesh units
 const COAT_SCALE := Vector3(1.2, 1.12, 1.32)
 const COAT_TOP := 1.655 # collar height
@@ -148,9 +152,9 @@ func _initialize() -> void:
 	var fist_r := _fist_xf("Right")
 	var hand_mat := _material(D + "sol_mod_hand_src.glb")
 	hand_mat.metallic_specular = 0.32
-	var hr := _attach(root, "Hand.R", "RightHand")
+	var hr := _attach(root, "HandR", "RightHand")
 	_add_part(hr, root, "HandMesh", _load_arrays(D + "sol_mod_hand_src.glb", fist_r), hand_mat, false)
-	var hl := _attach(root, "Hand.L", "LeftHand")
+	var hl := _attach(root, "HandL", "LeftHand")
 	_add_part(hl, root, "HandMesh", _load_arrays(D + "sol_mod_hand_src.glb", _fist_xf("Left")), hand_mat, false)
 	# sword grip frame: blade (+Z) out of the thumb side (-Z of the fist mesh), edge along the fingers
 	var grip_mesh := Transform3D(Basis(Vector3.UP, PI), GRIP_IN_FIST)
@@ -914,7 +918,8 @@ func _fist_xf(side: String) -> Transform3D:
 	if side == "Left":
 		z = -z # the left fist is the right one mirrored (thumb still forward)
 	# fist mesh axes: +X palm/fingers, +Y wrist->knuckles, -Z thumb
-	var b := Basis(n * HAND_SCALE, d * HAND_SCALE, z * HAND_SCALE)
+	var tw := Basis(d, deg_to_rad(FIST_TWIST) * (1.0 if side == "Right" else -1.0))
+	var b := tw * Basis(n * HAND_SCALE, d * HAND_SCALE, z * HAND_SCALE)
 	return Transform3D(b, wrist - b * HAND_WRIST)
 
 
@@ -1018,16 +1023,18 @@ func _principal(pts: PackedVector3Array, c: Vector3, exclude: Vector3) -> Vector
 func _add_boots(root: Node) -> void:
 	var mat := _material(D + "sol_mod_boot_src.glb")
 	for side in ["Left", "Right"]:
-		var foot := skel.find_bone(side + "Foot")
-		var toe := skel.find_bone(side + "ToeBase")
-		var fp := bone_rest_g[foot].origin
-		var tp := bone_rest_g[toe].origin
-		var fwd := Vector3(tp.x - fp.x, 0, tp.z - fp.z).normalized()
-		var bas := Basis(Vector3.UP.cross(fwd).normalized() * -1.0, Vector3.UP, fwd)
-		var xf := Transform3D(bas.scaled(Vector3.ONE * 0.3), Vector3(fp.x, 0.15, fp.z + 0.04))
-		if side == "Right":
-			xf = Transform3D(Basis.from_scale(Vector3(-1, 1, 1)), Vector3.ZERO) * Transform3D(Basis.from_scale(Vector3(-1, 1, 1)), Vector3.ZERO) * xf
-		var att := _attach(root, "Foot." + side.substr(0, 1), side + "Foot")
+		var sg := 1.0 if side == "Left" else -1.0
+		# the body's own boot, measured: fit the model over it a touch larger so it covers it
+		var lo := Vector3(INF, INF, INF)
+		var hi := -lo
+		for p in body_pts:
+			if p.y < 0.27 and p.x * sg > 0.05:
+				lo = lo.min(p)
+				hi = hi.max(p)
+		var size := hi - lo
+		var sc := Vector3(size.x, size.y, size.z) * 1.04
+		var xf := Transform3D(Basis.from_scale(Vector3(sc.x / 0.39 * sg, sc.y, sc.z)), Vector3((lo.x + hi.x) * 0.5, lo.y + sc.y * 0.5 - 0.004, (lo.z + hi.z) * 0.5))
+		var att := _attach(root, "Foot" + side.substr(0, 1), side + "Foot")
 		_add_part(att, root, "BootMesh", _load_arrays(D + "sol_mod_boot_src.glb", xf), mat, false)
 
 

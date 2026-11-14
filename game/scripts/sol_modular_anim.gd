@@ -87,6 +87,7 @@ func setup(model: Node) -> bool:
 	tree.tree_root = bt
 	tree.active = true
 	tree.set("parameters/hit_speed/scale", 1.6)
+	tree.set("parameters/life/transition_request", "alive")
 	return true
 
 

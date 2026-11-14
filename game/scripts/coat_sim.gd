@@ -22,24 +22,24 @@ extends Node
 @export var gravity := 9.8
 ## Pull toward the rest shape (1/s^2), at the waist and at the hem.
 @export var stiffness_top := 70.0
-@export var stiffness_hem := 16.0
+@export var stiffness_hem := 24.0
 ## Velocity kept per 1/60 s (verlet damping).
 @export var damping := 0.86
 ## Air drag (1/s): makes the coat trail behind when Sol moves.
-@export var drag := 1.6
+@export var drag := 0.45
 ## Outward flare acceleration per m/s of horizontal speed, at the hem.
-@export var flare := 1.1
+@export var flare := 0.35
 ## Wind and rain flutter (m/s^2).
-@export var flutter := 0.9
+@export var flutter := 0.7
 ## Max angle (radians) a link may swing away from its rest direction.
-@export var max_swing := 1.25
+@export var max_swing := 0.75
 ## Leg capsules: [bone_a, bone_b, radius]; the cloth keeps `cloth_margin` outside them.
 @export var capsules := [
 	["LeftUpLeg", "LeftLeg", 0.085], ["LeftLeg", "LeftFoot", 0.065],
 	["RightUpLeg", "RightLeg", 0.085], ["RightLeg", "RightFoot", 0.065],
 	["Hips", "Spine02", 0.14],
 ]
-@export var cloth_margin := 0.03
+@export var cloth_margin := 0.02
 ## Simulation on/off (off = the coat holds its rest shape).
 @export var enabled := true
 

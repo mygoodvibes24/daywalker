@@ -1,7 +1,8 @@
 extends RefCounted
-## Builds the visible blade for an equipped weapon item. Kept separate so a real
-## sword model can replace it later: return any Node3D whose blade runs from the
-## origin (the hilt) along +Z, flat side facing ±X.
+## Builds the visible blade for an equipped weapon item: return any Node3D whose blade runs
+## from the origin along +Z, flat side facing ±X. With `modelled` (the modular hero) it is one
+## of the four sword models, origin at the grip, picked by blade family and tinted by rarity;
+## otherwise (the fallback bodies) a box blade whose origin is the hilt.
 
 const ItemDB = preload("res://scripts/items/item_db.gd")
 
