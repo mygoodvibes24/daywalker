@@ -41,6 +41,13 @@ var uplight_mat: ShaderMaterial
 var halo_xfs: Array = [] # lantern halos (one MultiMesh of camera-facing quads)
 var halo_mm: MultiMesh
 var alleys: Array = [] # [Vector3 centre, Vector3 along] of every back alley, for whoever wants them
+## Layout data for other systems (points of interest, spawners...). Read after build().
+## blocks: [{"centre": Vector2, "district": String, "lots": Array[Rect2], "heights": Array[float]}]
+var blocks: Array = []
+## lots: every building footprint (XZ Rect2) in the city, cathedral included.
+var lots: Array[Rect2] = []
+## The open cathedral plaza (XZ); the Undercroft well sits at its centre (radius PIT_R + balustrade).
+const PLAZA_RECT := Rect2(-GRID + ROAD_HALF, -GRID + ROAD_HALF, 2.0 * (GRID - ROAD_HALF), 2.0 * (GRID - ROAD_HALF))
 var collider_root: Node3D
 var car_bodies: StaticBody3D
 var signs_left := 7
@@ -1457,6 +1464,8 @@ func _build_block(cx: float, cz: float) -> void:
 	body.name = "Block_%d_%d" % [cx, cz]
 	collider_root.add_child(body)
 	var far := clampf((maxf(absf(cx), absf(cz)) - 30.0) / 40.0, 0.0, 1.0)
+	var binfo := {"centre": Vector2(cx, cz), "district": dist, "lots": [], "heights": []}
+	blocks.append(binfo)
 	for pi in parcels.size():
 		var p: Array = parcels[pi]
 		var spec := _building_spec(dist, far)
@@ -1472,6 +1481,10 @@ func _build_block(cx: float, cz: float) -> void:
 		# which sides face a street
 		spec["ext"] = [is_equal_approx(p[3], L), is_equal_approx(p[1], -L), is_equal_approx(p[2], L), is_equal_approx(p[0], -L)]
 		var H := _building(spec)
+		var fp := Rect2(cx + p[0], cz + p[1], p[2] - p[0], p[3] - p[1])
+		binfo.lots.append(fp)
+		binfo.heights.append(H)
+		lots.append(fp)
 		var col := CollisionShape3D.new()
 		var shape := BoxShape3D.new()
 		shape.size = Vector3(p[2] - p[0], H, p[3] - p[1])
@@ -2472,6 +2485,7 @@ func _build_cathedral() -> void:
 		# string courses
 		for y: float in [10.2, 18.0, 25.5]:
 			fbox(st, f, -0.3, y, f.w + 0.3, y + 0.35, 0.0, 0.25, dark)
+		lots.append(Rect2(lo, zb, hi - lo, zf - zb))
 		var cs := CollisionShape3D.new()
 		var shape := BoxShape3D.new()
 		shape.size = Vector3(hi - lo, tower_h, zf - zb)
@@ -2941,7 +2955,7 @@ func _build_props() -> void:
 const PropsScript = preload("res://scripts/props.gd")
 const GLB_PROPS := {"sedan": "sedan", "hydrant": "hydrant", "newsbox": "news_box", "dumpster": "dumpster", "trash": "trash_pile"}
 const GLB_THIN := {"trash": 6, "newsbox": 3, "hydrant": 2, "dumpster": 2}
-const PROP_CELL := 40.0 # instances are bucketed into cells so off-screen ones are culled
+const PROP_CELL := 80.0 # instances are bucketed into quadrants so off-screen ones are culled (fewer draw calls than 40 m cells)
 
 
 func _glb_multimeshes(kind: String, glb: Dictionary, xfs: Array) -> void:
@@ -3188,8 +3202,8 @@ func build_lair(root: Node3D) -> void:
 		f.r = Vector3(-sin(a), 0, cos(a)) * -1.0
 		f.w = 1.7
 		f.o = d * (R - 0.03) - f.r * f.w * 0.5 + Vector3(0, -D, 0)
-		fq(glow, f, 0.2, 0.0, 1.5, 1.9, 0.01, Color(0.55, 0.55, 0.55))
-		glow.tri(f.p(0.2, 1.9, 0.01), f.p(0.85, 2.7, 0.01), f.p(1.5, 1.9, 0.01), f.n, Color(0.55, 0.55, 0.55))
+		fq(glow, f, 0.2, 0.0, 1.5, 1.9, 0.01, Color(0.3, 0.3, 0.3))
+		glow.tri(f.p(0.2, 1.9, 0.01), f.p(0.85, 2.7, 0.01), f.p(1.5, 1.9, 0.01), f.n, Color(0.3, 0.3, 0.3))
 		_pointed_arch(st, f, 0.85, 0.68, 1.9, 0.2, 0.18, sc * Color(0.7, 0.68, 0.66), 0.2)
 	# floor of the well: wet flags lit from the crypt
 	_disc(glow, Vector3(0, -D + 0.01, 0), R, segs, Color(0.22, 0.22, 0.22))
@@ -3349,10 +3363,10 @@ func _process(delta: float) -> void:
 	neon_flicker_mat.emission_energy_multiplier = neon_e * (0.05 if nbuzz > 1.4 else 1.0)
 	far_mat.emission_energy_multiplier = win * 0.9
 	stained_mat.emission_energy_multiplier = 0.15 + night * 2.6
-	shop_mat.emission_energy_multiplier = 0.25 + win * 1.1
+	shop_mat.emission_energy_multiplier = 0.15 + win * 0.5
 	halo_mat.set_shader_parameter("strength", night * 0.55)
 	if uplight_mat != null:
-		uplight_mat.set_shader_parameter("strength", 0.45 + night * 0.75)
+		uplight_mat.set_shader_parameter("strength", 0.35 + night * 0.5)
 	crypt_mat.emission_energy_multiplier = 0.5 + night * 0.7
 	var pool := night * 0.42
 	pool_mat.albedo_color = Color(1.0 * pool, 0.72 * pool, 0.42 * pool)
