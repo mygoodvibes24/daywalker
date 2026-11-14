@@ -29,6 +29,14 @@ static func sword_for(inst: Dictionary) -> String:
 	return FAMILY_SWORD.get(d.get("family", ""), DEFAULT_SWORD)
 
 
+## Which combo chain (scripts/sol_moves.gd COMBOS) an item swings: the heavy cleaver family uses
+## Weapon_Combo_2, everything else the light Triple_Combo_Attack.
+static func combo_for(inst: Dictionary) -> String:
+	if inst.is_empty():
+		return "light"
+	return "heavy" if sword_for(inst) == "cleaver" else "light"
+
+
 ## The sword model for an item, tinted toward its family's steel and its rarity colour
 ## (Hallowed and Eclipse blades also glow faintly). Null if the scene is missing.
 static func build_model(inst: Dictionary) -> Node3D:
