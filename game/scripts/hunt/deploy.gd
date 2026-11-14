@@ -73,7 +73,7 @@ func play(p: Dictionary, dressings: Dictionary) -> void:
 				ct.tween_property(cover, "position", cover.position + Vector3(0.6, 2.4, 0.2), 0.35).set_ease(Tween.EASE_OUT)
 				ct.parallel().tween_property(cover, "rotation", Vector3(2.8, 0.7, 1.2), 0.7)
 				ct.tween_property(cover, "position", cover.position + Vector3(1.6, 0.04, 0.9), 0.4).set_ease(Tween.EASE_IN)
-			HFx.puff(main, pos + Vector3(0, 0.2, 0), Color(0.5, 0.5, 0.5), 10, 0.25, 1.6)
+			HFx.puff(main, pos + Vector3(0, 0.2, 0), Color(0.22, 0.2, 0.19), 10, 0.14, 1.6)
 			cam_from = pos + face * 6.0 + side * 3.0 + Vector3(0, 1.0, 0)
 			cam_to = pos - face * 2.4 + side * 1.0 + Vector3(0, 2.8, 0)
 		_: # rooftop
@@ -97,7 +97,7 @@ func _slam(power: float) -> void:
 	slammed = true
 	var pos: Vector3 = main.player.global_position
 	HFx.shockwave(main, pos, 3.0 + 6.0 * power, Color(1.0, 0.2, 0.15), 0.5)
-	HFx.puff(main, pos + Vector3(0, 0.3, 0), Color(0.45, 0.42, 0.4), 14, 0.3, 2.0 + 3.0 * power)
+	HFx.puff(main, pos + Vector3(0, 0.3, 0), Color(0.22, 0.2, 0.19), 12, 0.16, 2.0 + 3.0 * power)
 	main.player.shake = maxf(main.player.shake, 0.3 + 0.4 * power)
 	main.rumble(0.4, 0.8 * power, 0.35)
 	if power > 0.5:

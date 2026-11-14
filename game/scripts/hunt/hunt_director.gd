@@ -130,6 +130,8 @@ func start() -> void:
 	main.lair_pos = Vector3(0, -500, 0) # Keep Vigil moves to the chapels during a Hunt
 	main.hud.clock_label.visible = false
 	main.hud.info_label.visible = false
+	main.hud.announce_label.anchor_top = 0.27 # clear of the compass and the phase line
+	main.hud.announce_label.anchor_bottom = 0.27
 	main.kills = 0
 	hud = HuntHud.new()
 	hud.director = self

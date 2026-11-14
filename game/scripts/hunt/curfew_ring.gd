@@ -12,7 +12,7 @@ uniform sampler2D noise_tex : repeat_enable, filter_linear_mipmap;
 uniform vec4 color : source_color = vec4(0.95, 0.05, 0.08, 1.0);
 uniform float radius = 100.0;
 uniform float flash = 0.0;
-uniform float intensity = 1.0;
+uniform float intensity = 1.35;
 varying float h;
 void vertex() {
 	h = VERTEX.y;
@@ -26,9 +26,11 @@ void fragment() {
 	float hf = clamp((h + 35.0) / 70.0, 0.0, 1.0);
 	float base = pow(1.0 - hf, 1.6);
 	float fres = 1.0 - abs(dot(normalize(NORMAL), normalize(VIEW)));
-	float veil = (0.18 + smoothstep(0.35, 0.95, n) * 0.9) * (0.45 + fres * 0.8);
-	float a = base * veil * intensity + flash * base * 0.6;
-	float foot = smoothstep(0.06, 0.0, hf) * 0.8;
+	// vertical blood streaks running up the wall
+	float streak = pow(texture(noise_tex, vec2(UV.x * tiles * 3.0, TIME * 0.05)).r, 3.0) * 1.6;
+	float veil = (0.42 + smoothstep(0.3, 0.9, n) * 1.1 + streak * (1.0 - hf)) * (0.55 + fres * 0.9);
+	float a = base * veil * intensity + flash * base * 0.8;
+	float foot = smoothstep(0.08, 0.0, hf) * 1.4;
 	vec3 c = color.rgb * (0.6 + n * 0.8) + vec3(1.0, 0.35, 0.3) * flash * 0.5;
 	ALBEDO = c * (a + foot);
 	ALPHA = clamp(a + foot, 0.0, 1.0);
@@ -41,6 +43,7 @@ var center := Vector3.ZERO
 var wall: MeshInstance3D
 var mat: ShaderMaterial
 var bolts: Array[MeshInstance3D] = []
+var base_ring: MeshInstance3D # a burning line where the wall meets the street
 var bolt_mat: StandardMaterial3D
 var bolt_t := 0.5
 var flash := 0.0
@@ -79,6 +82,22 @@ func _ready() -> void:
 	wall.position.y = HEIGHT * 0.5 - 1.0
 	wall.extra_cull_margin = 200.0
 	add_child(wall)
+	var tor := TorusMesh.new()
+	tor.inner_radius = 0.997
+	tor.outer_radius = 1.003
+	tor.rings = 128
+	tor.ring_segments = 4
+	base_ring = MeshInstance3D.new()
+	base_ring.mesh = tor
+	var rm := StandardMaterial3D.new()
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	rm.albedo_color = Color(1.0, 0.12, 0.1)
+	base_ring.material_override = rm
+	base_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	base_ring.position.y = 0.15
+	base_ring.extra_cull_margin = 200.0
+	add_child(base_ring)
 	bolt_mat = StandardMaterial3D.new()
 	bolt_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	bolt_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
@@ -149,6 +168,7 @@ func _apply() -> void:
 	global_position = center
 	if wall != null:
 		wall.scale = Vector3(radius, 1.0, radius)
+		base_ring.scale = Vector3(radius, 40.0, radius)
 		mat.set_shader_parameter("radius", radius)
 
 

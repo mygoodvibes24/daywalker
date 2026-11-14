@@ -113,8 +113,8 @@ func _ready() -> void:
 	map_hint = S.label("[M] map", 13, Color(0.75, 0.7, 0.65), 3)
 	map_hint.anchor_left = 0.5
 	map_hint.anchor_right = 0.5
-	map_hint.offset_left = 336
-	map_hint.offset_top = 22
+	map_hint.offset_left = 268
+	map_hint.offset_top = 54
 	root.add_child(map_hint)
 
 	fade = ColorRect.new()

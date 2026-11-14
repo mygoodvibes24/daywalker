@@ -49,7 +49,7 @@ func _ready() -> void:
 	var d := Dressing.build(type, self, rng, def.color)
 	for c in d.coffins:
 		coffins.append({"node": c, "opened": false})
-	marker = Dressing.label(self, display_name.to_upper(), def.color.lightened(0.3), 4.6)
+	marker = Dressing.label(self, display_name.to_upper(), def.color.lightened(0.3), 6.5)
 	marker.no_depth_test = false
 	_refill(main.is_day())
 

@@ -32,13 +32,13 @@ func _ready() -> void:
 	aura = HFx.aura(self, def.get("aura", Color(1, 0.1, 0.2)), 1.3 * s, 2.3 * s, 0.9)
 	label = Label3D.new()
 	label.text = display_name.to_upper()
-	label.font_size = 40
+	label.font_size = 32
 	label.outline_size = 10
 	label.modulate = def.get("aura", Color(1, 0.3, 0.3)).lightened(0.35)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
 	label.fixed_size = false
-	label.pixel_size = 0.006
+	label.pixel_size = 0.004
 	label.position = Vector3(0, 2.6 * s + 0.3, 0)
 	add_child(label)
 
@@ -74,4 +74,4 @@ func _process(_delta: float) -> void:
 		var v: Node3D = e.visual
 		v.scale = Vector3.ONE * s
 	var hp_frac := clampf(e.hp / maxf(e.max_hp, 1.0), 0.0, 1.0)
-	label.text = "%s\n%s" % [display_name.to_upper(), "|".repeat(int(round(hp_frac * 20.0))).rpad(20, ".")]
+	label.text = "%s\n%s" % [display_name.to_upper(), "=".repeat(int(ceil(hp_frac * 12.0))).rpad(12, "·")]
