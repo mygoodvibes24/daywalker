@@ -155,6 +155,7 @@ func start() -> void:
 	deploy.finished.connect(_on_deployed)
 	state = "deploy"
 	deploy.play(deploy_point, deploy_dressing)
+	Dialogue.play_group("hunt_deploy_") # AUDIO HOOK
 
 
 func _on_deployed() -> void:
@@ -180,11 +181,13 @@ func _enter(s: String) -> void:
 				main.hud.announce("DAY %d\nThe Curfew falls at dusk. Hunt fast." % (day + 1))
 		"shrink1":
 			ring.shrink_to(Cfg.RING_STAGE1, T.shrink1)
+			Dialogue.play("curfew_broadcast"); Dialogue.play("curfew_warning") # AUDIO HOOK
 			main.hud.announce("THE RED CURFEW FALLS\nGet inside the blood-fog before it takes you")
 		"hold":
 			pass
 		"shrink2":
 			ring.shrink_to(arena.radius, T.shrink2)
+			Dialogue.play("curfew_final"); Dialogue.play("reyes_scanner") # AUDIO HOOK
 			main.hud.announce("THE CURFEW CLOSES\nMake for %s" % arena.name)
 		"boss":
 			_spawn_boss()
@@ -391,6 +394,9 @@ func _spawn_boss() -> void:
 	b.died.connect(_on_boss_died)
 	boss = b
 	ring.set_radius(arena.radius)
+	Audio.set_boss(true); Dialogue.play(["boss_alpha_intro", "boss_marcus_intro", "boss_seraphine_intro"][mini(day, 2)]) # AUDIO HOOK
+	if day == 0:
+		Audio.play_at("wolf_howl", b.position) # AUDIO HOOK
 	main.hud.announce(def.name + "\n" + def.title)
 	main.set_slowmo(0.4, 0.6)
 	main.rumble(0.5, 0.8, 0.6)
@@ -438,6 +444,7 @@ func summons_alive() -> int:
 
 func _on_boss_died(b) -> void:
 	bosses_killed += 1
+	Audio.set_boss(false); Dialogue.play(["boss_alpha_death", "boss_marcus_death", "boss_seraphine_death"][mini(day, 2)]) # AUDIO HOOK
 	var def: Dictionary = Cfg.BOSSES[mini(day, 2)]
 	main.loot.spawn_motes(b.global_position + Vector3(0, 1.5, 0), int(round(def.tithe * (1.0 + main.progression.stat("tithe_mult")))))
 	main.loot.spawn_item(random_item(ItemDB.LEGENDARY, "blade"), b.global_position + Vector3(1.5, 0, 0))
@@ -499,7 +506,7 @@ func _final_night() -> void:
 
 # ---------------------------------------------------------------- POIs
 func on_poi_roused(_poi) -> void:
-	pass
+	Dialogue.play("hunt_poi_found") # AUDIO HOOK (has its own cooldown)
 
 
 func on_poi_cleared(poi) -> void:
@@ -515,6 +522,7 @@ func on_poi_cleared(poi) -> void:
 		3:
 			main.loot.spawn_item(random_item(ItemDB.LEGENDARY, "blade"), pos + Vector3(0.8, 0, 0.8))
 	main.hud.popup("%s CLEARED" % poi.display_name.to_upper())
+	Dialogue.play_group("poi_cleared_") # AUDIO HOOK
 
 
 func coffin_loot(pos: Vector3, day_: bool) -> void:
@@ -641,6 +649,8 @@ func _end_run(won_: bool) -> void:
 		"day": day + 1, "time": run_time, "tithe": main.progression.tithe}
 	summary["earned"] = Meta.record_hunt(summary, carried)
 	summary["kept"] = Meta.data.last.get("kept", [])
+	if won:
+		Dialogue.play("hunt_extract") # AUDIO HOOK
 	main.progression.reset() # run-scoped: rank, Tithe, Vows and the Coat start over next Hunt
 	main.player.hp = maxf(main.player.hp, 0.0)
 	if map_screen != null:

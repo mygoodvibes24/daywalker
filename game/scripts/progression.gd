@@ -146,6 +146,7 @@ func level_up() -> bool:
 	vow_choices = roll_vows(3)
 	tithe_changed.emit(tithe)
 	leveled_up.emit(level)
+	Audio.play("level_up"); Dialogue.play_group("bark_levelup_") # AUDIO HOOK
 	save()
 	return true
 

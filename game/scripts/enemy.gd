@@ -382,6 +382,7 @@ func _start_transform() -> void:
 				U.part(visual, U.box(Vector3(0.14, 0.12, 0.24)), skin_mat, Vector3(0, 1.73, 0.18)),
 			]
 	main.on_wolf_transform(self)
+	Audio.on_wolf_transform(global_position) # AUDIO HOOK
 
 
 ## Sunrise: the wolf shrinks back into a person with civilian stats.
@@ -471,6 +472,7 @@ func _physics_process(delta: float) -> void:
 					windup_t = 0.38 if kind == VAMPIRE else 0.45
 					attack_cd = 1.1 if kind == VAMPIRE else 1.3
 					_anim_attack(windup_t)
+					Audio.enemy_bark(self) # AUDIO HOOK
 			elif not token and dist < 5.5:
 				hvel = _circle(to, dist) # wait for a turn: ring the player
 			else:
@@ -629,6 +631,7 @@ func _die(_drained: bool) -> void:
 	collision_layer = 0
 	collision_mask = 0
 	main.on_enemy_killed(self, _drained)
+	Audio.on_enemy_died(self) # AUDIO HOOK
 	var tw := create_tween()
 	if anim != null:
 		visual.rotation.z = 0.0

@@ -466,6 +466,7 @@ func _attack() -> void:
 	var dmg: float = w.dmg * (1.0 if combo < 3 else 2.0 * (1.0 + stat("finisher"))) * damage_mult()
 	var reach: float = (2.7 if combo < 3 else 3.3) + w.reach
 	attacked.emit(combo, fwd)
+	Audio.play("sword_swing", -2.0 if combo < 3 else 1.0, 0.1) # AUDIO HOOK
 	if mod_anim != null:
 		mod_anim.swing(combo, w.spd)
 	var hit := false
@@ -479,6 +480,7 @@ func _attack() -> void:
 			var hd: float = dmg * _vs_mult(e)
 			e.take_hit(hd, to.normalized() if d > 0.01 else fwd)
 			hit_enemy.emit(e, hd)
+			Audio.play_at("sword_hit", e.global_position, 0.0 if combo < 3 else 3.0) # AUDIO HOOK
 			hit = true
 	if hit:
 		shake = maxf(shake, 0.12 if combo < 3 else 0.28)
@@ -512,6 +514,7 @@ func _bite(target) -> void:
 	main.set_slowmo(0.35, 0.35)
 	main.rumble(0.3, 0.6, 0.25)
 	bit_enemy.emit(target, blood)
+	Audio.play("bite"); Dialogue.play_group("bark_bite_") # AUDIO HOOK
 
 
 func heal(v: float) -> void:
@@ -523,6 +526,7 @@ func add_hunger(v: float) -> void:
 	if hunger >= 100.0 and frenzy_t <= 0.0:
 		frenzy_t = 8.0 * (1.0 + stat("frenzy_time")) # PROGRESSION HOOK
 		main.hud.announce("FRENZY\nThe beast is loose")
+		Dialogue.play("bark_frenzy") # AUDIO HOOK
 
 
 func take_damage(amount: float, _src) -> void:
@@ -538,6 +542,7 @@ func take_damage(amount: float, _src) -> void:
 	amount *= maxf(1.0 + stat("dmg_taken"), 0.2) # PROGRESSION HOOK
 	hp -= amount
 	hurt.emit(amount, _src)
+	Dialogue.on_player_hurt(hp / max_hp) # AUDIO HOOK
 	since_hurt = 0.0
 	invuln_t = 0.4
 	shake = maxf(shake, 0.32)
@@ -552,6 +557,7 @@ func _die() -> void:
 		return
 	dead = true
 	hp = 0.0
+	Audio.on_player_died() # AUDIO HOOK
 	if mod_anim != null:
 		mod_anim.die()
 		visual.rotation.x = 0.0

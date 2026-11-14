@@ -83,6 +83,7 @@ func _ready() -> void:
 	add_child(hud)
 	hud.process_mode = Node.PROCESS_MODE_ALWAYS
 	_setup_progression() # PROGRESSION HOOK
+	Audio.attach_world(self) # AUDIO HOOK
 	pause_menu = PauseMenu.new()
 	pause_menu.main = self
 	add_child(pause_menu)
@@ -106,6 +107,7 @@ func start_game() -> void:
 	player.block_attack()
 	if hunt != null:
 		hunt.start() # HUNT HOOK: run-scoped reset, hub loadout, the Descent
+	Dialogue.play("hunt_start") # AUDIO HOOK
 
 
 ## HUNT HOOK: a Hunt runs when the hub asked for one (or --hunt / --shorthunt / ?hunt).
@@ -288,12 +290,15 @@ func _process(delta: float) -> void:
 		night_count += 1
 		if is_full_moon():
 			hud.announce("FULL MOON\nThe Hollow Pack is turning")
+			Audio.play("wolf_howl", -6.0); Dialogue.play("nia_full_moon") # AUDIO HOOK
 		else:
 			hud.announce("NIGHTFALL\nThe Velvet Court awakens")
+			Dialogue.play("bark_nightfall") # AUDIO HOOK
 	elif not was_day and is_day():
 		lair_stock = LAIR_MAX
 		loot.respawn_caches() # PROGRESSION HOOK
 		hud.announce("SUNRISE\nVampires burn. The blood bank is restocked.\nCoffins and crates are full again.")
+		Dialogue.play(["bark_sunrise", "nia_sunrise"].pick_random()) # AUDIO HOOK
 	_update_lighting()
 	_update_spawning(delta)
 
@@ -426,6 +431,7 @@ func _update_slowmo() -> void:
 
 func perfect_dodge() -> void:
 	hud.popup("PERFECT DODGE")
+	Audio.play("perfect_dodge"); Dialogue.play_group("bark_dodge_") # AUDIO HOOK
 	player.dash_charges = minf(player.dash_charges + 1.0, player.MAX_DASH)
 	set_slowmo(0.3, 0.8)
 	progression.on_perfect_dodge() # PROGRESSION HOOK

@@ -35,7 +35,7 @@ The game opens on a **main menu** (`game/scenes/main_menu.tscn`, the project's m
 - **Options** (saved to `user://settings.cfg` and applied live):
   - **Display:** brightness, window mode (windowed / fullscreen / borderless; windowed or fullscreen in a browser), resolution scale (50-100% 3D render scale), V-Sync, quality preset (Low turns off SSAO, SSIL, SSR and volumetric fog; Medium keeps SSAO and fog), rain on / off.
   - **Controls:** mouse sensitivity, controller look sensitivity, invert Y.
-  - **Audio:** master, music and effects volume (the Master, Music and SFX buses).
+  - **Audio:** master, music, effects and voice volume (the Master, Music, SFX and Voice buses), and subtitles on / off.
 - The menu works with mouse, keyboard (arrows, Enter, Esc) and controller (D-pad / left stick, **A** to accept, **B** to go back). Left / right changes a slider or a choice.
 - **Pause menu:** **Esc** in play pauses the game and frees the mouse: Resume, Options, Controls, Quit to Menu. On a controller, Start is the Coat and B is the dash, so the pause menu is the **Pause** button inside the Coat (or **Back / Share** while the Coat is open).
 
@@ -98,6 +98,13 @@ Code: `game/scripts/hunt/` (`hunt_director.gd` run state machine, `hunt_config.g
 - **Perfect dodge.** Dash through (or out of) an enemy's strike to trigger bullet-time and refund a dash. Strikes are committed when the wind-up starts, so you can also just sidestep them.
 - **Enemies hunt properly.** They path around buildings, and only two attack at once while the rest circle you.
 - **The Undercroft**, Sol's lair entrance in the cathedral plaza, with a blood bank that restocks at sunrise.
+
+## Sound, music and voice
+- **Voiced dialogue with subtitles** (57 lines, `game/data/dialogue.json`, script in `docs/DIALOGUE.md`): Nia and Sol banter in the lair while the main menu idles (it stops the moment you click), Nia briefs you over comms, Sol barks on bites, perfect dodges, low blood, frenzy, rank-ups, Eclipse loot, sunrise and nightfall, vampires and the Velvet Court taunt you, and the bosses get intros and deaths. Speaker names are coloured in the subtitle.
+- **Music** crossfades by context: a gothic slow-jazz lair theme on the menu, an exploration bed when no enemies are near, and a combat track when they engage (also the boss track).
+- **SFX:** blade swings and flesh hits (positional), the bite, the Blood Dash whoosh, perfect dodge, rank-up chime, loot pickup, the Eclipse beam hum, Tithe motes, wolf transformation, growls and howls, vampire hisses and sun-burn sizzle, deaths, rain with distant thunder, wet footsteps and menu clicks.
+- Code: the `Audio` autoload (`game/scripts/audio/audio.gd`: SFX pool, 3D sounds, music contexts) and the `Dialogue` autoload (`game/scripts/audio/dialogue.gd`: queue, priorities, cooldowns, subtitles). Gameplay calls them from one-line hooks marked `# AUDIO HOOK`. In a browser nothing plays until the first click or key press.
+- All audio was generated for this project; models, voices and the date are in `game/assets/audio/CREDITS.md`.
 
 ## Progression
 - **Tithe** is the blood-essence currency. Every kill bursts into red motes that fly to you when you're close (vampire 8, Pack civilian 12, werewolf 25, full-moon wolf 40; draining with a bite pays 50% more). Your total is on the HUD.

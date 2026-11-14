@@ -9,7 +9,7 @@ signal changed
 const PATH := "user://settings.cfg"
 const WINDOW_MODES := ["Windowed", "Fullscreen", "Borderless"]
 const QUALITY := ["Low", "Medium", "High"]
-const BUSES := ["Master", "Music", "SFX"]
+const BUSES := ["Master", "Music", "SFX", "Voice"]
 
 # base look speeds (sensitivity 1.0 = the game's original tuning)
 const MOUSE_BASE := 0.0025 # radians per pixel
@@ -25,7 +25,8 @@ static var rain := true
 static var mouse_sensitivity := 1.0 # 0.2..3.0
 static var pad_sensitivity := 1.0 # 0.2..3.0
 static var invert_y := false
-static var volume := {"Master": 0.9, "Music": 0.7, "SFX": 0.8} # linear 0..1
+static var volume := {"Master": 0.9, "Music": 0.7, "SFX": 0.8, "Voice": 0.9} # linear 0..1
+static var subtitles := true # AUDIO: dialogue subtitles
 
 const KEYS := ["brightness", "window_mode", "resolution_scale", "vsync", "quality", "rain",
 	"mouse_sensitivity", "pad_sensitivity", "invert_y"]
@@ -75,7 +76,7 @@ func _on_node_added(n: Node) -> void:
 
 
 static func ensure_buses() -> void:
-	for b in ["Music", "SFX"]:
+	for b in ["Music", "SFX", "Voice"]:
 		if AudioServer.get_bus_index(b) < 0:
 			AudioServer.add_bus()
 			var i := AudioServer.bus_count - 1
@@ -98,6 +99,7 @@ static func load_settings(path: String = PATH) -> bool:
 	invert_y = bool(cf.get_value("controls", "invert_y", invert_y))
 	for b in BUSES:
 		volume[b] = clampf(float(cf.get_value("audio", b, volume[b])), 0.0, 1.0)
+	subtitles = bool(cf.get_value("audio", "subtitles", subtitles))
 	return true
 
 
@@ -114,6 +116,7 @@ static func save_settings(path: String = PATH) -> bool:
 	cf.set_value("controls", "invert_y", invert_y)
 	for b in BUSES:
 		cf.set_value("audio", b, volume[b])
+	cf.set_value("audio", "subtitles", subtitles)
 	return cf.save(path) == OK
 
 
@@ -132,6 +135,7 @@ func set_value(key: String, value) -> void:
 			"mouse_sensitivity": mouse_sensitivity = float(value)
 			"pad_sensitivity": pad_sensitivity = float(value)
 			"invert_y": invert_y = bool(value)
+			"subtitles": subtitles = bool(value)
 	apply_all()
 	if key == "rain":
 		_apply_rain()
@@ -152,6 +156,7 @@ func get_value(key: String):
 		"mouse_sensitivity": return mouse_sensitivity
 		"pad_sensitivity": return pad_sensitivity
 		"invert_y": return invert_y
+		"subtitles": return subtitles
 	return null
 
 

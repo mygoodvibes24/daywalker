@@ -87,6 +87,7 @@ func _initialize() -> void:
 	ok = await _gameplay_checks(main) and ok
 	ok = await _progression_checks(main) and ok
 	ok = await _coat_checks(main) and ok
+	ok = await _audio_checks(main) and ok
 	ok = await _menu_checks(main) and ok
 	ok = await _hunt_checks() and ok
 	if FileAccess.file_exists(SMOKE_SAVE):
@@ -430,6 +431,95 @@ func _coat_checks(main) -> bool:
 	p.mod_anim.tree.active = true
 	ok = _check("coat comes to rest on a still body (%.4f m/s)" % rest_motion, rest_motion < 0.02) and ok
 	ok = _check("modular model animates with clips", p.mod_anim != null and p.mod_anim.tree != null and p.mod_anim.tree.active) and ok
+	return ok
+
+
+# ---------------------------------------------------------------- audio, dialogue, subtitles
+func _audio_checks(main) -> bool:
+	var ok := true
+	var audio = root.get_node("Audio")
+	var dlg = root.get_node("Dialogue")
+	# every line's voice file exists and loads
+	var bad := []
+	for id in dlg.lines:
+		var l: Dictionary = dlg.lines[id]
+		var s = load(l.audio) if ResourceLoader.exists(l.audio) else null
+		if s == null or s.get_length() < 0.3 or float(l.duration) <= 0.0 or not dlg.speakers.has(l.speaker):
+			bad.append(id)
+	ok = _check("all %d dialogue lines have audio that loads %s" % [dlg.lines.size(), bad], bad.is_empty() and dlg.lines.size() >= 45) and ok
+	var missing := []
+	for n in audio.SFX:
+		for path in audio.SFX[n]:
+			if audio.stream(path) == null:
+				missing.append(path)
+	for c in audio.MUSIC:
+		if audio.stream(audio.MUSIC[c]) == null:
+			missing.append(c)
+	ok = _check("all SFX and music load %s" % [missing], missing.is_empty()) and ok
+	# Dialogue.play shows a subtitle, queues behind a busy channel, a boss line cuts in
+	var St = load("res://scripts/settings.gd")
+	St.subtitles = true
+	dlg.stop_all()
+	var started: bool = dlg.play("curfew_warning")
+	await process_frame
+	ok = _check("Dialogue.play starts a line with a subtitle", started and dlg.is_speaking() and dlg.subtitle_text().begins_with("NIA") and dlg.subtitle_text().contains("Red Curfew")) and ok
+	var queued: bool = dlg.play("hunt_hub")
+	ok = _check("a second comms line queues", queued and dlg.queue.size() == 1 and dlg.current.id == "curfew_warning") and ok
+	ok = _check("a bark during comms waits briefly or drops, never overlaps", dlg.current.id == "curfew_warning") and ok
+	dlg.play("boss_marcus_intro")
+	ok = _check("a boss intro beats a lower line", dlg.current.id == "boss_marcus_intro" and dlg.subtitle_text().begins_with("MARCUS")) and ok
+	ok = _check("same line on cooldown is refused", not dlg.play("boss_marcus_intro") or dlg.lines["boss_marcus_intro"].cooldown == 0) and ok
+	St.subtitles = false
+	dlg.stop_all()
+	dlg.play("poi_cleared_2")
+	await process_frame
+	ok = _check("subtitles off hides the label", dlg.is_speaking() and dlg.subtitle_text() == "") and ok
+	St.subtitles = true
+	dlg.stop_all()
+	ok = _check("hunt line ids exist for the run hooks", dlg.has_line("hunt_deploy_1") and dlg.has_line("curfew_warning") and dlg.has_line("boss_alpha_intro")) and ok
+	# music follows the fight: enemies near -> combat, boss -> boss, calm -> explore
+	_clear_enemies(main)
+	var was_over: bool = main.game_over
+	main.game_over = false
+	audio.attach_world(main)
+	audio._calm_t = 99.0
+	audio._poll_t = 0.0
+	await process_frame
+	await process_frame
+	ok = _check("music is the exploration bed with no enemies near", audio.context == "explore") and ok
+	_spawn(main, 0, main.player.global_position + Vector3(3, 0, 0))
+	audio._poll_t = 0.0
+	await process_frame
+	await process_frame
+	ok = _check("music switches to combat when enemies engage", audio.context == "combat") and ok
+	audio.set_boss(true)
+	ok = _check("music switches to the boss track", audio.context == "boss") and ok
+	audio.set_boss(false)
+	_clear_enemies(main)
+	audio._calm_t = 99.0
+	audio._poll_t = 0.0
+	await process_frame
+	await process_frame
+	ok = _check("music falls back to explore when calm", audio.context == "explore") and ok
+	audio.set_music("menu", 0.1)
+	ok = _check("menu music context", audio.context == "menu" and audio._music[audio._music_cur].stream != null) and ok
+	audio.set_music("explore", 0.1)
+	main.game_over = was_over
+	# Voice bus and subtitle setting round-trip
+	var path := "user://smoke_audio.cfg"
+	var keep: Dictionary = St.volume.duplicate()
+	var keep_sub: bool = St.subtitles
+	St.volume["Voice"] = 0.35
+	St.subtitles = false
+	var saved: bool = St.save_settings(path)
+	St.volume["Voice"] = 0.9
+	St.subtitles = true
+	var loaded: bool = St.load_settings(path)
+	ok = _check("Voice volume and subtitles round-trip", saved and loaded and is_equal_approx(St.volume["Voice"], 0.35) and St.subtitles == false) and ok
+	St.volume = keep
+	St.subtitles = keep_sub
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	ok = _check("Voice bus exists", AudioServer.get_bus_index("Voice") >= 0) and ok
 	return ok
 
 

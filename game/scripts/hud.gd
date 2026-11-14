@@ -218,6 +218,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			help_t = maxf(help_t, 6.0)
 	if not started and (event is InputEventKey or event is InputEventMouseButton or event is InputEventJoypadButton) and event.is_pressed():
 		get_viewport().set_input_as_handled()
+		Audio.unlock() # AUDIO HOOK: the first click unlocks web audio
 		main.start_game()
 
 

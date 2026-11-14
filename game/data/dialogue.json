@@ -1,0 +1,609 @@
+{
+ "_comment": "Daywalker voiced dialogue, played by the Dialogue autoload (scripts/audio/dialogue.gd): Dialogue.play(id), or Dialogue.play_group(prefix) for a random variant (e.g. 'bark_bite_'). duration = subtitle seconds (audio length + 0.6). priority: 0 menu idle, 1 barks/taunts, 2 comms, 3 boss. cooldown = seconds before the same id may play again.",
+ "speakers": {
+  "sol": {
+   "name": "SOL",
+   "color": "#e8c27a"
+  },
+  "nia": {
+   "name": "NIA",
+   "color": "#6fd3c8"
+  },
+  "lucien": {
+   "name": "LUCIEN",
+   "color": "#c9354a"
+  },
+  "marcus": {
+   "name": "MARCUS CRANE",
+   "color": "#b27ae8"
+  },
+  "seraphine": {
+   "name": "SERAPHINE",
+   "color": "#ff5a7a"
+  },
+  "reyes": {
+   "name": "DET. REYES",
+   "color": "#8fb4ff"
+  },
+  "vampire": {
+   "name": "VAMPIRE",
+   "color": "#d0505a"
+  },
+  "court": {
+   "name": "VELVET COURT",
+   "color": "#d77fb0"
+  }
+ },
+ "lines": [
+  {
+   "id": "menu_lair_01a",
+   "speaker": "nia",
+   "category": "menu",
+   "text": "You've sharpened that thing three times.",
+   "audio": "res://assets/audio/voice/menu_lair_01a.ogg",
+   "duration": 2.99,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_01b",
+   "speaker": "sol",
+   "category": "menu",
+   "text": "Fourth time's for luck.",
+   "audio": "res://assets/audio/voice/menu_lair_01b.ogg",
+   "duration": 1.92,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_02a",
+   "speaker": "nia",
+   "category": "menu",
+   "text": "Your blood sample just ate my control sample.",
+   "audio": "res://assets/audio/voice/menu_lair_02a.ogg",
+   "duration": 3.68,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_02b",
+   "speaker": "sol",
+   "category": "menu",
+   "text": "Sounds about right. Did it say thank you?",
+   "audio": "res://assets/audio/voice/menu_lair_02b.ogg",
+   "duration": 3.46,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_03a",
+   "speaker": "nia",
+   "category": "menu",
+   "text": "Reyes left another voicemail. She sounds... thorough.",
+   "audio": "res://assets/audio/voice/menu_lair_03a.ogg",
+   "duration": 5.13,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_03b",
+   "speaker": "sol",
+   "category": "menu",
+   "text": "She's a good cop. That's the problem.",
+   "audio": "res://assets/audio/voice/menu_lair_03b.ogg",
+   "duration": 3.05,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_04a",
+   "speaker": "nia",
+   "category": "menu",
+   "text": "You could sleep, you know. Like a normal person.",
+   "audio": "res://assets/audio/voice/menu_lair_04a.ogg",
+   "duration": 3.74,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_04b",
+   "speaker": "sol",
+   "category": "menu",
+   "text": "Tried it once. Didn't take.",
+   "audio": "res://assets/audio/voice/menu_lair_04b.ogg",
+   "duration": 2.63,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_05a",
+   "speaker": "nia",
+   "category": "menu",
+   "text": "The Court's throwing a party on the Velvet Mile tonight.",
+   "audio": "res://assets/audio/voice/menu_lair_05a.ogg",
+   "duration": 3.25,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_05b",
+   "speaker": "sol",
+   "category": "menu",
+   "text": "Then I reckon I'm crashing it.",
+   "audio": "res://assets/audio/voice/menu_lair_05b.ogg",
+   "duration": 2.82,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_06a",
+   "speaker": "nia",
+   "category": "menu",
+   "text": "Hunger's at forty percent. I'm writing that down.",
+   "audio": "res://assets/audio/voice/menu_lair_06a.ogg",
+   "duration": 3.61,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_06b",
+   "speaker": "sol",
+   "category": "menu",
+   "text": "Write it in pencil, Doc.",
+   "audio": "res://assets/audio/voice/menu_lair_06b.ogg",
+   "duration": 2.02,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_07a",
+   "speaker": "nia",
+   "category": "menu",
+   "text": "Rain's coming down hard up top.",
+   "audio": "res://assets/audio/voice/menu_lair_07a.ogg",
+   "duration": 2.69,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_07b",
+   "speaker": "sol",
+   "category": "menu",
+   "text": "Good. Hides the smell. Theirs and mine.",
+   "audio": "res://assets/audio/voice/menu_lair_07b.ogg",
+   "duration": 4.24,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_08a",
+   "speaker": "nia",
+   "category": "menu",
+   "text": "If you die out there, I'm keeping the coat.",
+   "audio": "res://assets/audio/voice/menu_lair_08a.ogg",
+   "duration": 3.27,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "menu_lair_08b",
+   "speaker": "sol",
+   "category": "menu",
+   "text": "It wouldn't fit you. Barely fits me.",
+   "audio": "res://assets/audio/voice/menu_lair_08b.ogg",
+   "duration": 3.35,
+   "priority": 0,
+   "cooldown": 0
+  },
+  {
+   "id": "hunt_start",
+   "speaker": "nia",
+   "category": "hunt",
+   "text": "Comms are up. I can hear you breathing, so that's a good start.",
+   "audio": "res://assets/audio/voice/hunt_start.ogg",
+   "duration": 4.53,
+   "priority": 2,
+   "cooldown": 0
+  },
+  {
+   "id": "hunt_hub",
+   "speaker": "nia",
+   "category": "hunt",
+   "text": "Pick your steel, pick your ground. Every district's crawling tonight.",
+   "audio": "res://assets/audio/voice/hunt_hub.ogg",
+   "duration": 5.17,
+   "priority": 2,
+   "cooldown": 0
+  },
+  {
+   "id": "hunt_deploy_1",
+   "speaker": "nia",
+   "category": "hunt",
+   "text": "Dropping you in. Three marks on the map. Hit them before the Curfew closes.",
+   "audio": "res://assets/audio/voice/hunt_deploy_1.ogg",
+   "duration": 5.33,
+   "priority": 2,
+   "cooldown": 0
+  },
+  {
+   "id": "hunt_deploy_2",
+   "speaker": "nia",
+   "category": "hunt",
+   "text": "Out of the tunnels and into the rain. Try to bring the coat back dry.",
+   "audio": "res://assets/audio/voice/hunt_deploy_2.ogg",
+   "duration": 5.0,
+   "priority": 2,
+   "cooldown": 0
+  },
+  {
+   "id": "hunt_poi_found",
+   "speaker": "nia",
+   "category": "hunt",
+   "text": "That signal's a nest. Clear it, and whatever they're guarding is yours.",
+   "audio": "res://assets/audio/voice/hunt_poi_found.ogg",
+   "duration": 5.16,
+   "priority": 2,
+   "cooldown": 0
+  },
+  {
+   "id": "bark_bite_1",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "Mm. Vintage.",
+   "audio": "res://assets/audio/voice/bark_bite_1.ogg",
+   "duration": 2.44,
+   "priority": 1,
+   "cooldown": 6
+  },
+  {
+   "id": "bark_bite_2",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "That'll hold me.",
+   "audio": "res://assets/audio/voice/bark_bite_2.ogg",
+   "duration": 1.53,
+   "priority": 1,
+   "cooldown": 6
+  },
+  {
+   "id": "bark_dodge_1",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "Too slow.",
+   "audio": "res://assets/audio/voice/bark_dodge_1.ogg",
+   "duration": 1.48,
+   "priority": 1,
+   "cooldown": 6
+  },
+  {
+   "id": "bark_dodge_2",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "Missed me, darlin'.",
+   "audio": "res://assets/audio/voice/bark_dodge_2.ogg",
+   "duration": 1.78,
+   "priority": 1,
+   "cooldown": 6
+  },
+  {
+   "id": "bark_lowhp_1",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "Okay. That one hurt.",
+   "audio": "res://assets/audio/voice/bark_lowhp_1.ogg",
+   "duration": 2.5,
+   "priority": 1,
+   "cooldown": 6
+  },
+  {
+   "id": "bark_lowhp_2",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "Need blood. Now.",
+   "audio": "res://assets/audio/voice/bark_lowhp_2.ogg",
+   "duration": 2.49,
+   "priority": 1,
+   "cooldown": 6
+  },
+  {
+   "id": "bark_frenzy",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "Can't... hold it... back!",
+   "audio": "res://assets/audio/voice/bark_frenzy.ogg",
+   "duration": 3.08,
+   "priority": 1,
+   "cooldown": 0
+  },
+  {
+   "id": "bark_levelup_1",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "Feel that? Stronger.",
+   "audio": "res://assets/audio/voice/bark_levelup_1.ogg",
+   "duration": 2.54,
+   "priority": 1,
+   "cooldown": 0
+  },
+  {
+   "id": "bark_levelup_2",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "Gettin' the hang of this.",
+   "audio": "res://assets/audio/voice/bark_levelup_2.ogg",
+   "duration": 2.02,
+   "priority": 1,
+   "cooldown": 0
+  },
+  {
+   "id": "bark_eclipse",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "Eclipse steel. Somebody's gonna miss this.",
+   "audio": "res://assets/audio/voice/bark_eclipse.ogg",
+   "duration": 3.76,
+   "priority": 1,
+   "cooldown": 0
+  },
+  {
+   "id": "bark_sunrise",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "Sun's up. Run, little bats.",
+   "audio": "res://assets/audio/voice/bark_sunrise.ogg",
+   "duration": 2.96,
+   "priority": 1,
+   "cooldown": 60
+  },
+  {
+   "id": "bark_nightfall",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "Here comes the night shift.",
+   "audio": "res://assets/audio/voice/bark_nightfall.ogg",
+   "duration": 1.92,
+   "priority": 1,
+   "cooldown": 60
+  },
+  {
+   "id": "bark_kill_1",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "Stay down.",
+   "audio": "res://assets/audio/voice/bark_kill_1.ogg",
+   "duration": 1.51,
+   "priority": 1,
+   "cooldown": 6
+  },
+  {
+   "id": "bark_kill_2",
+   "speaker": "sol",
+   "category": "bark",
+   "text": "Who's next?",
+   "audio": "res://assets/audio/voice/bark_kill_2.ogg",
+   "duration": 1.36,
+   "priority": 1,
+   "cooldown": 6
+  },
+  {
+   "id": "curfew_warning",
+   "speaker": "nia",
+   "category": "comms",
+   "text": "Red Curfew's closing. Get inside the ring, Sol, or it gets inside you.",
+   "audio": "res://assets/audio/voice/curfew_warning.ogg",
+   "duration": 5.32,
+   "priority": 2,
+   "cooldown": 20
+  },
+  {
+   "id": "curfew_final",
+   "speaker": "nia",
+   "category": "comms",
+   "text": "Ring's almost shut. Move. Now.",
+   "audio": "res://assets/audio/voice/curfew_final.ogg",
+   "duration": 3.65,
+   "priority": 2,
+   "cooldown": 20
+  },
+  {
+   "id": "poi_cleared_1",
+   "speaker": "nia",
+   "category": "comms",
+   "text": "Nest's clear. Nice work. Grab what's shiny and go.",
+   "audio": "res://assets/audio/voice/poi_cleared_1.ogg",
+   "duration": 4.56,
+   "priority": 2,
+   "cooldown": 20
+  },
+  {
+   "id": "poi_cleared_2",
+   "speaker": "nia",
+   "category": "comms",
+   "text": "That's one less hole full of teeth.",
+   "audio": "res://assets/audio/voice/poi_cleared_2.ogg",
+   "duration": 2.74,
+   "priority": 2,
+   "cooldown": 20
+  },
+  {
+   "id": "nia_low_blood",
+   "speaker": "nia",
+   "category": "comms",
+   "text": "Your blood's crashing. Find a neck. Well, not any neck.",
+   "audio": "res://assets/audio/voice/nia_low_blood.ogg",
+   "duration": 4.93,
+   "priority": 2,
+   "cooldown": 20
+  },
+  {
+   "id": "nia_full_moon",
+   "speaker": "nia",
+   "category": "comms",
+   "text": "Full moon's up. The Pack is out in force. Don't let them flank you.",
+   "audio": "res://assets/audio/voice/nia_full_moon.ogg",
+   "duration": 5.28,
+   "priority": 2,
+   "cooldown": 60
+  },
+  {
+   "id": "nia_sunrise",
+   "speaker": "nia",
+   "category": "comms",
+   "text": "Sun's coming. The bloodsuckers scramble. You don't.",
+   "audio": "res://assets/audio/voice/nia_sunrise.ogg",
+   "duration": 4.51,
+   "priority": 2,
+   "cooldown": 60
+  },
+  {
+   "id": "hunt_extract",
+   "speaker": "nia",
+   "category": "comms",
+   "text": "Hunt's done. Get to extraction and I'll put the kettle on.",
+   "audio": "res://assets/audio/voice/hunt_extract.ogg",
+   "duration": 4.15,
+   "priority": 2,
+   "cooldown": 20
+  },
+  {
+   "id": "curfew_broadcast",
+   "speaker": "lucien",
+   "category": "comms",
+   "text": "Citizens of Port Vesper. The Red Curfew is in effect. Stay indoors... and stay delicious.",
+   "audio": "res://assets/audio/voice/curfew_broadcast.ogg",
+   "duration": 8.08,
+   "priority": 2,
+   "cooldown": 20
+  },
+  {
+   "id": "reyes_scanner",
+   "speaker": "reyes",
+   "category": "comms",
+   "text": "All units, Curfew zone is sealed. Man in the long coat, do not engage. I mean it.",
+   "audio": "res://assets/audio/voice/reyes_scanner.ogg",
+   "duration": 6.97,
+   "priority": 2,
+   "cooldown": 20
+  },
+  {
+   "id": "vamp_taunt_1",
+   "speaker": "vampire",
+   "category": "enemy",
+   "text": "Half-breed! You smell like a church.",
+   "audio": "res://assets/audio/voice/vamp_taunt_1.ogg",
+   "duration": 3.42,
+   "priority": 1,
+   "cooldown": 8
+  },
+  {
+   "id": "vamp_taunt_2",
+   "speaker": "vampire",
+   "category": "enemy",
+   "text": "The Count wants you alive. Mostly.",
+   "audio": "res://assets/audio/voice/vamp_taunt_2.ogg",
+   "duration": 3.3,
+   "priority": 1,
+   "cooldown": 8
+  },
+  {
+   "id": "vamp_taunt_3",
+   "speaker": "vampire",
+   "category": "enemy",
+   "text": "Come here, Daywalker. Let me taste you.",
+   "audio": "res://assets/audio/voice/vamp_taunt_3.ogg",
+   "duration": 3.84,
+   "priority": 1,
+   "cooldown": 8
+  },
+  {
+   "id": "court_taunt_1",
+   "speaker": "court",
+   "category": "enemy",
+   "text": "The Velvet Court sends its regards.",
+   "audio": "res://assets/audio/voice/court_taunt_1.ogg",
+   "duration": 2.96,
+   "priority": 1,
+   "cooldown": 8
+  },
+  {
+   "id": "court_taunt_2",
+   "speaker": "court",
+   "category": "enemy",
+   "text": "You're terribly underdressed for this party.",
+   "audio": "res://assets/audio/voice/court_taunt_2.ogg",
+   "duration": 3.38,
+   "priority": 1,
+   "cooldown": 8
+  },
+  {
+   "id": "court_taunt_3",
+   "speaker": "court",
+   "category": "enemy",
+   "text": "Kneel, and Lucien might let you keep your head.",
+   "audio": "res://assets/audio/voice/court_taunt_3.ogg",
+   "duration": 3.75,
+   "priority": 1,
+   "cooldown": 8
+  },
+  {
+   "id": "boss_alpha_intro",
+   "speaker": "nia",
+   "category": "boss",
+   "text": "That howl is the Alpha. She's big, she's angry, and she brought family.",
+   "audio": "res://assets/audio/voice/boss_alpha_intro.ogg",
+   "duration": 6.57,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
+   "id": "boss_alpha_death",
+   "speaker": "nia",
+   "category": "boss",
+   "text": "Alpha's down. The Pack won't forget that.",
+   "audio": "res://assets/audio/voice/boss_alpha_death.ogg",
+   "duration": 3.47,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
+   "id": "boss_marcus_intro",
+   "speaker": "marcus",
+   "category": "boss",
+   "text": "Look at us. Two fast men in nice coats. Only one walks out tonight.",
+   "audio": "res://assets/audio/voice/boss_marcus_intro.ogg",
+   "duration": 5.51,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
+   "id": "boss_marcus_death",
+   "speaker": "marcus",
+   "category": "boss",
+   "text": "Faster... than me? Nobody's... faster...",
+   "audio": "res://assets/audio/voice/boss_marcus_death.ogg",
+   "duration": 4.41,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
+   "id": "boss_seraphine_intro",
+   "speaker": "seraphine",
+   "category": "boss",
+   "text": "My darling abomination. Show the Daywalker what his blood has made.",
+   "audio": "res://assets/audio/voice/boss_seraphine_intro.ogg",
+   "duration": 5.77,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
+   "id": "boss_seraphine_death",
+   "speaker": "seraphine",
+   "category": "boss",
+   "text": "You killed my child. I'll make another... from you.",
+   "audio": "res://assets/audio/voice/boss_seraphine_death.ogg",
+   "duration": 4.93,
+   "priority": 3,
+   "cooldown": 0
+  }
+ ]
+}
