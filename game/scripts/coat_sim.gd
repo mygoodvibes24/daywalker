@@ -1,45 +1,54 @@
 extends Node
 ## Spring-bone simulation for the skirt of Sol's trenchcoat (sol_modular.scn).
 ##
-## The coat's lower half is skinned to `chains` chains of `links` bones each, all children of
-## the Hips bone (built by tools/build_sol_modular.gd, bones named "Coat<c>_<k>"). Every physics
-## frame each chain is a little verlet rope in world space:
+## The coat's lower half is skinned to `chains` chains of `links` bones each, all children of the
+## Hips bone (built by tools/build_sol_modular.gd, bones named "Coat<c>_<k>"; neighbouring chains
+## share the vertices between them, so the skirt folds between chains instead of moving as panels).
+## Every physics frame each chain is a little verlet rope in world space:
 ##   * joint 0 rides the animated Hips; joints 1..links are free particles;
-##   * forces: gravity, a spring back toward the coat's tailored rest shape (stiffer near the
-##     waist), air drag (so the hem trails when Sol runs or turns), an outward flare that grows
-##     with speed, and a little wind/rain flutter noise;
-##   * constraints: fixed link lengths, a swing limit, and capsules around the thighs, shins and
-##     hips so the cloth never passes through the legs;
+##   * forces: gravity, a spring back toward the coat's tailored rest shape (firm at the waist, soft at
+##     the hem, so the hem lags, overshoots a touch and settles like heavy leather), air drag (the hem
+##     trails when Sol runs or turns), an outward flare that grows with speed but saturates, and a
+##     wind / rain flutter with its own phase per chain;
+##   * constraints: fixed link lengths, a per-link swing limit and a whole-chain cone (so sprinting or
+##     a big slash can't throw the hem out horizontal), and soft capsules around the thighs, shins and
+##     hips that push the cloth back and around a lifting knee rather than up;
 ##   * the particle positions are then written back as bone rotations.
-## Cost: 8 chains x 4 links, two constraint passes with 5 capsules = ~400 capsule tests and 32
-## bone writes per physics frame, all plain float math (well under 0.2 ms in a web build).
+## Cost (12 chains x 5 links = 60 bones): 60 particles, two constraint passes against 5 capsules =
+## 600 capsule tests and 60 bone writes per physics frame, all plain float math (about 0.2 ms in a
+## web build).
 
 @export var skeleton_path := NodePath("../Skeleton3D")
-@export var chains := 8
-@export var links := 4
+@export var chains := 12
+@export var links := 5
 ## Hem offset from the last bone of each chain, in that bone's rest space (one per chain).
 @export var tails := PackedVector3Array()
 @export var gravity := 9.8
-## Pull toward the rest shape (1/s^2), at the waist and at the hem.
-@export var stiffness_top := 70.0
-@export var stiffness_hem := 24.0
-## Velocity kept per 1/60 s (verlet damping).
-@export var damping := 0.86
+## Pull toward the rest shape (1/s^2), at the waist and at the hem (heavy leather: soft at the hem).
+@export var stiffness_top := 80.0
+@export var stiffness_hem := 11.0
+## Velocity kept per 1/60 s (verlet damping): under-damped at the hem, so it overshoots slightly.
+@export var damping := 0.935
 ## Air drag (1/s): makes the coat trail behind when Sol moves.
-@export var drag := 0.45
-## Outward flare acceleration per m/s of horizontal speed, at the hem.
-@export var flare := 0.35
+@export var drag := 0.55
+## Outward flare acceleration per m/s of horizontal speed, at the hem, and the speed it saturates at.
+@export var flare := 0.28
+@export var flare_speed_cap := 8.0
 ## Wind and rain flutter (m/s^2).
-@export var flutter := 0.7
+@export var flutter := 0.6
 ## Max angle (radians) a link may swing away from its rest direction.
-@export var max_swing := 0.75
+@export var max_swing := 0.55
+## Max angle (radians) the whole chain (waist joint -> any joint) may swing away from its rest line.
+@export var max_cone := 0.95
 ## Leg capsules: [bone_a, bone_b, radius]; the cloth keeps `cloth_margin` outside them.
 @export var capsules := [
 	["LeftUpLeg", "LeftLeg", 0.085], ["LeftLeg", "LeftFoot", 0.065],
 	["RightUpLeg", "RightLeg", 0.085], ["RightLeg", "RightFoot", 0.065],
 	["Hips", "Spine02", 0.14],
 ]
-@export var cloth_margin := 0.02
+@export var cloth_margin := 0.025
+## How much of a capsule penetration is resolved per pass (soft collision: < 1 lets the cloth give).
+@export var collision_softness := 0.6
 ## Simulation on/off (off = the coat holds its rest shape).
 @export var enabled := true
 
@@ -50,6 +59,7 @@ var rest_hips: Array[PackedVector3Array] = [] # [chain][k] joint rest position i
 var seg_len: Array[PackedFloat32Array] = []
 var pos: Array[PackedVector3Array] = [] # world space, k = 0..links
 var prev: Array[PackedVector3Array] = []
+var phase := PackedFloat32Array() # per-chain flutter phase
 var cap_bones: Array[PackedInt32Array] = []
 var cap_r := PackedFloat32Array()
 var t := 0.0
@@ -82,7 +92,7 @@ func _ready() -> void:
 			bl.append(b)
 			rh.append(hips_rest.affine_inverse() * skel.get_bone_global_rest(b).origin)
 		var last := skel.get_bone_global_rest(bl[links - 1])
-		var tail: Vector3 = tails[c] if c < tails.size() else Vector3(0, -0.13, 0)
+		var tail: Vector3 = tails[c] if c < tails.size() else Vector3(0, -0.11, 0)
 		rh.append(hips_rest.affine_inverse() * (last * tail))
 		for k in links:
 			sl.append(rh[k].distance_to(rh[k + 1]))
@@ -93,6 +103,7 @@ func _ready() -> void:
 		p.resize(links + 1)
 		pos.append(p)
 		prev.append(p.duplicate())
+		phase.append(fmod(c * 2.39996, TAU)) # golden-angle spread: no two neighbours flutter in step
 	for cap in capsules:
 		var a := skel.find_bone(cap[0])
 		var b := skel.find_bone(cap[1])
@@ -125,13 +136,14 @@ func _physics_process(delta: float) -> void:
 	hips_vel = hips_vel.lerp(v_now, clampf(delta * 12.0, 0.0, 1.0))
 	last_hips = hips_g.origin
 	var hspeed := Vector2(hips_vel.x, hips_vel.z).length()
+	var flare_spd := flare_speed_cap * (1.0 - exp(-hspeed / flare_speed_cap)) # saturates
 	var keep := pow(damping, dt * 60.0)
 	# gravity minus the share the tailored rest shape already carries (the rest pose was cut
 	# hanging upright): upright this nets to ~0, but when the hips tip over (a lunge, a fall)
 	# the coat drapes toward the ground
 	var g_world := Vector3(0, -gravity, 0)
 	var g := g_world - (sx.basis.orthonormalized() * skel.get_bone_global_pose(hips).basis.orthonormalized() * hips_rest_inv) * g_world * 0.85
-	# wind gusts: slow, mostly sideways; stronger at night rain doesn't matter here
+	# wind gusts: slow, mostly sideways
 	var gust := Vector3(sin(t * 0.7) + 0.5 * sin(t * 1.9 + 1.3), 0.0, cos(t * 0.5) * 0.6) * flutter
 	var axis := hips_g.origin
 	# capsules in world space
@@ -139,10 +151,12 @@ func _physics_process(delta: float) -> void:
 	for cb in cap_bones:
 		caps.append(PackedVector3Array([sx * skel.get_bone_global_pose(cb[0]).origin, sx * skel.get_bone_global_pose(cb[1]).origin]))
 	var msum := 0.0
+	var move_amt := 0.25 + 0.75 * clampf(hspeed / 8.0, 0.0, 1.0)
 	for c in pos.size():
 		var p := pos[c]
 		var q := prev[c]
 		var rh := rest_hips[c]
+		var ph := phase[c]
 		p[0] = hips_g * rh[0]
 		q[0] = p[0]
 		for k in range(1, links + 1):
@@ -152,11 +166,13 @@ func _physics_process(delta: float) -> void:
 			var radial := Vector3(p[k].x - axis.x, 0.0, p[k].z - axis.z)
 			radial = radial.normalized() if radial.length() > 0.001 else Vector3.ZERO
 			var noise := Vector3(
-				sin(t * 5.3 + c * 1.7 + k * 0.9), sin(t * 3.1 + c * 2.3) * 0.3, cos(t * 4.7 + c * 1.1 + k * 1.3)
-			) * flutter * (0.25 + 0.75 * clampf(hspeed / 8.0, 0.0, 1.0))
-			var acc := g + (target - p[k]) * lerpf(stiffness_top, stiffness_hem, f)
+				sin(t * 5.3 + ph + k * 0.9), sin(t * 3.1 + ph * 1.3) * 0.3, cos(t * 4.7 + ph * 0.7 + k * 1.3)
+			) * flutter * move_amt
+			# stiffness falls off toward the hem faster than linearly (the hem is the heavy, free part)
+			var stiff := lerpf(stiffness_top, stiffness_hem, sqrt(f))
+			var acc := g + (target - p[k]) * stiff
 			acc += -vel * drag + gust * f * 0.35 + noise * f
-			acc += radial * flare * hspeed * f
+			acc += radial * flare * flare_spd * f
 			var np := p[k] + (p[k] - q[k]) * keep + acc * dt * dt
 			q[k] = p[k]
 			p[k] = np
@@ -171,21 +187,34 @@ func _physics_process(delta: float) -> void:
 				d /= len
 				# swing limit around the posed rest direction
 				var rest_dir := (hips_g.basis * (rh[k] - rh[k - 1])).normalized()
-				var ang := d.angle_to(rest_dir)
-				if ang > max_swing:
-					var ax := rest_dir.cross(d)
-					if ax.length() > 1e-5:
-						d = rest_dir.rotated(ax.normalized(), max_swing)
+				d = _clamp_dir(d, rest_dir, max_swing)
 				p[k] = parent + d * seg_len[c][k - 1]
-				# legs and hips: push the cloth point out of each capsule
+				# whole-chain cone: the hem can flare but never fly out flat
+				var rest_line := (hips_g.basis * (rh[k] - rh[0])).normalized()
+				var line := p[k] - p[0]
+				var ll := line.length()
+				if ll > 1e-4:
+					var nd := _clamp_dir(line / ll, rest_line, max_cone)
+					p[k] = p[0] + nd * ll
+				# legs and hips: soft push out of each capsule, sideways and back, never up
 				for ci in caps.size():
-					p[k] = _push_out(p[k], caps[ci][0], caps[ci][1], cap_r[ci] + cloth_margin)
+					p[k] = _push_out(p[k], caps[ci][0], caps[ci][1], cap_r[ci] + cloth_margin, collision_softness)
 		pos[c] = p
 		prev[c] = q
 		for k in range(1, links + 1):
 			msum += p[k].distance_to(q[k]) / dt
 	_motion = msum / maxf(pos.size() * links, 1)
 	_write(sx)
+
+
+static func _clamp_dir(d: Vector3, rest: Vector3, lim: float) -> Vector3:
+	var ang := d.angle_to(rest)
+	if ang <= lim:
+		return d
+	var ax := rest.cross(d)
+	if ax.length() < 1e-5:
+		return d
+	return rest.rotated(ax.normalized(), lim)
 
 
 func _snap(hips_g: Transform3D) -> void:
@@ -199,7 +228,10 @@ func _snap(hips_g: Transform3D) -> void:
 	hips_vel = Vector3.ZERO
 
 
-static func _push_out(p: Vector3, a: Vector3, b: Vector3, r: float) -> Vector3:
+## Push p out of the capsule a-b (radius r). The push loses its upward part, so a knee coming up
+## slides the hem aside and back around the leg instead of lifting it; `soft` < 1 resolves only part
+## of the overlap per pass (the cloth gives a little, no popping).
+static func _push_out(p: Vector3, a: Vector3, b: Vector3, r: float, soft: float) -> Vector3:
 	var ab := b - a
 	var tt := clampf((p - a).dot(ab) / maxf(ab.length_squared(), 1e-6), 0.0, 1.0)
 	var c := a + ab * tt
@@ -207,9 +239,16 @@ static func _push_out(p: Vector3, a: Vector3, b: Vector3, r: float) -> Vector3:
 	var l := d.length()
 	if l >= r:
 		return p
-	if l < 1e-5:
-		return c + Vector3(0, 0, r)
-	return c + d / l * r
+	var n := d / l if l > 1e-5 else Vector3(0, 0, 1)
+	if n.y > 0.0:
+		n.y = 0.0
+		if n.length() < 1e-3:
+			return p
+		n = n.normalized()
+	# the depth along the (now horizontal) push direction that clears the capsule
+	var perp := d - ab.normalized() * d.dot(ab.normalized()) if ab.length_squared() > 1e-8 else d
+	var depth := r - maxf(perp.dot(n), 0.0)
+	return p + n * maxf(depth, 0.0) * soft
 
 
 ## Turn the particle chain into bone rotations (in skeleton space, parent first).
@@ -224,7 +263,7 @@ func _write(sx: Transform3D) -> void:
 			var rest := skel.get_bone_rest(b)
 			var cur_basis := gp.basis * rest.basis
 			var origin := gp * rest.origin
-			var child_local: Vector3 = skel.get_bone_rest(bones[c][k + 1]).origin if k + 1 < links else (tails[c] if c < tails.size() else Vector3(0, -0.13, 0))
+			var child_local: Vector3 = skel.get_bone_rest(bones[c][k + 1]).origin if k + 1 < links else (tails[c] if c < tails.size() else Vector3(0, -0.11, 0))
 			var cur_dir := (cur_basis * child_local).normalized()
 			var want := (inv * p[k + 1]) - origin
 			var new_basis := cur_basis
@@ -256,5 +295,3 @@ func swing_amount() -> float:
 ## Mean speed (m/s) of the free cloth points over the last frame: ~0 once the coat has settled.
 func motion_amount() -> float:
 	return _motion
-
-
