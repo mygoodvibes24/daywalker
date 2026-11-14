@@ -33,7 +33,8 @@ const MODULAR_NAMES := {
 	"UpperArm.R": "RightArm", "ForeArm.R": "RightForeArm", "Hand.R": "RightHand",
 }
 var modular := false
-var touched := PackedInt32Array() # bones this script writes; reset to rest before the clip
+var touched := PackedInt32Array() # bones this script writes; reset to rest after the clip
+var damped := PackedInt32Array() # bones that keep a little of the clip (hips, legs)
 var fist_off := {"Hand.L": Vector3.ZERO, "Hand.R": Vector3.ZERO} # wrist -> fist centre (skeleton space)
 var fist_local := {"Hand.L": Vector3.ZERO, "Hand.R": Vector3.ZERO} # fist centre in the hand bone frame
 
@@ -52,6 +53,10 @@ func setup(s: Skeleton3D, player: AnimationPlayer = null) -> void:
 	for k in bi:
 		if k != "Hips":
 			touched.append(bi[k])
+	if modular:
+		for n in ["Hips", "LeftUpLeg", "LeftLeg", "LeftFoot", "LeftToeBase", "RightUpLeg", "RightLeg", "RightFoot", "RightToeBase"]:
+			if skel.find_bone(n) >= 0:
+				damped.append(skel.find_bone(n))
 	# the idle clip as the base layer, advanced by hand so the overrides always land after it
 	if player != null and player.has_animation("idle"):
 		anim = player
@@ -112,9 +117,18 @@ func _pose(time: float, delta: float) -> void:
 		skel.set_bone_pose_rotation(b, skel.get_bone_rest(b).basis.get_rotation_quaternion())
 	if anim != null:
 		anim.advance(delta)
-		# the idle clip looks around; at the bench his eyes stay on the work
-		for k in ["Neck", "Head"]:
-			skel.set_bone_pose_rotation(bi[k], skel.get_bone_rest(bi[k]).basis.get_rotation_quaternion())
+		# the idle clip is a look-around idle (the hips swing ~80 degrees): at the bench only a
+		# tenth of it is kept on the hips and legs, for life, and its vertical bob; the upper
+		# body is posed from rest so his eyes and hands stay on the work
+		for b in damped:
+			var rest_q := skel.get_bone_rest(b).basis.get_rotation_quaternion()
+			skel.set_bone_pose_rotation(b, rest_q.slerp(skel.get_bone_pose_rotation(b), 0.1))
+		for b in touched:
+			skel.set_bone_pose_rotation(b, skel.get_bone_rest(b).basis.get_rotation_quaternion())
+		if bi.has("Hips"):
+			var hr := skel.get_bone_rest(bi["Hips"]).origin
+			var hp := skel.get_bone_pose_position(bi["Hips"])
+			skel.set_bone_pose_position(bi["Hips"], Vector3(hr.x, lerpf(hr.y, hp.y, 0.5), hr.z))
 	var breath := sin(time * 1.4)
 	# slow stroke: draw the stone toward the tip, lift it a touch and bring it back
 	var cyc := fmod(time / stroke_period, 1.0)
@@ -122,16 +136,16 @@ func _pose(time: float, delta: float) -> void:
 	var lift := sin(clampf((cyc - 0.62) / 0.38, 0.0, 1.0) * PI) * 0.03
 
 	# torso: upright, leaning slightly into the work; the chest turns a touch with the stroke
-	_rot("Spine", Quaternion(Vector3.RIGHT, 0.1 + breath * 0.006))
+	_rot("Spine", Quaternion(Vector3.RIGHT, 0.14 + breath * 0.006))
 	_rot("Chest", Quaternion(Vector3.UP, -0.03 - push * 0.05) * Quaternion(Vector3.RIGHT, 0.09))
 	_rot("UpperChest", Quaternion(Vector3.RIGHT, 0.05 + breath * 0.008))
 	# shoulders roll forward a little, as when working with both hands in front
 	_rot("Shoulder.L", Quaternion(Vector3.UP, 0.12))
 	_rot("Shoulder.R", Quaternion(Vector3.UP, -0.12))
-	_rot("Neck", Quaternion(Vector3.RIGHT, 0.16))
+	_rot("Neck", Quaternion(Vector3.RIGHT, 0.3))
 	# eyes on the edge, following the stone; now and then a glance along the blade
 	var glance := smoothstep(0.85, 1.0, sin(time * 0.21) * 0.5 + 0.5)
-	_rot("Head", Quaternion(Vector3.UP, -0.08 - push * 0.14 + glance * 0.3) * Quaternion(Vector3.RIGHT, 0.34 - glance * 0.12))
+	_rot("Head", Quaternion(Vector3.UP, -0.04 - push * 0.08 + glance * 0.25) * Quaternion(Vector3.RIGHT, 0.5 - glance * 0.15))
 
 	if not _has(["UpperArm.L", "ForeArm.L", "Hand.L", "UpperArm.R", "ForeArm.R", "Hand.R"]):
 		return

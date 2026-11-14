@@ -712,11 +712,20 @@ func _workbench() -> void:
 		b.add_child(k)
 		_box(k, Vector3(0.032, 0.006, 0.22), Vector3(0, 0, -0.08), m_steel)
 		_box(k, Vector3(0.034, 0.022, 0.12), Vector3(0, 0.006, 0.09), m_wood_dark)
-	# an oil rag by the knives
-	_box(b, Vector3(0.24, 0.015, 0.2), Vector3(0.88, top_y + 0.005, 0.12), U.mat(Color(0.3, 0.27, 0.22), 1.0), Vector3(0, 0.3, 0))
-	# vials of red serum by the lamp
-	for i in 4:
-		_cyl(b, 0.02, 0.02, 0.11, Vector3(-0.66 + i * 0.05, top_y + 0.055, -0.08 + (i % 2) * 0.05), U.glow(Color(0.6, 0.03, 0.03), 0.9), Vector3.ZERO, 8)
+	# glass vials of red serum by the lamp: clear glass, the serum glowing faintly inside, corks
+	var vial_glass := StandardMaterial3D.new()
+	vial_glass.albedo_color = Color(0.8, 0.75, 0.7, 0.22)
+	vial_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	vial_glass.roughness = 0.05
+	vial_glass.metallic_specular = 1.0
+	var serum := U.glow(Color(0.55, 0.02, 0.03), 0.7)
+	var cork := U.mat(Color(0.35, 0.24, 0.15), 0.9)
+	for i in 5:
+		var vh := 0.1 + fmod(i * 0.37, 0.05)
+		var vp := Vector3(-0.68 + i * 0.045, top_y, -0.06 + (i % 2) * 0.05)
+		_cyl(b, 0.016, 0.016, vh * 0.7, vp + Vector3(0, vh * 0.35, 0), serum, Vector3.ZERO, 8)
+		_cyl(b, 0.019, 0.019, vh, vp + Vector3(0, vh * 0.5, 0), vial_glass, Vector3.ZERO, 10)
+		_cyl(b, 0.012, 0.012, 0.022, vp + Vector3(0, vh + 0.008, 0), cork, Vector3.ZERO, 6)
 	# the brass work lamp, on the camera-left end of the bench
 	_cyl(b, 0.09, 0.11, 0.04, Vector3(-0.95, top_y + 0.02, -0.2), m_brass)
 	_cyl(b, 0.012, 0.012, 0.6, Vector3(-0.92, top_y + 0.32, -0.2), m_brass, Vector3(0, 0, -0.12), 8)
@@ -1193,11 +1202,11 @@ func _lights() -> void:
 	# 1. the work lamp: warm key on Sol's hands and face
 	var lamp := SpotLight3D.new()
 	lamp.position = BENCH_POS + Vector3(-0.45, BENCH_TOP + 0.58, -0.2)
-	lamp.look_at_from_position(lamp.position, SOL_POS + Vector3(0.0, 1.05, 0.3), Vector3.UP)
+	lamp.look_at_from_position(lamp.position, SOL_POS + Vector3(-0.35, 1.0, 0.55), Vector3.UP)
 	lamp.light_color = Color(1.0, 0.74, 0.45)
 	lamp.light_energy = 2.6 if cinematic else 2.4
 	lamp.spot_range = 5.0
-	lamp.spot_angle = 52.0
+	lamp.spot_angle = 62.0
 	lamp.spot_attenuation = 0.9
 	lamp.shadow_enabled = true
 	lamp.shadow_blur = 1.5
