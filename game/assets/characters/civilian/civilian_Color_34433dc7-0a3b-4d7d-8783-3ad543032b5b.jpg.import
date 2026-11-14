@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c5u8bmif7oeym"
-path="res://.godot/imported/civilian_Color_34433dc7-0a3b-4d7d-8783-3ad543032b5b.jpg-4da232430c9641592a7f66567f571e2e.ctex"
+path.s3tc="res://.godot/imported/civilian_Color_34433dc7-0a3b-4d7d-8783-3ad543032b5b.jpg-4da232430c9641592a7f66567f571e2e.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "ba7568353eaf7503766ae7c9deaf7724"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/civilian/civilian_Color_34433dc7-0a3b-4d7d-8783-3ad543032b5b.jpg"
-dest_files=["res://.godot/imported/civilian_Color_34433dc7-0a3b-4d7d-8783-3ad543032b5b.jpg-4da232430c9641592a7f66567f571e2e.ctex"]
+dest_files=["res://.godot/imported/civilian_Color_34433dc7-0a3b-4d7d-8783-3ad543032b5b.jpg-4da232430c9641592a7f66567f571e2e.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1

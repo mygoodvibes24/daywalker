@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://csgj8v5mn1h8n"
-path="res://.godot/imported/vampire_ORM_436fe4d5-33d0-42b1-9d24-4f48c243ca4e.jpg-23bc90902d2eaeee41d48afec489de61.ctex"
+path.s3tc="res://.godot/imported/vampire_ORM_436fe4d5-33d0-42b1-9d24-4f48c243ca4e.jpg-23bc90902d2eaeee41d48afec489de61.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "4cf66fbd56c17ff718016076cc0661e4"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/vampire/vampire_ORM_436fe4d5-33d0-42b1-9d24-4f48c243ca4e.jpg"
-dest_files=["res://.godot/imported/vampire_ORM_436fe4d5-33d0-42b1-9d24-4f48c243ca4e.jpg-23bc90902d2eaeee41d48afec489de61.ctex"]
+dest_files=["res://.godot/imported/vampire_ORM_436fe4d5-33d0-42b1-9d24-4f48c243ca4e.jpg-23bc90902d2eaeee41d48afec489de61.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
