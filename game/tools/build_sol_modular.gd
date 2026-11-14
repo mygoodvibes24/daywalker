@@ -139,12 +139,15 @@ func _initialize() -> void:
 	var head_att := _attach(root, "Head", "Head")
 	var head_arr := _load_arrays(D + "sol_mod_head_src.glb", Transform3D(Basis(Vector3.UP, -PI / 2.0).scaled(Vector3.ONE * HEAD_SCALE), HEAD_OFF))
 	head_arr = _cut_bust(head_arr, D + "sol_mod_head_src.glb")
-	_add_part(head_att, root, "HeadMesh", head_arr, _material(D + "sol_mod_head_src.glb"), true)
+	var head_mat := _material(D + "sol_mod_head_src.glb")
+	head_mat.metallic_specular = 0.32 # the generated skin reads plastic at full specular
+	_add_part(head_att, root, "HeadMesh", head_arr, head_mat, true)
 	_add_glasses(head_att, root)
 
 	# ---------------------------------------------------------------- hands + sword
 	var fist_r := _fist_xf("Right")
 	var hand_mat := _material(D + "sol_mod_hand_src.glb")
+	hand_mat.metallic_specular = 0.32
 	var hr := _attach(root, "Hand.R", "RightHand")
 	_add_part(hr, root, "HandMesh", _load_arrays(D + "sol_mod_hand_src.glb", fist_r), hand_mat, false)
 	var hl := _attach(root, "Hand.L", "LeftHand")
@@ -836,18 +839,18 @@ func _add_glasses(att: BoneAttachment3D, root: Node) -> void:
 	g.name = "Glasses"
 	att.add_child(g)
 	g.owner = root
-	var eye := Vector3(0.0, 1.744, 0.112) # between the eyes, just in front of the brow line
+	var eye := Vector3(0.0, 1.741, 0.104) # between the eyes, just in front of the brow line
 	g.transform = att.transform.affine_inverse() * Transform3D(Basis(), eye)
 	var frame := StandardMaterial3D.new()
 	frame.albedo_color = Color(0.09, 0.085, 0.08)
 	frame.metallic = 1.0
 	frame.roughness = 0.3
 	var lens := StandardMaterial3D.new()
-	lens.albedo_color = Color(0.015, 0.012, 0.014)
-	lens.metallic = 0.6
-	lens.roughness = 0.04
-	var r := 0.0215
-	var dx := 0.0335
+	lens.albedo_color = Color(0.03, 0.025, 0.03)
+	lens.metallic = 0.8
+	lens.roughness = 0.08
+	var r := 0.0175
+	var dx := 0.0315
 	for s in [-1.0, 1.0]:
 		var rim := MeshInstance3D.new()
 		var tm := TorusMesh.new()
@@ -877,10 +880,10 @@ func _add_glasses(att: BoneAttachment3D, root: Node) -> void:
 		# temple arm back to the ear
 		var arm := MeshInstance3D.new()
 		var bm := BoxMesh.new()
-		bm.size = Vector3(0.0022, 0.0028, 0.105)
+		bm.size = Vector3(0.0022, 0.0028, 0.1)
 		arm.mesh = bm
 		arm.material_override = frame
-		arm.position = Vector3((dx + r + 0.004) * s, 0.002, -0.052)
+		arm.position = Vector3((dx + r + 0.003) * s, 0.002, -0.05)
 		arm.rotation = Vector3(0, -0.07 * s, 0)
 		g.add_child(arm)
 		arm.owner = root
@@ -1100,7 +1103,7 @@ func _slash_window(A: Animation) -> Vector2:
 			best_t = tt
 		prev = p
 		tt += step
-	var w := Vector2(maxf(best_t - 0.42, 0.0), minf(best_t + 0.38, A.length))
+	var w := Vector2(maxf(best_t - 0.32, 0.0), minf(best_t + 0.36, A.length))
 	print("slash: peak hand speed %.1f m/s at %.2f s -> window %s" % [best_v, best_t, w])
 	return w
 

@@ -4,6 +4,8 @@ extends CharacterBody3D
 const U = preload("res://scripts/util.gd")
 const SolAnim = preload("res://scripts/sol_anim.gd")
 const SOL_SCENE := "res://assets/characters/sol/sol.scn"
+const SOL_MODULAR := "res://assets/characters/sol/sol_modular.scn"
+const SolModularAnim = preload("res://scripts/sol_modular_anim.gd")
 
 const WALK := 7.5
 const SPRINT := 13.0
@@ -67,6 +69,7 @@ var visual: Node3D
 var coat: MeshInstance3D # primitive fallback only
 var arm_pivot: Node3D # swing driver; drawn directly only by the primitive fallback
 var anim: SolAnim # procedural animator for the skinned model (null on the fallback)
+var mod_anim: SolModularAnim # clip blending for the modular model (null otherwise)
 
 
 func _ready() -> void:
@@ -99,9 +102,37 @@ func _ready() -> void:
 func _build_body() -> void:
 	visual = Node3D.new()
 	add_child(visual)
+	if ResourceLoader.exists(SOL_MODULAR) and _build_modular():
+		return
 	if ResourceLoader.exists(SOL_SCENE) and _build_model():
 		return
 	_build_primitive_body()
+
+
+## The modular hero: skinned body, separate head, fists, sword and a spring-bone trenchcoat
+## (built by tools/build_sol_modular.gd). Animated by clips (scripts/sol_modular_anim.gd).
+func _build_modular() -> bool:
+	var scene := load(SOL_MODULAR) as PackedScene
+	if scene == null:
+		return false
+	var model := scene.instantiate() as Node3D
+	var skel := model.get_node_or_null("Skeleton3D") as Skeleton3D
+	if skel == null or skel.find_bone("RightHand") < 0 or model.find_child("Blade", true, false) == null:
+		model.free()
+		return false
+	visual.add_child(model)
+	var ma := SolModularAnim.new()
+	if not ma.setup(model):
+		model.queue_free()
+		return false
+	mod_anim = ma
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	hurt.connect(func(_amount, _src): mod_anim.hit())
+	# arm_pivot keeps the swing math alive; the clips draw the actual swing
+	arm_pivot = Node3D.new()
+	visual.add_child(arm_pivot)
+	return true
 
 
 ## The generated, skinned Sol model (1.88 m, feet at y=0, facing +Z) with the silver
@@ -364,6 +395,14 @@ func set_weapon_visual(item: Dictionary) -> void:
 	if weapon_visual != null and is_instance_valid(weapon_visual):
 		weapon_visual.queue_free()
 		weapon_visual = null
+	# modular model: "Blade" is the grip frame in the right fist; swap the sword scene under it
+	var grip := visual.find_child("Blade", true, false) if visual != null else null
+	if grip != null and not grip is MeshInstance3D:
+		for c in grip.get_children():
+			(c as Node3D).visible = false
+		weapon_visual = preload("res://scripts/items/weapon_visual.gd").build(item, 0.014, true)
+		grip.add_child(weapon_visual)
+		return
 	var blade := _find_blade_mesh()
 	if blade == null:
 		return
@@ -427,6 +466,8 @@ func _attack() -> void:
 	var dmg: float = w.dmg * (1.0 if combo < 3 else 2.0 * (1.0 + stat("finisher"))) * damage_mult()
 	var reach: float = (2.7 if combo < 3 else 3.3) + w.reach
 	attacked.emit(combo, fwd)
+	if mod_anim != null:
+		mod_anim.swing(combo, w.spd)
 	var hit := false
 	for e in main.enemies_root.get_children():
 		if e.dead or (e.staggered and e != target):
@@ -511,8 +552,12 @@ func _die() -> void:
 		return
 	dead = true
 	hp = 0.0
-	var tw := create_tween()
-	tw.tween_property(visual, "rotation:x", -1.45, 0.6).set_ease(Tween.EASE_IN)
+	if mod_anim != null:
+		mod_anim.die()
+		visual.rotation.x = 0.0
+	else:
+		var tw := create_tween()
+		tw.tween_property(visual, "rotation:x", -1.45, 0.6).set_ease(Tween.EASE_IN)
 	main.on_player_died()
 
 
@@ -569,6 +614,9 @@ func _process(delta: float) -> void:
 			"dashing": dash_t > 0.0, "biting": bite_t > 0.0,
 			"swinging": swing_t > 0.0, "swing_rot": arm_pivot.rotation,
 		})
+	elif mod_anim != null:
+		lean *= 0.5 # small additive tilt on top of the clips (dash lunge, bite lean)
+		mod_anim.update(delta, {"speed": hs, "on_floor": is_on_floor()})
 	visual.rotation.x = lerpf(visual.rotation.x, lean, 12.0 * delta)
 
 	if dash_t > 0.0 or (frenzy_t > 0.0 and hs > 3.0):

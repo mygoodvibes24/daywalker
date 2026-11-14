@@ -6,6 +6,59 @@ extends RefCounted
 const ItemDB = preload("res://scripts/items/item_db.gd")
 
 static var _mats := {}
+static var _sword_mats := {}
+
+## Modelled swords (built by tools/build_sol_modular.gd): origin at the grip, blade along +Z,
+## flat facing +-X. Blade family -> sword scene.
+const SWORD_DIR := "res://assets/characters/sol/"
+const FAMILY_SWORD := {
+	"saber": "sabre",
+	"cleaver": "cleaver", "machete": "cleaver", "kukri": "cleaver",
+	"cane": "rapier",
+	"longblade": "silver",
+}
+const DEFAULT_SWORD := "silver"
+
+
+## Which sword model an item uses. Sol's own Marrow's Silver keeps the silver blade.
+static func sword_for(inst: Dictionary) -> String:
+	if inst.get("id", "marrow_silver") == "marrow_silver":
+		return DEFAULT_SWORD
+	var d := ItemDB.get_def(inst.get("id", "marrow_silver"))
+	return FAMILY_SWORD.get(d.get("family", ""), DEFAULT_SWORD)
+
+
+## The sword model for an item, tinted toward its family's steel and its rarity colour
+## (Hallowed and Eclipse blades also glow faintly). Null if the scene is missing.
+static func build_model(inst: Dictionary) -> Node3D:
+	var sword := sword_for(inst)
+	var path := SWORD_DIR + "sol_sword_%s.scn" % sword
+	if not ResourceLoader.exists(path):
+		return null
+	var node := (load(path) as PackedScene).instantiate() as Node3D
+	var d := ItemDB.get_def(inst.get("id", "marrow_silver"))
+	var look: Dictionary = ItemDB.BLADE_LOOK.get(d.get("family", "saber"), ItemDB.BLADE_LOOK.saber)
+	var rarity := int(inst.get("r", 0))
+	var key := "%s_%s_%d" % [sword, d.get("family", ""), rarity]
+	for mi in node.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		var base := m.mesh.surface_get_material(0) as StandardMaterial3D
+		if base == null:
+			continue
+		if not _sword_mats.has(key):
+			var mat := base.duplicate() as StandardMaterial3D
+			var tint: Color = Color.WHITE.lerp(look.col, 0.35)
+			if rarity > ItemDB.COMMON:
+				tint = tint.lerp(ItemDB.RARITY_COLORS[rarity], 0.12 + 0.06 * rarity)
+			mat.albedo_color = tint
+			if rarity >= ItemDB.RARE:
+				mat.emission_enabled = true
+				mat.emission = ItemDB.RARITY_COLORS[rarity]
+				mat.emission_energy_multiplier = 0.25 if rarity == ItemDB.RARE else 0.5
+			_sword_mats[key] = mat
+		m.material_override = _sword_mats[key]
+	node.name = "WeaponVisual"
+	return node
 
 
 static func _steel(c: Color, rarity: int) -> StandardMaterial3D:
@@ -24,7 +77,12 @@ static func _steel(c: Color, rarity: int) -> StandardMaterial3D:
 
 
 ## `thickness` is the original blade's flat-axis size, so it matches the hand it sits in.
-static func build(inst: Dictionary, thickness: float = 0.014) -> Node3D:
+## `modelled`: use the sword models (the modular hero holds them by the grip).
+static func build(inst: Dictionary, thickness: float = 0.014, modelled: bool = false) -> Node3D:
+	if modelled:
+		var m := build_model(inst)
+		if m != null:
+			return m
 	var d := ItemDB.get_def(inst.get("id", "marrow_silver"))
 	var look: Dictionary = ItemDB.BLADE_LOOK.get(d.get("family", "saber"), ItemDB.BLADE_LOOK.saber)
 	var rarity := int(inst.get("r", 0))
