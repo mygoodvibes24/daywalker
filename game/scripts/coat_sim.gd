@@ -57,6 +57,7 @@ var ready_ok := false
 var hips_vel := Vector3.ZERO
 var last_hips := Vector3.ZERO
 var _need_reset := true
+var _motion := 0.0
 var hips_rest_inv := Basis()
 
 
@@ -137,6 +138,7 @@ func _physics_process(delta: float) -> void:
 	var caps: Array[PackedVector3Array] = []
 	for cb in cap_bones:
 		caps.append(PackedVector3Array([sx * skel.get_bone_global_pose(cb[0]).origin, sx * skel.get_bone_global_pose(cb[1]).origin]))
+	var msum := 0.0
 	for c in pos.size():
 		var p := pos[c]
 		var q := prev[c]
@@ -180,6 +182,9 @@ func _physics_process(delta: float) -> void:
 					p[k] = _push_out(p[k], caps[ci][0], caps[ci][1], cap_r[ci] + cloth_margin)
 		pos[c] = p
 		prev[c] = q
+		for k in range(1, links + 1):
+			msum += p[k].distance_to(q[k]) / dt
+	_motion = msum / maxf(pos.size() * links, 1)
 	_write(sx)
 
 
@@ -246,3 +251,10 @@ func swing_amount() -> float:
 			s += skel.get_bone_pose_rotation(b).angle_to(skel.get_bone_rest(b).basis.get_rotation_quaternion())
 			n += 1
 	return s / maxf(n, 1)
+
+
+## Mean speed (m/s) of the free cloth points over the last frame: ~0 once the coat has settled.
+func motion_amount() -> float:
+	return _motion
+
+

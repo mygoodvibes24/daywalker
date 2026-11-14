@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cuk3m3lsc2uw5"
-path="res://.godot/imported/sol_mod_sword_cleaver_NormalGL_7e78ec60-4812-4a76-85a3-5420d12d1a4e.png-2a31f8b0d948e2455ac3cad9a3fff13b.ctex"
+path.s3tc="res://.godot/imported/sol_mod_sword_cleaver_NormalGL_7e78ec60-4812-4a76-85a3-5420d12d1a4e.png-2a31f8b0d948e2455ac3cad9a3fff13b.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "0122a65e2d776d9ba5680fb2af98d135"
@@ -14,7 +15,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_sword_cleaver_NormalGL_7e78ec60-4812-4a76-85a3-5420d12d1a4e.png"
-dest_files=["res://.godot/imported/sol_mod_sword_cleaver_NormalGL_7e78ec60-4812-4a76-85a3-5420d12d1a4e.png-2a31f8b0d948e2455ac3cad9a3fff13b.ctex"]
+dest_files=["res://.godot/imported/sol_mod_sword_cleaver_NormalGL_7e78ec60-4812-4a76-85a3-5420d12d1a4e.png-2a31f8b0d948e2455ac3cad9a3fff13b.s3tc.ctex"]
 
 [params]
 

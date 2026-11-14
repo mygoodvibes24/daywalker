@@ -50,12 +50,12 @@ static func build_model(inst: Dictionary) -> Node3D:
 			var mat := base.duplicate() as StandardMaterial3D
 			var tint: Color = Color.WHITE.lerp(look.col, 0.35)
 			if rarity > ItemDB.COMMON:
-				tint = tint.lerp(ItemDB.RARITY_COLORS[rarity], 0.12 + 0.06 * rarity)
+				tint = tint.lerp(ItemDB.RARITY_COLORS[rarity], 0.1 + 0.04 * rarity)
 			mat.albedo_color = tint
 			if rarity >= ItemDB.RARE:
 				mat.emission_enabled = true
 				mat.emission = ItemDB.RARITY_COLORS[rarity]
-				mat.emission_energy_multiplier = 0.25 if rarity == ItemDB.RARE else 0.5
+				mat.emission_energy_multiplier = 0.08 if rarity == ItemDB.RARE else 0.16
 			_sword_mats[key] = mat
 		m.material_override = _sword_mats[key]
 	node.name = "WeaponVisual"

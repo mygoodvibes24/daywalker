@@ -15,6 +15,7 @@ const LootScript = preload("res://scripts/loot.gd")
 const FxScript = preload("res://scripts/fx.gd")
 const InventoryUI = preload("res://scripts/ui/inventory_ui.gd")
 const LevelupUI = preload("res://scripts/ui/levelup_ui.gd")
+const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 
 const DAY_LENGTH := 240.0 # seconds for one full day/night cycle
 const LAIR_MAX := 3
@@ -53,6 +54,7 @@ var loot: Node3D # loot.gd
 var fx: Node3D # fx.gd
 var inventory_ui: CanvasLayer
 var levelup_ui: CanvasLayer
+var pause_menu: CanvasLayer # Esc: Resume / Options / Controls / Quit to Menu
 var ui_block_until := 0 # ms; swallows the button press that closed a menu
 
 
@@ -78,6 +80,9 @@ func _ready() -> void:
 	add_child(hud)
 	hud.process_mode = Node.PROCESS_MODE_ALWAYS
 	_setup_progression() # PROGRESSION HOOK
+	pause_menu = PauseMenu.new()
+	pause_menu.main = self
+	add_child(pause_menu)
 	_update_lighting()
 	Input.joy_connection_changed.connect(_on_joy_changed)
 	if started_once:
@@ -457,6 +462,12 @@ func _on_equipment_changed() -> void:
 
 func _on_menu_closed() -> void:
 	ui_block_until = Time.get_ticks_msec() + 250
+
+
+## The Coat's "Pause" button (and pad Back inside the Coat) lands here.
+func open_pause() -> void:
+	if started and not game_over:
+		pause_menu.open()
 
 
 func menu_open() -> bool:

@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://blmw1x4r640vf"
-path="res://.godot/imported/sol_mod_body_src_NormalGL_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.png-c982b4bec4371f1f6ee1e661d1ebc7de.ctex"
+path.s3tc="res://.godot/imported/sol_mod_body_src_NormalGL_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.png-c982b4bec4371f1f6ee1e661d1ebc7de.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "a1b0335158d0bb4141d769043b25b73f"
@@ -14,7 +15,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_body_src_NormalGL_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.png"
-dest_files=["res://.godot/imported/sol_mod_body_src_NormalGL_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.png-c982b4bec4371f1f6ee1e661d1ebc7de.ctex"]
+dest_files=["res://.godot/imported/sol_mod_body_src_NormalGL_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.png-c982b4bec4371f1f6ee1e661d1ebc7de.s3tc.ctex"]
 
 [params]
 

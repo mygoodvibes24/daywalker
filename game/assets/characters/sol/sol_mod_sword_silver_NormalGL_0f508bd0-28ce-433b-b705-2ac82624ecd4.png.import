@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b64bfrwaodlij"
-path="res://.godot/imported/sol_mod_sword_silver_NormalGL_0f508bd0-28ce-433b-b705-2ac82624ecd4.png-ca6e1f06ba672fb3f4ebb5944ba643b0.ctex"
+path.s3tc="res://.godot/imported/sol_mod_sword_silver_NormalGL_0f508bd0-28ce-433b-b705-2ac82624ecd4.png-ca6e1f06ba672fb3f4ebb5944ba643b0.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "0c4e9dcf2439719665fefc023528fc61"
@@ -14,7 +15,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_sword_silver_NormalGL_0f508bd0-28ce-433b-b705-2ac82624ecd4.png"
-dest_files=["res://.godot/imported/sol_mod_sword_silver_NormalGL_0f508bd0-28ce-433b-b705-2ac82624ecd4.png-ca6e1f06ba672fb3f4ebb5944ba643b0.ctex"]
+dest_files=["res://.godot/imported/sol_mod_sword_silver_NormalGL_0f508bd0-28ce-433b-b705-2ac82624ecd4.png-ca6e1f06ba672fb3f4ebb5944ba643b0.s3tc.ctex"]
 
 [params]
 

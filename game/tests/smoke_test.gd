@@ -87,6 +87,7 @@ func _initialize() -> void:
 	ok = await _gameplay_checks(main) and ok
 	ok = await _progression_checks(main) and ok
 	ok = await _coat_checks(main) and ok
+	ok = await _menu_checks(main) and ok
 	if FileAccess.file_exists(SMOKE_SAVE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SMOKE_SAVE))
 	print("SMOKE TEST: ", "PASS" if ok else "FAIL")
@@ -269,7 +270,10 @@ func _progression_checks(main) -> bool:
 	p.global_position = Vector3(10.0, 0.1, 10.0)
 	p.velocity = Vector3.ZERO
 
-	# a kill grants Tithe (motes fly to Sol)
+	# a kill grants Tithe (motes fly to Sol); motes still in flight from earlier checks don't count
+	for m in loot.motes:
+		m.node.queue_free()
+	loot.motes.clear()
 	var t0: int = prog.tithe
 	var v = _spawn(main, 0, Vector3(10.0, 0.5, 11.0))
 	for i in 3: await physics_frame
@@ -412,9 +416,117 @@ func _coat_checks(main) -> bool:
 		await physics_frame
 		run_max = maxf(run_max, sim.swing_amount())
 	_pad_axis(JOY_AXIS_LEFT_Y, 0.0)
+	var run_motion: float = sim.motion_amount()
 	for i in 240: await physics_frame
 	var settled: float = sim.swing_amount()
-	ok = _check("coat bones swing when running (%.3f rad vs %.3f standing)" % [run_max, still], run_max > 0.12 and run_max > still * 2.0) and ok
-	ok = _check("coat settles after stopping (%.3f rad)" % settled, settled < 0.08 and settled < run_max * 0.5) and ok
+	var still_motion: float = sim.motion_amount()
+	ok = _check("coat bones swing when running (%.3f rad vs %.3f standing)" % [run_max, still], run_max > still + 0.12) and ok
+	ok = _check("coat settles after stopping (%.3f rad, cloth %.3f m/s, was %.2f)" % [settled, still_motion, run_motion], absf(settled - still) < 0.06 and still_motion < run_motion * 0.06) and ok
+	# with the idle clip frozen too, the cloth comes fully to rest
+	p.mod_anim.tree.active = false
+	for i in 150: await physics_frame
+	var rest_motion: float = sim.motion_amount()
+	p.mod_anim.tree.active = true
+	ok = _check("coat comes to rest on a still body (%.4f m/s)" % rest_motion, rest_motion < 0.02) and ok
 	ok = _check("modular model animates with clips", p.mod_anim != null and p.mod_anim.tree != null and p.mod_anim.tree.active) and ok
+	return ok
+
+
+# ---------------------------------------------------------------- main menu, pause, settings
+func _key(code: int, pressed: bool) -> void:
+	var e := InputEventKey.new()
+	e.physical_keycode = code
+	e.keycode = code
+	e.pressed = pressed
+	Input.parse_input_event(e)
+	Input.flush_buffered_events()
+
+
+func _menu_checks(main) -> bool:
+	var ok := true
+	# Esc opens the pause menu (and frees the mouse); Esc again resumes
+	main.ui_block_until = 0
+	_key(KEY_ESCAPE, true)
+	await process_frame
+	_key(KEY_ESCAPE, false)
+	await process_frame
+	ok = _check("Esc opens the pause menu", main.pause_menu.is_open() and paused and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED) and ok
+	_key(KEY_TAB, true)
+	await process_frame
+	_key(KEY_TAB, false)
+	await process_frame
+	ok = _check("the Coat stays shut under the pause menu", not main.inventory_ui.visible) and ok
+	_key(KEY_ESCAPE, true)
+	await process_frame
+	_key(KEY_ESCAPE, false)
+	await process_frame
+	ok = _check("Esc again resumes", not main.pause_menu.is_open() and not paused) and ok
+	# the Coat's Pause entry hands over to the pause menu
+	main.ui_block_until = 0
+	main.inventory_ui.open()
+	main.inventory_ui._pause()
+	ok = _check("Pause inside the Coat opens the pause menu", main.pause_menu.is_open() and not main.inventory_ui.visible and paused) and ok
+	main.pause_menu.close()
+
+	# settings save / load round-trip (on a scratch file, then restored)
+	var St = load("res://scripts/settings.gd")
+	var path := "user://smoke_settings.cfg"
+	var keep := [St.brightness, St.quality, St.rain, St.mouse_sensitivity, St.pad_sensitivity, St.invert_y, St.volume.duplicate()]
+	St.brightness = 1.35
+	St.quality = 0
+	St.rain = false
+	St.mouse_sensitivity = 1.8
+	St.pad_sensitivity = 0.6
+	St.invert_y = true
+	St.volume["Music"] = 0.25
+	var saved: bool = St.save_settings(path)
+	St.brightness = 1.0
+	St.quality = 2
+	St.rain = true
+	St.mouse_sensitivity = 1.0
+	St.pad_sensitivity = 1.0
+	St.invert_y = false
+	St.volume["Music"] = 0.7
+	var loaded: bool = St.load_settings(path)
+	ok = _check("settings save/load round-trips", saved and loaded and is_equal_approx(St.brightness, 1.35) and St.quality == 0 and not St.rain
+		and is_equal_approx(St.mouse_sensitivity, 1.8) and is_equal_approx(St.pad_sensitivity, 0.6) and St.invert_y
+		and is_equal_approx(St.volume["Music"], 0.25)) and ok
+	ok = _check("look sensitivity / invert feed the player", is_equal_approx(St.mouse_look(), 0.0025 * 1.8) and St.y_sign() == -1.0
+		and is_equal_approx(St.pad_yaw(), 3.0 * 0.6) and is_equal_approx(St.pad_pitch(), 2.0 * 0.6)) and ok
+	St.brightness = keep[0]; St.quality = keep[1]; St.rain = keep[2]
+	St.mouse_sensitivity = keep[3]; St.pad_sensitivity = keep[4]; St.invert_y = keep[5]; St.volume = keep[6]
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	ok = _check("audio buses exist", AudioServer.get_bus_index("Music") >= 0 and AudioServer.get_bus_index("SFX") >= 0) and ok
+
+	# the main menu scene loads, builds the lair and its screens
+	main.queue_free()
+	await process_frame
+	ok = _check("main menu is the main scene", ProjectSettings.get_setting("application/run/main_scene") == "res://scenes/main_menu.tscn") and ok
+	var menu = load("res://scenes/main_menu.tscn").instantiate()
+	root.add_child(menu)
+	for i in 5: await process_frame
+	var set_ = menu.get_node("LairMenuSet")
+	ok = _check("menu lair set builds with Sol and Nia", set_.sol_skel != null and set_.nia != null and set_.camera != null) and ok
+	ok = _check("menu has Start / Controls / Options", menu.buttons.size() >= 3 and menu.buttons[0].text == "Start") and ok
+	menu.debug_show("options")
+	await process_frame
+	ok = _check("Options screen opens", menu.options.visible and not menu.menu_box.visible) and ok
+	menu._back()
+	menu.debug_show("controls")
+	await process_frame
+	ok = _check("Controls screen opens", menu.controls.visible) and ok
+	menu._back()
+	ok = _check("Back returns to the menu", menu.menu_box.visible and menu.state == "menu") and ok
+	menu.queue_free()
+	await process_frame
+	# coming from the menu, main.tscn starts at once without the title overlay
+	var Main = load("res://scripts/main.gd")
+	Main.started_once = true
+	var m2 = load("res://scenes/main.tscn").instantiate()
+	root.add_child(m2)
+	await process_frame
+	await process_frame
+	ok = _check("main starts at once after the menu", m2.started and not paused and not m2.hud.start_overlay.visible) and ok
+	m2.queue_free()
+	await process_frame
 	return ok

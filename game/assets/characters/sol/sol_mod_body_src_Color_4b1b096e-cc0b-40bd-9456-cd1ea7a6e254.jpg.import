@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cc7e26wv1m74m"
-path="res://.godot/imported/sol_mod_body_src_Color_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.jpg-35251c61968bcf4150b99d3ec6523fc3.ctex"
+path.s3tc="res://.godot/imported/sol_mod_body_src_Color_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.jpg-35251c61968bcf4150b99d3ec6523fc3.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "46f434a6be11cb6b6dbbc4f5173e61b9"
@@ -14,7 +15,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_body_src_Color_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.jpg"
-dest_files=["res://.godot/imported/sol_mod_body_src_Color_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.jpg-35251c61968bcf4150b99d3ec6523fc3.ctex"]
+dest_files=["res://.godot/imported/sol_mod_body_src_Color_4b1b096e-cc0b-40bd-9456-cd1ea7a6e254.jpg-35251c61968bcf4150b99d3ec6523fc3.s3tc.ctex"]
 
 [params]
 

@@ -212,8 +212,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		block_attack()
 	elif event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var mm := event as InputEventMouseMotion
-		cam_yaw -= mm.relative.x * 0.0025
-		cam_pitch = clampf(cam_pitch - mm.relative.y * 0.0025, -1.1, 0.35)
+		cam_yaw -= mm.relative.x * Settings.mouse_look()
+		cam_pitch = clampf(cam_pitch - mm.relative.y * Settings.mouse_look() * Settings.y_sign(), -1.1, 0.35)
 	elif event.is_action_pressed("ui_cancel"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -567,8 +567,8 @@ func _process(delta: float) -> void:
 	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
 	if look.length() > 0.0:
 		var curve := look * look.length() # finer control near center
-		cam_yaw -= curve.x * 3.0 * real_dt
-		cam_pitch = clampf(cam_pitch - curve.y * 2.0 * real_dt, -1.1, 0.35)
+		cam_yaw -= curve.x * Settings.pad_yaw() * real_dt
+		cam_pitch = clampf(cam_pitch - curve.y * Settings.pad_pitch() * Settings.y_sign() * real_dt, -1.1, 0.35)
 	pivot.rotation = Vector3(cam_pitch, cam_yaw, 0.0)
 	if shake > 0.0:
 		camera.h_offset = randf_range(-1.0, 1.0) * shake * 0.25

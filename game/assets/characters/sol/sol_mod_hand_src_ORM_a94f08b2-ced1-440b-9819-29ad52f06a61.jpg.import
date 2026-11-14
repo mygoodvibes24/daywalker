@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c460r2l0imkll"
-path="res://.godot/imported/sol_mod_hand_src_ORM_a94f08b2-ced1-440b-9819-29ad52f06a61.jpg-68e6bcee49bed4db3d38a9838893f585.ctex"
+path.s3tc="res://.godot/imported/sol_mod_hand_src_ORM_a94f08b2-ced1-440b-9819-29ad52f06a61.jpg-68e6bcee49bed4db3d38a9838893f585.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "84e8fb8e4f39504d2cd1204c4bbf4efb"
@@ -14,7 +15,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_hand_src_ORM_a94f08b2-ced1-440b-9819-29ad52f06a61.jpg"
-dest_files=["res://.godot/imported/sol_mod_hand_src_ORM_a94f08b2-ced1-440b-9819-29ad52f06a61.jpg-68e6bcee49bed4db3d38a9838893f585.ctex"]
+dest_files=["res://.godot/imported/sol_mod_hand_src_ORM_a94f08b2-ced1-440b-9819-29ad52f06a61.jpg-68e6bcee49bed4db3d38a9838893f585.s3tc.ctex"]
 
 [params]
 
