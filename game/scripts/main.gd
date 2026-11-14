@@ -16,6 +16,7 @@ const FxScript = preload("res://scripts/fx.gd")
 const InventoryUI = preload("res://scripts/ui/inventory_ui.gd")
 const LevelupUI = preload("res://scripts/ui/levelup_ui.gd")
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
+const HuntDirector = preload("res://scripts/hunt/hunt_director.gd") # HUNT HOOK
 
 const DAY_LENGTH := 240.0 # seconds for one full day/night cycle
 const LAIR_MAX := 3
@@ -56,6 +57,7 @@ var inventory_ui: CanvasLayer
 var levelup_ui: CanvasLayer
 var pause_menu: CanvasLayer # Esc: Resume / Options / Controls / Quit to Menu
 var ui_block_until := 0 # ms; swallows the button press that closed a menu
+var hunt: Node3D = null # HUNT HOOK: hunt_director.gd while a Hunt runs (null in free roam)
 
 
 func _ready() -> void:
@@ -67,6 +69,7 @@ func _ready() -> void:
 	_build_environment()
 	_build_city()
 	_build_lair()
+	_setup_hunt() # HUNT HOOK: POIs and deployment points, before the navmesh bake
 	_bake_navigation()
 	enemies_root = Node3D.new()
 	enemies_root.name = "Enemies"
@@ -80,6 +83,7 @@ func _ready() -> void:
 	add_child(hud)
 	hud.process_mode = Node.PROCESS_MODE_ALWAYS
 	_setup_progression() # PROGRESSION HOOK
+	Audio.attach_world(self) # AUDIO HOOK
 	pause_menu = PauseMenu.new()
 	pause_menu.main = self
 	add_child(pause_menu)
@@ -101,6 +105,20 @@ func start_game() -> void:
 	hud.started = true
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	player.block_attack()
+	if hunt != null:
+		hunt.start() # HUNT HOOK: run-scoped reset, hub loadout, the Descent
+	Dialogue.play("hunt_start") # AUDIO HOOK
+
+
+## HUNT HOOK: a Hunt runs when the hub asked for one (or --hunt / --shorthunt / ?hunt).
+func _setup_hunt() -> void:
+	if not HuntDirector.wanted(self):
+		return
+	hunt = HuntDirector.new()
+	hunt.name = "Hunt"
+	hunt.main = self
+	add_child(hunt)
+	hunt.build_world()
 
 
 ## True if the page URL has ?name or &name (or name=...) as its own parameter.
@@ -246,6 +264,8 @@ func daylight() -> float:
 
 
 func is_full_moon() -> bool:
+	if hunt != null:
+		return hunt.is_full_moon() # HUNT HOOK
 	return not is_day() and night_count > 0 and night_count % 3 == 0 # nights 3, 6, 9...
 
 
@@ -257,9 +277,12 @@ func clock_text() -> String:
 func _process(delta: float) -> void:
 	_update_slowmo()
 	if game_over:
-		if Input.is_action_just_pressed("restart"):
+		if Input.is_action_just_pressed("restart") and hunt == null: # HUNT HOOK: the results screen decides
 			clear_slowmo()
 			get_tree().reload_current_scene()
+		return
+	if hunt != null:
+		_update_lighting() # HUNT HOOK: the director drives the clock and the spawning
 		return
 	var was_day := is_day()
 	time_of_day = fmod(time_of_day + delta / DAY_LENGTH, 1.0)
@@ -267,12 +290,15 @@ func _process(delta: float) -> void:
 		night_count += 1
 		if is_full_moon():
 			hud.announce("FULL MOON\nThe Hollow Pack is turning")
+			Audio.play("wolf_howl", -6.0); Dialogue.play("nia_full_moon") # AUDIO HOOK
 		else:
 			hud.announce("NIGHTFALL\nThe Velvet Court awakens")
+			Dialogue.play("bark_nightfall") # AUDIO HOOK
 	elif not was_day and is_day():
 		lair_stock = LAIR_MAX
 		loot.respawn_caches() # PROGRESSION HOOK
 		hud.announce("SUNRISE\nVampires burn. The blood bank is restocked.\nCoffins and crates are full again.")
+		Dialogue.play(["bark_sunrise", "nia_sunrise"].pick_random()) # AUDIO HOOK
 	_update_lighting()
 	_update_spawning(delta)
 
@@ -405,12 +431,16 @@ func _update_slowmo() -> void:
 
 func perfect_dodge() -> void:
 	hud.popup("PERFECT DODGE")
+	Audio.play("perfect_dodge"); Dialogue.play_group("bark_dodge_") # AUDIO HOOK
 	player.dash_charges = minf(player.dash_charges + 1.0, player.MAX_DASH)
 	set_slowmo(0.3, 0.8)
 	progression.on_perfect_dodge() # PROGRESSION HOOK
 
 
 func on_player_died() -> void:
+	if hunt != null:
+		hunt.on_player_died() # HUNT HOOK: revive charge or the end of the Hunt
+		return
 	game_over = true
 	progression.on_death(player.global_position) # PROGRESSION HOOK: half the Tithe stays here
 	clear_slowmo()
