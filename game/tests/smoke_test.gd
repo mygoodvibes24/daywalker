@@ -88,7 +88,9 @@ func _initialize() -> void:
 	ok = await _progression_checks(main) and ok
 	ok = await _coat_checks(main) and ok
 	ok = await _move_checks(main) and ok
+	ok = await _audio_checks(main) and ok
 	ok = await _menu_checks(main) and ok
+	ok = await _hunt_checks() and ok
 	if FileAccess.file_exists(SMOKE_SAVE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SMOKE_SAVE))
 	print("SMOKE TEST: ", "PASS" if ok else "FAIL")
@@ -540,6 +542,95 @@ func _move_checks(main) -> bool:
 	return ok
 
 
+# ---------------------------------------------------------------- audio, dialogue, subtitles
+func _audio_checks(main) -> bool:
+	var ok := true
+	var audio = root.get_node("Audio")
+	var dlg = root.get_node("Dialogue")
+	# every line's voice file exists and loads
+	var bad := []
+	for id in dlg.lines:
+		var l: Dictionary = dlg.lines[id]
+		var s = load(l.audio) if ResourceLoader.exists(l.audio) else null
+		if s == null or s.get_length() < 0.3 or float(l.duration) <= 0.0 or not dlg.speakers.has(l.speaker):
+			bad.append(id)
+	ok = _check("all %d dialogue lines have audio that loads %s" % [dlg.lines.size(), bad], bad.is_empty() and dlg.lines.size() >= 45) and ok
+	var missing := []
+	for n in audio.SFX:
+		for path in audio.SFX[n]:
+			if audio.stream(path) == null:
+				missing.append(path)
+	for c in audio.MUSIC:
+		if audio.stream(audio.MUSIC[c]) == null:
+			missing.append(c)
+	ok = _check("all SFX and music load %s" % [missing], missing.is_empty()) and ok
+	# Dialogue.play shows a subtitle, queues behind a busy channel, a boss line cuts in
+	var St = load("res://scripts/settings.gd")
+	St.subtitles = true
+	dlg.stop_all()
+	var started: bool = dlg.play("curfew_warning")
+	await process_frame
+	ok = _check("Dialogue.play starts a line with a subtitle", started and dlg.is_speaking() and dlg.subtitle_text().begins_with("NIA") and dlg.subtitle_text().contains("Red Curfew")) and ok
+	var queued: bool = dlg.play("hunt_hub")
+	ok = _check("a second comms line queues", queued and dlg.queue.size() == 1 and dlg.current.id == "curfew_warning") and ok
+	ok = _check("a bark during comms waits briefly or drops, never overlaps", dlg.current.id == "curfew_warning") and ok
+	dlg.play("boss_marcus_intro")
+	ok = _check("a boss intro beats a lower line", dlg.current.id == "boss_marcus_intro" and dlg.subtitle_text().begins_with("MARCUS")) and ok
+	ok = _check("same line on cooldown is refused", not dlg.play("boss_marcus_intro") or dlg.lines["boss_marcus_intro"].cooldown == 0) and ok
+	St.subtitles = false
+	dlg.stop_all()
+	dlg.play("poi_cleared_2")
+	await process_frame
+	ok = _check("subtitles off hides the label", dlg.is_speaking() and dlg.subtitle_text() == "") and ok
+	St.subtitles = true
+	dlg.stop_all()
+	ok = _check("hunt line ids exist for the run hooks", dlg.has_line("hunt_deploy_1") and dlg.has_line("curfew_warning") and dlg.has_line("boss_alpha_intro")) and ok
+	# music follows the fight: enemies near -> combat, boss -> boss, calm -> explore
+	_clear_enemies(main)
+	var was_over: bool = main.game_over
+	main.game_over = false
+	audio.attach_world(main)
+	audio._calm_t = 99.0
+	audio._poll_t = 0.0
+	await process_frame
+	await process_frame
+	ok = _check("music is the exploration bed with no enemies near", audio.context == "explore") and ok
+	_spawn(main, 0, main.player.global_position + Vector3(3, 0, 0))
+	audio._poll_t = 0.0
+	await process_frame
+	await process_frame
+	ok = _check("music switches to combat when enemies engage", audio.context == "combat") and ok
+	audio.set_boss(true)
+	ok = _check("music switches to the boss track", audio.context == "boss") and ok
+	audio.set_boss(false)
+	_clear_enemies(main)
+	audio._calm_t = 99.0
+	audio._poll_t = 0.0
+	await process_frame
+	await process_frame
+	ok = _check("music falls back to explore when calm", audio.context == "explore") and ok
+	audio.set_music("menu", 0.1)
+	ok = _check("menu music context", audio.context == "menu" and audio._music[audio._music_cur].stream != null) and ok
+	audio.set_music("explore", 0.1)
+	main.game_over = was_over
+	# Voice bus and subtitle setting round-trip
+	var path := "user://smoke_audio.cfg"
+	var keep: Dictionary = St.volume.duplicate()
+	var keep_sub: bool = St.subtitles
+	St.volume["Voice"] = 0.35
+	St.subtitles = false
+	var saved: bool = St.save_settings(path)
+	St.volume["Voice"] = 0.9
+	St.subtitles = true
+	var loaded: bool = St.load_settings(path)
+	ok = _check("Voice volume and subtitles round-trip", saved and loaded and is_equal_approx(St.volume["Voice"], 0.35) and St.subtitles == false) and ok
+	St.volume = keep
+	St.subtitles = keep_sub
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	ok = _check("Voice bus exists", AudioServer.get_bus_index("Voice") >= 0) and ok
+	return ok
+
+
 # ---------------------------------------------------------------- main menu, pause, settings
 func _key(code: int, pressed: bool) -> void:
 	var e := InputEventKey.new()
@@ -637,4 +728,174 @@ func _menu_checks(main) -> bool:
 	ok = _check("main starts at once after the menu", m2.started and not paused and not m2.hud.start_overlay.visible) and ok
 	m2.queue_free()
 	await process_frame
+	return ok
+
+
+# ---------------------------------------------------------------- the Hunt
+func _wait_physics(n: int) -> void:
+	for i in n:
+		await physics_frame
+
+
+func _start_hunt():
+	var Main = load("res://scripts/main.gd")
+	Main.started_once = true
+	var m = load("res://scenes/main.tscn").instantiate()
+	root.add_child(m)
+	await process_frame
+	await process_frame
+	return m
+
+
+func _hunt_checks() -> bool:
+	var ok := true
+	var HD = load("res://scripts/hunt/hunt_director.gd")
+	var Meta = load("res://scripts/hunt/hunt_meta.gd")
+	var Cfg = load("res://scripts/hunt/hunt_config.gd")
+	var meta_path := "user://smoke_hunt_meta.json"
+	Meta.path = meta_path
+	if FileAccess.file_exists(meta_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(meta_path))
+	Meta.reset_meta()
+	Meta.data.loadout = [1, -1, -1] # wear High John Root from the armoury
+	Meta.save_meta()
+	ok = _check("--shorthunt flag parses", HD.short_flag(PackedStringArray(["--shorthunt"])) and not HD.short_flag(PackedStringArray([])) and HD.short_flag(PackedStringArray([]), true)) and ok
+	HD.requested = true
+	HD.force_short = true
+	HD.seed_override = 4242
+	var m = await _start_hunt()
+	var h = m.hunt
+	var p = m.player
+	ok = _check("a Hunt runs when the hub asks for one", h != null and h.state == "deploy") and ok
+	ok = _check("--shorthunt timings (explore %.0fs, day %.0fs)" % [h.T.explore, Cfg.day_length(true)], h.short and h.T.explore <= 30.0 and Cfg.day_length(true) < Cfg.day_length(false) / 4.0) and ok
+	var dp: Vector3 = h.deploy_point.pos
+	ok = _check("deploys at a map-edge point, away from the plaza (%.0f m out)" % Vector2(dp.x, dp.z).length(), Vector2(dp.x, dp.z).length() > 50.0 and Vector2(p.global_position.x - dp.x, p.global_position.z - dp.z).length() < 20.0) and ok
+	await _wait_physics(30)
+	h.deploy.finish()
+	await _wait_physics(2)
+	ok = _check("the Descent hands over control (state %s)" % h.state, h.state == "explore" and p.is_physics_processing() and p.camera.current) and ok
+	ok = _check("player starts far from the plaza centre (%.0f m)" % Vector2(p.global_position.x, p.global_position.z).length(), Vector2(p.global_position.x, p.global_position.z).length() > 40.0) and ok
+	ok = _check("hub charm worn into the Hunt", m.inventory.charms[0].get("id", "") == "john_root") and ok
+	ok = _check("run starts fresh (rank 1, 0 Tithe, no save writes)", m.progression.level == 1 and m.progression.tithe == 0 and not m.progression.persist) and ok
+	# POIs
+	var with_enemies := 0
+	var types := {}
+	for poi in h.pois:
+		types[poi.type] = true
+		if poi.is_combat() and poi.total_alive() > 0:
+			with_enemies += 1
+	ok = _check("POIs generated (%d, %d types, %d with enemies)" % [h.pois.size(), types.size(), with_enemies], h.pois.size() >= 10 and types.size() == 6 and with_enemies >= 6) and ok
+	var far_ok := true
+	for poi in h.pois:
+		if Vector2(poi.global_position.x, poi.global_position.z).length() < 20.0:
+			far_ok = false
+	ok = _check("POIs stay off the plaza", far_ok) and ok
+	var camp = null
+	for poi in h.pois:
+		if poi.type == "camp":
+			camp = poi
+			break
+	var start: Vector3 = camp.global_position + Vector3(45.0, 0.0, 0.0)
+	if absf(start.x) > 78.0:
+		start = camp.global_position - Vector3(45.0, 0.0, 0.0)
+	p.global_position = start + Vector3(0, 0.2, 0)
+	p.hp = 1e9
+	p.max_hp = 1e9
+	await _wait_physics(10)
+	var idle_pos: Array = []
+	for l in camp.live:
+		idle_pos.append(l.e.global_position)
+	await _wait_physics(40)
+	var still: bool = camp.live.size() > 0
+	for i in camp.live.size():
+		if camp.live[i].e.global_position.distance_to(idle_pos[i]) > 0.3:
+			still = false
+	ok = _check("camp enemies are pre-placed and idle until Sol is close (%d)" % camp.live.size(), still and not camp.roused) and ok
+	var has_elite := false
+	for l in camp.live:
+		if l.e.get_node_or_null("Elite") != null:
+			has_elite = true
+	ok = _check("camp has a named elite", has_elite) and ok
+	p.global_position = camp.global_position + Vector3(2.0, 0.2, 0.0)
+	await _wait_physics(5)
+	ok = _check("camp aggros when Sol comes close", camp.roused) and ok
+	ok = _check("active enemies capped (%d <= %d)" % [m.living_enemies(), Cfg.MAX_ACTIVE_ENEMIES], m.living_enemies() <= Cfg.MAX_ACTIVE_ENEMIES) and ok
+	var t0: int = m.progression.tithe
+	for l in camp.live:
+		if is_instance_valid(l.e) and not l.e.dead:
+			l.e._die(false)
+	await _wait_physics(4)
+	ok = _check("clearing a POI marks it cleared", camp.cleared) and ok
+	await _wait_physics(150)
+	ok = _check("clearing pays a Tithe burst (+%d)" % (m.progression.tithe - t0), m.progression.tithe - t0 >= Cfg.POI_TYPES.camp.tithe) and ok
+	_clear_enemies(m)
+	# the Red Curfew
+	var r0: float = h.ring.radius
+	h.debug_skip_to("shrink1")
+	await _wait_physics(90)
+	ok = _check("the Curfew shrinks (%.0f -> %.0f)" % [r0, h.ring.radius], h.ring.radius < r0 - 5.0) and ok
+	p.max_hp = 100.0
+	p.hp = 100.0
+	p.invuln_t = 0.0
+	var c: Vector3 = h.ring.center
+	var away := Vector3(-c.x, 0, -c.z).normalized()
+	if away.length() < 0.5:
+		away = Vector3(1, 0, 0)
+	h.ring.set_radius(12.0)
+	p.global_position = c + away * 30.0 + Vector3(0, 0.2, 0)
+	await _wait_physics(60)
+	ok = _check("outside the Curfew hurts (hp %.0f, tint %.2f)" % [p.hp, h.outside_amount], p.hp < 95.0 and h.outside_amount > 0.5) and ok
+	p.global_position = c + Vector3(0, 0.2, 0)
+	p.hp = 1e9
+	p.max_hp = 1e9
+	h.debug_skip_to("shrink2")
+	await _wait_physics(int((h.T.shrink2 + 0.5) * 60.0))
+	ok = _check("the boss spawns when the Curfew closes (state %s)" % h.state, h.state == "boss" and h.boss != null and is_instance_valid(h.boss) and h.boss.boss_name == "THE HOLLOW ALPHA") and ok
+	ok = _check("the Curfew holds as the arena wall", is_equal_approx(h.ring.radius, h.arena.radius)) and ok
+	ok = _check("boss night is night under a full moon", not m.is_day() and m.is_full_moon()) and ok
+	await _wait_physics(150) # let the Alpha finish his entrance and swing a few times
+	var boss = h.boss
+	boss.take_hit(boss.max_hp * 0.6, Vector3.FORWARD)
+	ok = _check("the Alpha frenzies below half", boss.enraged) and ok
+	boss.take_hit(1e6, Vector3.FORWARD)
+	await _wait_physics(3)
+	ok = _check("killing the boss counts", h.bosses_killed == 1 and boss.dead) and ok
+	m.clear_slowmo()
+	await _wait_physics(int((h.T.victory + 1.0) * 60.0))
+	ok = _check("killing the boss advances the day (day %d, %s)" % [h.day + 1, h.state], h.day == 1 and h.state == "explore" and m.is_day()) and ok
+	# death ends the run
+	m.progression.tithe = 140
+	m.progression.level = 4
+	h.revives = 1
+	p.max_hp = 100.0
+	p.hp = 1.0
+	p.invuln_t = 0.0
+	p.dash_t = 0.0
+	p.take_damage(50.0, null)
+	m.clear_slowmo()
+	await _wait_physics(int(2.6 * 60.0))
+	ok = _check("a revive charge gets Sol back up at half blood (hp %.0f)" % p.hp, not p.dead and is_equal_approx(p.hp, p.max_hp * 0.5) and h.revives == 0 and h.state != "over") and ok
+	ok = _check("the death drop still drops half the Tithe", int(m.progression.death_drop.get("amount", 0)) == 70) and ok
+	p.invuln_t = 0.0
+	p.dash_t = 0.0
+	p.take_damage(1000.0, null)
+	await _wait_physics(int(2.5 * 60.0))
+	ok = _check("death without a revive ends the Hunt and shows results", h.state == "over" and h.results.visible and paused) and ok
+	ok = _check("results: 1 boss, Sunmarks earned (%d)" % h.summary.get("earned", 0), h.summary.get("bosses", 0) == 1 and h.summary.get("earned", 0) > 0 and int(Meta.data.sunmarks) > 0 and int(Meta.data.hunts) == 1) and ok
+	ok = _check("run-scoped state resets (rank %d, Tithe %d)" % [m.progression.level, m.progression.tithe], m.progression.level == 1 and m.progression.tithe == 0 and m.inventory.weapon.id == "marrow_silver" and m.progression.vows.is_empty()) and ok
+	paused = false
+	m.queue_free()
+	await process_frame
+	# persistent charms survive
+	Meta.load_meta()
+	ok = _check("persistent charms survive (loadout on disk)", Meta.loadout_charms()[0].get("id", "") == "john_root") and ok
+	var m2 = await _start_hunt()
+	ok = _check("the next Hunt wears them again, fresh run", m2.inventory.charms[0].get("id", "") == "john_root" and m2.progression.level == 1 and m2.hunt.seed == 4242) and ok
+	m2.queue_free()
+	await process_frame
+	HD.requested = false
+	HD.force_short = false
+	HD.seed_override = -1
+	if FileAccess.file_exists(meta_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(meta_path))
 	return ok

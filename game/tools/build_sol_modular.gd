@@ -174,7 +174,15 @@ func _initialize() -> void:
 	head_arr = _extend_neck(_cut_bust(head_arr, D + "sol_mod_head_src.glb"))
 	var head_mat := _material(D + "sol_mod_head_src.glb")
 	head_mat.metallic_specular = 0.32 # the generated skin reads plastic at full specular
-	_add_part(head_att, root, "HeadMesh", head_arr, head_mat, true)
+	# the head is skinned, not rigid: its neck takes the body's own neck / spine weights where it meets
+	# the collar, blending into the head bone above, so neck and body bend together in every clip
+	var head_mi := MeshInstance3D.new()
+	head_mi.name = "HeadMesh"
+	var head_skin := _skin_head(head_arr)
+	head_mi.mesh = _mesh(head_arr, head_mat, true)
+	head_mi.skin = head_skin
+	skel.add_child(head_mi)
+	head_mi.owner = root
 	_add_glasses(head_att, root, head_arr[Mesh.ARRAY_VERTEX])
 
 	# ---------------------------------------------------------------- hands + sword
@@ -980,9 +988,43 @@ func _cut_bust(arr: Array, path: String) -> Array:
 	return _filter(arr, func(a, b, c): return drop[a] == 0 and drop[b] == 0 and drop[c] == 0)
 
 
+## Skin weights for the head bust (in place, on `arr`): above the jaw line all Head; down the neck a
+## blend into the weights of the body vertices underneath (neck, Spine02, shoulders), so where the bust
+## overlaps the body's neck both deform identically and no gap can open. Returns the skin (binds for
+## every bone at its rest pose).
+func _skin_head(arr: Array) -> Skin:
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var head := skel.find_bone("Head")
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	bones.resize(v.size() * 4)
+	weights.resize(v.size() * 4)
+	for i in v.size():
+		var t := smoothstep(NECK_CUT - 0.02, NECK_CUT + 0.075, v[i].y)
+		var wd := {head: t}
+		if t < 1.0:
+			var under := _upper_weights(v[i])
+			for b in under:
+				wd[b] = wd.get(b, 0.0) + under[b] * (1.0 - t)
+		var keys: Array = wd.keys()
+		keys.sort_custom(func(x, y): return wd[x] > wd[y])
+		var tot := 0.0
+		for k in mini(4, keys.size()):
+			tot += wd[keys[k]]
+		for k in 4:
+			bones[i * 4 + k] = keys[k] if k < keys.size() else 0
+			weights[i * 4 + k] = wd[keys[k]] / tot if k < keys.size() else 0.0
+	arr[Mesh.ARRAY_BONES] = bones
+	arr[Mesh.ARRAY_WEIGHTS] = weights
+	var skin := Skin.new()
+	for b in skel.get_bone_count():
+		skin.add_named_bind(skel.get_bone_name(b), bone_rest_g[b].affine_inverse())
+	return skin
+
+
 ## Close the neck seam: the bust's lower edge is ragged (the white T-shirt is cut away by colour), and
 ## between it and the body's neck cut a thin gap let the background show through as a white line. The
-## open boundary along the bottom of the neck is pushed 3 cm down and a little in, so it tucks inside the
+## open boundary along the bottom of the neck is pushed 4.5 cm down and in, so it tucks inside the
 ## body's collar.
 func _extend_neck(arr: Array) -> Array:
 	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX].duplicate()
@@ -1007,8 +1049,8 @@ func _extend_neck(arr: Array) -> Array:
 		var p := v[i]
 		if p.y < NECK_CUT + 0.07 and rim.has(key.call(p)):
 			var h := Vector2(p.x, p.z) - axis
-			h *= 0.9
-			v[i] = Vector3(axis.x + h.x, p.y - 0.03, axis.y + h.y)
+			h *= 0.86
+			v[i] = Vector3(axis.x + h.x, p.y - 0.045, axis.y + h.y)
 			n += 1
 	print("head: tucked %d neck-edge vertices into the collar" % n)
 	arr = arr.duplicate()

@@ -151,7 +151,7 @@ func _physics_process(delta: float) -> void:
 	for cb in cap_bones:
 		caps.append(PackedVector3Array([sx * skel.get_bone_global_pose(cb[0]).origin, sx * skel.get_bone_global_pose(cb[1]).origin]))
 	var msum := 0.0
-	var move_amt := 0.1 + 0.9 * clampf(hspeed / 8.0, 0.0, 1.0) # a breath of wind standing, a flutter running
+	var move_amt := 0.04 + 0.96 * clampf(hspeed / 8.0, 0.0, 1.0) # a breath of wind standing, a flutter running
 	for c in pos.size():
 		var p := pos[c]
 		var q := prev[c]
@@ -171,7 +171,7 @@ func _physics_process(delta: float) -> void:
 			# stiffness falls off toward the hem faster than linearly (the hem is the heavy, free part)
 			var stiff := lerpf(stiffness_top, stiffness_hem, sqrt(f))
 			var acc := g + (target - p[k]) * stiff
-			acc += -vel * drag + gust * f * 0.35 * (0.3 + 0.7 * move_amt) + noise * f
+			acc += -vel * drag + gust * f * 0.35 * (0.15 + 0.85 * move_amt) + noise * f
 			acc += radial * flare * flare_spd * f
 			var np := p[k] + (p[k] - q[k]) * keep + acc * dt * dt
 			q[k] = p[k]

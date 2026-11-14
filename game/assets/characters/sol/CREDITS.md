@@ -29,7 +29,9 @@ Negative prompt:
   from turnaround images of the reference design: the coatless body (henley, harness, cargo trousers,
   boots), the long open leather trenchcoat, a head-and-neck bust, a right fist in a sword grip, a combat boot,
   and four swords (silver blade, sabre, cleaver, rapier). The body was turned to face +Z and sent to the Meshy
-  auto-rigger (24-bone humanoid) with seven clips: idle, run, sprint, slash, hit, death, jump.
+  auto-rigger (24-bone humanoid) with seven clips: idle, run, sprint, slash, hit, death, jump; later eight
+  sword clips on the same rig (Triple_Combo_Attack, Thrust_Slash, Charged_Slash, Sword_Judgment, Sword_Parry,
+  Weapon_Combo_2, Combat_Stance, Right_Hand_Sword_Slash; see docs/animation_reference/README.md).
 - **What ships:** `sol_modular.scn` and the four `sol_sword_*.scn` scenes, plus the extracted texture maps
   (`sol_mod_*_Color/NormalGL/ORM_*`; VRAM compressed, 2048 px max for body, head and coat, 1024 px for the hands
   and swords). The runtime loads nothing else: the `.glb` files are build sources and are excluded from exports.
@@ -42,8 +44,10 @@ Negative prompt:
   the centimetre rig to metres, cuts the body's head, hands and ponytail away, fits the bust, fists (mirrored
   for the left), procedural round sunglasses and the sword, swings the coat's sleeves onto the arms, keeps the
   coat outside the body, skins the coat (upper half: weights sampled from the body under it, sharpened with a
-  nearest-bone falloff; skirt: 8 spring-bone chains x 4 links) and gathers the clips (root motion stripped,
-  slash cut to its strike plus a reversed copy for the backhand).
+  nearest-bone falloff; skirt: 12 spring-bone chains x 5 links, leather and lining sharing weights) and gathers the clips (root
+  motion stripped into a "travel" value, combos cut into moves with their strike times). Each sword scene gets a
+  GripPoint marker, computed from its grip (the narrow stretch under the guard), that weapon_visual.gd puts
+  on the fist's grip socket (fitted to the tunnel of the curled fingers).
 - **Motion:** clips blended by `scripts/sol_modular_anim.gd`; the coat skirt is simulated by
   `scripts/coat_sim.gd`. The boots are the body's own: the separate boot model did not add enough to justify
   a second texture set and an ankle seam.

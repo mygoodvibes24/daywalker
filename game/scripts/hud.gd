@@ -218,6 +218,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			help_t = maxf(help_t, 6.0)
 	if not started and (event is InputEventKey or event is InputEventMouseButton or event is InputEventJoypadButton) and event.is_pressed():
 		get_viewport().set_input_as_handled()
+		Audio.unlock() # AUDIO HOOK: the first click unlocks web audio
 		main.start_game()
 
 
@@ -252,7 +253,7 @@ func _process(delta: float) -> void:
 		prompt_label.text = lp if prompt_label.text == "" else (prompt_label.text + ("\n" + lp if lp != "" else ""))
 		tithe_label.text = "RANK %d     TITHE %d" % [main.progression.level, main.progression.tithe]
 		if main.progression.can_level():
-			tithe_label.text += "   ·  a rank awaits at the Undercroft"
+			tithe_label.text += "   ·  a rank awaits at " + ("a chapel" if main.get("hunt") != null else "the Undercroft")
 
 	announce_t = maxf(announce_t - real_dt, 0.0)
 	announce_label.modulate.a = clampf(announce_t, 0.0, 1.0)
