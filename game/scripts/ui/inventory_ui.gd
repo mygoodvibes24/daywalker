@@ -177,7 +177,8 @@ func _build_footer() -> Control:
 	btn_use = S.button("Use", 16)
 	btn_drop = S.button("Drop", 16)
 	var btn_close := S.button("Close", 16)
-	for b in [btn_equip, btn_use, btn_drop, btn_close]:
+	var btn_pause := S.button("Pause", 16) # the pause menu (Options, Controls, Quit) for controllers
+	for b in [btn_equip, btn_use, btn_drop, btn_close, btn_pause]:
 		b.focus_mode = Control.FOCUS_NONE # don't steal focus from the slots
 		b.custom_minimum_size = Vector2(110, 38)
 		h.add_child(b)
@@ -185,6 +186,7 @@ func _build_footer() -> Control:
 	btn_use.pressed.connect(_use)
 	btn_drop.pressed.connect(_drop)
 	btn_close.pressed.connect(close)
+	btn_pause.pressed.connect(_pause)
 	hint_lbl = S.label("", 14, S.TEXT_DIM, 3)
 	hint_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -365,7 +367,7 @@ func _update_hint() -> void:
 	btn_use.disabled = inst.is_empty() or not ItemDB.is_consumable(inst)
 	btn_drop.disabled = inst.is_empty() or sel_where == "weapon"
 	if pad:
-		hint_lbl.text = "[A] %s   [Y] Use   [X] Drop   [B] Close" % primary
+		hint_lbl.text = "[A] %s   [Y] Use   [X] Drop   [B] Close   [Back] Pause" % primary
 	else:
 		hint_lbl.text = "[Click / Enter] %s   [U] Use   [X / Del] Drop   [Tab / I / Esc] Close" % primary
 
@@ -443,6 +445,12 @@ func close() -> void:
 	closed.emit()
 
 
+## Leave the Coat for the pause menu.
+func _pause() -> void:
+	close()
+	main.open_pause()
+
+
 func _input(event: InputEvent) -> void:
 	if not visible:
 		return
@@ -463,6 +471,8 @@ func _input(event: InputEvent) -> void:
 				_use()
 			JOY_BUTTON_X:
 				_drop()
+			JOY_BUTTON_BACK:
+				_pause()
 			_:
 				handled = false
 	else:

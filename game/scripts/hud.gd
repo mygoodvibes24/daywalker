@@ -27,8 +27,8 @@ var damage_t := 0.0
 var help_t := 20.0
 var started := false
 var using_pad := false
-const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)\nRMB / Q  Blood Dash   LMB / J  blade combo\nE  bite a staggered enemy (red orb) / take loot   F  drink at the Undercroft\nTAB / I  the Coat (inventory)   1 / 2  quick-use   T  rain   ESC  release mouse"
-const PAD_HELP := "L-stick move   R-stick camera   LT / L3 sprint   A jump (x2)\nB / RB  Blood Dash   X / RT  blade combo\nY  bite a staggered enemy (red orb) / take loot   LB  drink at the Undercroft\nSTART  the Coat (restart after death)   LB / R3  quick-use   BACK  rain"
+const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)\nRMB / Q  Blood Dash   LMB / J  blade combo\nE  bite a staggered enemy (red orb) / take loot   F  drink at the Undercroft\nTAB / I  the Coat (inventory)   1 / 2  quick-use   T  rain   ESC  pause"
+const PAD_HELP := "L-stick move   R-stick camera   LT / L3 sprint   A jump (x2)\nB / RB  Blood Dash   X / RT  blade combo\nY  bite a staggered enemy (red orb) / take loot   LB  drink at the Undercroft\nSTART  the Coat (restart after death)   LB / R3  quick-use   BACK  rain (pause from the Coat)"
 
 
 func _ready() -> void:

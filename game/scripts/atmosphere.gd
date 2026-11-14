@@ -62,7 +62,7 @@ func _ready() -> void:
 	post.name = "PostFX"
 	add_child(post)
 	post.configure(cinematic)
-	var rain_on := true
+	var rain_on: bool = Settings.rain
 	if "--norain" in OS.get_cmdline_user_args() or _url_flag("norain"):
 		rain_on = false
 	set_rain(rain_on)
@@ -325,7 +325,7 @@ func update_lighting(d: float, night: float, full_moon: bool) -> void:
 	env.ambient_light_color = Color(0.3, 0.38, 0.6).lerp(Color(0.68, 0.7, 0.76), d)
 	env.ambient_light_energy = lerpf(0.55 if cinematic else 0.6, 0.65, d)
 	env.ambient_light_sky_contribution = 0.0
-	env.tonemap_exposure = lerpf(1.25, 1.0, d) if cinematic else lerpf(1.3, 1.0, d)
+	env.tonemap_exposure = (lerpf(1.25, 1.0, d) if cinematic else lerpf(1.3, 1.0, d)) * Settings.brightness
 	env.glow_intensity = lerpf(1.0, 0.45, d) * (1.0 if cinematic else 0.8)
 	env.adjustment_saturation = lerpf(0.78, 0.85, d)
 	# key light: low warm sun by day, cold moon by night

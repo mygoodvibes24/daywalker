@@ -5,8 +5,12 @@ config_version=5
 
 config/name="Daywalker: Blood and Moon"
 config/description="Open-world action-horror prototype. A daywalker against vampires and werewolves."
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
+
+[autoload]
+
+Settings="*res://scripts/settings.gd"
 
 [display]
 

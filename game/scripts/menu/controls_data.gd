@@ -1,0 +1,32 @@
+extends RefCounted
+## The controls list shown on the Controls screen (main menu and pause menu).
+## Data only: add a row here when a binding is added in main.gd `_setup_input()`
+## (or by another system). Rows are [action, keyboard / mouse, controller].
+## A row whose first element starts with "#" is a section heading.
+
+const ROWS := [
+	["# Movement", "", ""],
+	["Move", "W A S D / arrows", "Left stick / D-pad"],
+	["Camera", "Mouse", "Right stick"],
+	["Sprint", "Shift", "LT (hold) / L3"],
+	["Jump (double jump)", "Space", "A / Cross"],
+	["# Combat", "", ""],
+	["Blade combo (3 hits)", "Left mouse / J", "X / Square  or  RT"],
+	["Blood Dash (3 charges)", "Right mouse / Q", "B / Circle  or  RB"],
+	["Bite a staggered enemy", "E", "Y / Triangle"],
+	["# System", "", ""],
+	["Pause menu", "Esc", "Back (inside the Coat)"],
+	["Restart after death", "R", "Start / Options"],
+	["# World", "", ""],
+	["Interact / take loot", "E", "Y / Triangle"],
+	["Drink bagged blood (Undercroft)", "F", "LB"],
+	["Quick-use slots 1 / 2", "1 / 2", "LB / R3"],
+	["Rain on / off", "T", "Back / Share"],
+	["# The Coat (inventory)", "", ""],
+	["Open / close the Coat", "Tab / I", "Start / Options"],
+	["Equip", "Enter / click", "A / Cross"],
+	["Use", "U", "Y / Triangle"],
+	["Drop", "X / Delete", "X / Square"],
+]
+
+const NOTES := "Interact and Bite share a button: next to a staggered enemy, Bite wins.\nLB drinks bagged blood when you are at the Undercroft, otherwise it quick-uses slot 1.\nControllers: Xbox, PlayStation and Switch Pro. Press any button to wake one in a browser."

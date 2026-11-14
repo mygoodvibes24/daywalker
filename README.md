@@ -27,6 +27,18 @@ godot --headless --import .
 godot --headless -s res://tests/smoke_test.gd   # exits 1 on any failure; CI runs it before every deploy
 ```
 
+## Main menu and options
+The game opens on a **main menu** (`game/scenes/main_menu.tscn`, the project's main scene) over a live 3D scene of Sol's lair in the Undercroft, built from `docs/concept_art/13_main_menu_lair.jpg`: Sol sharpens a silver blade on a whetstone at his workbench under a brass lamp while his assistant **Nia** stands by with a tablet, among the blood fridges, the map table with its red string, candles and the gated subway tunnel. The camera drifts slowly between two framings (with depth of field on desktop).
+
+- **Start** fades out and loads the city (on a background thread with a "Loading..." indicator; synchronously in the browser). The game begins at once; the old "click to hunt" title overlay only appears when `main.tscn` is run directly.
+- **Controls** lists every binding in two columns, keyboard / mouse and controller.
+- **Options** (saved to `user://settings.cfg` and applied live):
+  - **Display:** brightness, window mode (windowed / fullscreen / borderless; windowed or fullscreen in a browser), resolution scale (50-100% 3D render scale), V-Sync, quality preset (Low turns off SSAO, SSIL, SSR and volumetric fog; Medium keeps SSAO and fog), rain on / off.
+  - **Controls:** mouse sensitivity, controller look sensitivity, invert Y.
+  - **Audio:** master, music and effects volume (the Master, Music and SFX buses).
+- The menu works with mouse, keyboard (arrows, Enter, Esc) and controller (D-pad / left stick, **A** to accept, **B** to go back). Left / right changes a slider or a choice.
+- **Pause menu:** **Esc** in play pauses the game and frees the mouse: Resume, Options, Controls, Quit to Menu. On a controller, Start is the Coat and B is the dash, so the pause menu is the **Pause** button inside the Coat (or **Back / Share** while the Coat is open).
+
 ## Controls
 Plug in or pair an Xbox, PlayStation or Switch Pro controller and **press any button** (browsers only detect a controller after a button press).
 
@@ -44,6 +56,8 @@ Plug in or pair an Xbox, PlayStation or Switch Pro controller and **press any bu
 | Quick-use slot 1 / 2 (vials, flares) | LB (away from the Undercroft) / R3 | 1 / 2 |
 | The Coat (inventory; pauses the game) | Start / Options | Tab or I |
 | In the Coat: equip / use / drop / close | A / Y / X / B | Click or Enter / U / X or Del / Tab, I or Esc |
+| Pause menu (Resume / Options / Controls / Quit to Menu) | Back / Share inside the Coat, or the Coat's Pause button | Esc |
+| Menus: move / accept / back | D-pad or left stick / A / B | Arrows or mouse / Enter or click / Esc |
 | Restart after death | Start / Options | R |
 | Rain on/off | Back / Share | T |
 
