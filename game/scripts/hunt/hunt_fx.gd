@@ -120,7 +120,7 @@ static func circle_telegraph(parent: Node, pos: Vector3, radius: float, seconds:
 	root.global_position = Vector3(pos.x, 0.12, pos.z)
 	var edge := _mi(root, ring_mesh(), flat(Color(c.r, c.g, c.b, 0.9)))
 	edge.scale = Vector3(radius, 1.0, radius)
-	var fill := _mi(root, disc_mesh(), flat(Color(c.r * 0.6, c.g * 0.6, c.b * 0.6, 0.45)))
+	var fill := _mi(root, disc_mesh(), flat(Color(c.r * 0.45, c.g * 0.45, c.b * 0.45, 0.28)))
 	fill.scale = Vector3(0.05, 1.0, 0.05)
 	var tw := root.create_tween()
 	tw.tween_property(fill, "scale", Vector3(radius, 1.0, radius), maxf(seconds, 0.05))

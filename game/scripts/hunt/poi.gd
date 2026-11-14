@@ -2,8 +2,7 @@ extends Node3D
 ## One point of interest in a Hunt: its dressing, its pre-placed camp of enemies (idle until
 ## Sol comes close), its loot and its "cleared" state. Enemies only exist while Sol is within
 ## ACTIVATE_RANGE; beyond SLEEP_RANGE an un-roused camp goes back to sleep (freed, remembered).
-## Idle enemies are held still through enemy.gd's public `transform_t` (the same freeze it
-## uses while a wolf changes), so they breathe and turn but never chase until roused.
+## Idle enemies are held still by parking enemy.gd's public `speed` at 0 until roused.
 
 const Cfg = preload("res://scripts/hunt/hunt_config.gd")
 const Dressing = preload("res://scripts/hunt/poi_dressing.gd")
@@ -140,17 +139,20 @@ func tick(delta: float, ppos: Vector3, budget: int) -> int:
 				break
 		if roused and director != null:
 			director.on_poi_roused(self)
-	# hold idle ones still (and let them turn about a little)
+	# hold idle ones in place: their speed is parked at 0 (they stand in their idle clip and
+	# keep a wary eye on Sol) and handed back the moment the camp is roused
 	for l in live:
 		var e = l.e
 		if not is_instance_valid(e) or e.dead:
 			continue
 		if not roused:
-			if e.transform_t < 0.0001:
-				e.transform_t = 0.0001
-			l.spec.yaw += sin(Time.get_ticks_msec() * 0.0004 + l.spec.off.x) * delta * 0.3
-			if e.get("visual") != null:
-				e.visual.rotation.y = lerp_angle(e.visual.rotation.y, l.spec.yaw, 2.0 * delta)
+			if e.speed > 0.0:
+				l["speed"] = e.speed # also picks up a wolf transform's new speed
+				e.speed = 0.0
+		elif l.has("speed"):
+			if e.speed <= 0.0:
+				e.speed = l.speed
+			l.erase("speed")
 	# cleared?
 	if not live.is_empty() or pending.is_empty():
 		var done := pending.is_empty()

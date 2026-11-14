@@ -32,8 +32,11 @@ void fragment() {
 	float a = base * veil * intensity + flash * base * 0.8;
 	float foot = smoothstep(0.08, 0.0, hf) * 1.4;
 	vec3 c = color.rgb * (0.6 + n * 0.8) + vec3(1.0, 0.35, 0.3) * flash * 0.5;
-	ALBEDO = c * (a + foot);
-	ALPHA = clamp(a + foot, 0.0, 1.0);
+	// fade out right in front of the camera so standing in the wall doesn't white out the screen
+	float near = smoothstep(1.5, 12.0, -VERTEX.z);
+	float k = clamp(a + foot, 0.0, 0.85) * near;
+	ALBEDO = c * k;
+	ALPHA = k;
 }
 """
 
