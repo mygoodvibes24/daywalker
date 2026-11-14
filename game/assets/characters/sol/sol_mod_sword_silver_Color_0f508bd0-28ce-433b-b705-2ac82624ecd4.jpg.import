@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://crpmqwl6femmd"
+path="res://.godot/imported/sol_mod_sword_silver_Color_0f508bd0-28ce-433b-b705-2ac82624ecd4.jpg-22412bd24621ce14990933517b9d8717.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "a57f84b750e8b56274122482cf34a845"
+}
+
+[deps]
+
+source_file="res://assets/characters/sol/sol_mod_sword_silver_Color_0f508bd0-28ce-433b-b705-2ac82624ecd4.jpg"
+dest_files=["res://.godot/imported/sol_mod_sword_silver_Color_0f508bd0-28ce-433b-b705-2ac82624ecd4.jpg-22412bd24621ce14990933517b9d8717.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1
