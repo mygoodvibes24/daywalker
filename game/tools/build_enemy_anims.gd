@@ -1,7 +1,7 @@
 extends SceneTree
 ## Offline tool: puts real skeletal animation on the enemy models.
 ##   cd game && godot --headless -s res://tools/build_enemy_anims.gd
-##   (BUILD_ONLY=civilian to do one; CLIPS_DIR=/path/to/rig_glbs to re-extract the clips)
+##   (BUILD_ONLY=civilian to do one; REBUILD_CLIPS=1 to re-extract the clips)
 ##
 ## Inputs
 ##  - res://assets/characters/<name>/rigged/<name>_rigged.glb: the enemy mesh turned to face +Z
@@ -10,7 +10,9 @@ extends SceneTree
 ##    The folder has a .gdignore: the GLB is read here with GLTFDocument, never imported.
 ##  - res://assets/characters/clips/hero_clips.scn: seven clips (idle, run, sprint, slash, hit,
 ##    death, jump) rigged on the hero with the same skeleton, plus that skeleton's rest pose.
-##    Rebuilt from the downloaded rig_<clip>.glb files when CLIPS_DIR is set.
+##    Rebuilt with REBUILD_CLIPS=1 from the hero's skeleton-only clip GLBs
+##    (res://assets/characters/sol/sol_mod_anim_*.glb, sol_mod_rig_idle.glb), or from a folder
+##    of the original rig_<clip>.glb downloads given as CLIPS_DIR.
 ##
 ## Retargeting is done per bone in skeleton space. The source and target skeletons have the
 ## same bone names but different rests (A-pose hero, T-pose enemies, different proportions), so:
@@ -31,15 +33,16 @@ extends SceneTree
 
 const CLIPS_SCN := "res://assets/characters/clips/hero_clips.scn"
 const CLIPS := {
-	# out name: [source file, loop]
-	"idle": ["rig_idle", true],
-	"run": ["rig_run", true],
-	"sprint": ["rig_sprint", true],
-	"attack": ["rig_slash", false],
-	"hit": ["rig_hit", false],
-	"death": ["rig_death", false],
-	"jump": ["rig_jump", false],
+	# out name: [source clip, loop]
+	"idle": ["idle", true],
+	"run": ["run", true],
+	"sprint": ["sprint", true],
+	"attack": ["slash", false],
+	"hit": ["hit", false],
+	"death": ["death", false],
+	"jump": ["jump", false],
 }
+const SOL_DIR := "res://assets/characters/sol/"
 const CHARS := {
 	"vampire": {"eye_r": 0.0095},
 	"werewolf": {"eye_r": 0.016},
@@ -60,7 +63,7 @@ const NO_SWING := ["Hips", "Head"] # keep the root and head orientation as rigge
 
 func _initialize() -> void:
 	var dir := OS.get_environment("CLIPS_DIR")
-	if dir != "":
+	if dir != "" or OS.get_environment("REBUILD_CLIPS") != "" or not ResourceLoader.exists(CLIPS_SCN):
 		_extract_clips(dir)
 	var src: Node3D = (load(CLIPS_SCN) as PackedScene).instantiate()
 	root.add_child(src)
@@ -114,13 +117,19 @@ func _metric_skeleton(sk: Skeleton3D, s: float) -> Skeleton3D:
 	return out
 
 
-## Read the hero clips from rig_<clip>.glb and store them with the hero skeleton (metres).
+func _clip_file(dir: String, clip: String) -> String:
+	if dir != "":
+		return dir.path_join("rig_%s.glb" % clip)
+	return SOL_DIR + ("sol_mod_rig_idle.glb" if clip == "idle" else "sol_mod_anim_%s.glb" % clip)
+
+
+## Read the hero clips and store them with the hero skeleton (metres).
 func _extract_clips(dir: String) -> void:
 	var lib := AnimationLibrary.new()
 	var skel: Skeleton3D = null
 	for out_name in CLIPS:
 		var file: String = CLIPS[out_name][0]
-		var r := _load_glb(dir.path_join(file + ".glb"))
+		var r := _load_glb(_clip_file(dir, file))
 		var scn: Node3D = r[0]
 		var sk: Skeleton3D = r[1]
 		var s: float = r[2]
