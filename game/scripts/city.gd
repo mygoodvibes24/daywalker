@@ -34,6 +34,20 @@ var neon_flicker_mat: StandardMaterial3D
 var pool_mat: StandardMaterial3D
 var far_mat: StandardMaterial3D
 var stained_mat: StandardMaterial3D
+var shop_mat: StandardMaterial3D
+var crypt_mat: StandardMaterial3D
+var halo_mat: ShaderMaterial
+var uplight_mat: ShaderMaterial
+var halo_xfs: Array = [] # lantern halos (one MultiMesh of camera-facing quads)
+var halo_mm: MultiMesh
+var alleys: Array = [] # [Vector3 centre, Vector3 along] of every back alley, for whoever wants them
+## Layout data for other systems (points of interest, spawners...). Read after build().
+## blocks: [{"centre": Vector2, "district": String, "lots": Array[Rect2], "heights": Array[float]}]
+var blocks: Array = []
+## lots: every building footprint (XZ Rect2) in the city, cathedral included.
+var lots: Array[Rect2] = []
+## The open cathedral plaza (XZ); the Undercroft well sits at its centre (radius PIT_R + balustrade).
+const PLAZA_RECT := Rect2(-GRID + ROAD_HALF, -GRID + ROAD_HALF, 2.0 * (GRID - ROAD_HALF), 2.0 * (GRID - ROAD_HALF))
 var collider_root: Node3D
 var car_bodies: StaticBody3D
 var signs_left := 7
@@ -340,38 +354,6 @@ func _stone_textures() -> Array:
 	return [_tex(S, S, Image.FORMAT_RGB8, alb), _tex(S, S, Image.FORMAT_L8, rough), _normal_tex(S, S, hgt, 3.0)]
 
 
-## Old Quarter cobbles from cellular noise: 2 m tile.
-func _cobble_textures() -> Array:
-	var S := 256
-	var fn := FastNoiseLite.new()
-	fn.seed = 31
-	fn.noise_type = FastNoiseLite.TYPE_CELLULAR
-	fn.frequency = 0.055
-	fn.fractal_type = FastNoiseLite.FRACTAL_NONE
-	fn.cellular_return_type = FastNoiseLite.RETURN_DISTANCE2_SUB
-	var edge_img := fn.get_seamless_image(S, S, false, false, 0.1, true)
-	edge_img.convert(Image.FORMAT_L8)
-	var edges := edge_img.get_data()
-	fn.cellular_return_type = FastNoiseLite.RETURN_CELL_VALUE
-	var cell_img := fn.get_seamless_image(S, S, false, false, 0.1, true)
-	cell_img.convert(Image.FORMAT_L8)
-	var cells := cell_img.get_data()
-	var fine := _noise_img(S, 0.15, 32, 2)
-	var alb := PackedByteArray(); alb.resize(S * S * 3)
-	var rough := PackedByteArray(); rough.resize(S * S)
-	var hgt := PackedFloat32Array(); hgt.resize(S * S)
-	for p in S * S:
-		var e := edges[p] / 255.0
-		var cv := cells[p] / 255.0
-		var f := fine[p] / 255.0
-		var stone := clampf((e - 0.08) * 6.0, 0.0, 1.0)
-		var k := (0.55 + cv * 0.45 + (f - 0.5) * 0.2) * (0.35 + stone * 0.65)
-		_put(alb, p * 3, 0.42 * k, 0.4 * k, 0.37 * k)
-		rough[p] = int(lerpf(0.15, 0.55 + f * 0.25, stone) * 255.0) # wet gaps
-		hgt[p] = sqrt(stone) * 0.9 + f * 0.15
-	return [_tex(S, S, Image.FORMAT_RGB8, alb), _tex(S, S, Image.FORMAT_L8, rough), _normal_tex(S, S, hgt, 3.0)]
-
-
 ## Concrete sidewalk slabs with joints: 1.5 m tile.
 func _sidewalk_textures() -> Array:
 	var S := 128
@@ -661,6 +643,412 @@ func _blob_texture(noisy: bool) -> ImageTexture:
 	return _tex(S, S, Image.FORMAT_RGBA8, data)
 
 
+## Fan-pattern (segmental arc) cobbles for the cathedral plaza: 2 m tile,
+## overlapping fans of radius 0.5 m, five courses of ~10 cm stones each.
+func _fan_cobble_textures() -> Array:
+	var S := 256
+	var fine := _noise_img(S, 0.15, 33, 2)
+	var big := _noise_img(S, 0.02, 34, 3)
+	var alb := PackedByteArray(); alb.resize(S * S * 3)
+	var rough := PackedByteArray(); rough.resize(S * S)
+	var hgt := PackedFloat32Array(); hgt.resize(S * S)
+	for y in S:
+		for x in S:
+			var p := y * S + x
+			var px := x / 128.0 # tile = 2 units: 2 fans across, 4 rows down
+			var py := y / 128.0
+			var best_j := -99
+			var bi := 0
+			var dv := Vector2.ZERO
+			var j0 := int(floorf(py * 2.0)) - 1
+			for j in range(j0, j0 + 3):
+				var off := 0.5 if posmod(j, 2) == 1 else 0.0
+				var cy := j * 0.5
+				for i in range(int(floorf(px - off)) - 1, int(floorf(px - off)) + 2):
+					var c := Vector2(i + off + 0.5, cy)
+					var d := Vector2(px, py) - c
+					if d.length() < 0.5 and j > best_j:
+						best_j = j
+						bi = i
+						dv = d
+			var r := dv.length() / 0.5 * 5.0 # 0..5 courses from the fan centre
+			var ring := int(r)
+			var a := atan2(dv.y, dv.x) # stones get shorter towards the centre
+			var per := (ring + 1) * 2.4
+			var sa := a / PI * per
+			var stone_i := int(floorf(sa))
+			var fr := r - ring
+			var fa := sa - floorf(sa)
+			var f := fine[p] / 255.0
+			var g := big[p] / 255.0
+			var joint := (fr < 0.13 and ring > 0) or fr > 0.93 or (fa < 0.08 or fa > 0.95) and ring > 0
+			var h := _hash(posmod(bi, 2) * 31 + ring * 7 + 3, posmod(best_j, 4) * 97 + stone_i + 50)
+			if joint:
+				var m := 0.12 + f * 0.06
+				_put(alb, p * 3, m, m * 0.98, m * 0.95)
+				rough[p] = 20 # water in the joints
+				hgt[p] = 0.0
+			else:
+				var k := (0.5 + h * 0.4 + (f - 0.5) * 0.2) * (0.75 + g * 0.35)
+				var warm := 0.95 + h * 0.1
+				_put(alb, p * 3, 0.42 * k * warm, 0.4 * k, 0.37 * k / warm)
+				rough[p] = int(clampf(0.35 + f * 0.25 - g * 0.15, 0.05, 1.0) * 255.0)
+				var edge := minf(minf(fr - 0.13, 0.93 - fr) * 5.0, minf(fa - 0.08, 0.95 - fa) * 3.0)
+				hgt[p] = sqrt(clampf(edge * 4.0, 0.0, 1.0)) * 0.9 + f * 0.15
+	return [_tex(S, S, Image.FORMAT_RGB8, alb), _tex(S, S, Image.FORMAT_L8, rough), _normal_tex(S, S, hgt, 3.0)]
+
+
+## French Quarter cast-iron lace. Top half: gallery railing (2 m x 1 m per tile);
+## bottom half: the scalloped frieze hung under each gallery deck.
+func _lace_texture() -> ImageTexture:
+	var W := 256
+	var H := 256
+	var data := PackedByteArray(); data.resize(W * H * 4)
+	for y in H:
+		for x in W:
+			var solid := false
+			if y < 128:
+				var yy := y
+				solid = yy < 5 or yy > 121 or (yy > 27 and yy < 31) or (yy > 108 and yy < 111)
+				# frieze of rings under the handrail
+				var rx := float(x % 16) - 8.0
+				var ry := float(yy) - 17.0
+				var rr := sqrt(rx * rx + ry * ry)
+				solid = solid or (rr > 5.0 and rr < 7.0)
+				# balusters with lozenge medallions every 32 px
+				var mx := float(x % 32) - 16.0
+				var my := float(yy) - 70.0
+				var md := absf(mx) * 1.4 + absf(my) * 0.75
+				var in_med := md < 22.0
+				solid = solid or (not in_med and x % 8 < 2 and yy > 30 and yy < 109)
+				solid = solid or (md > 19.0 and md < 22.0) or (md > 9.0 and md < 11.5)
+				var cr := sqrt(mx * mx + my * my)
+				solid = solid or cr < 3.0
+				# little scrolls at the foot
+				var sx := float(x % 16) - 8.0
+				var sy := float(yy) - 100.0
+				var sr := sqrt(sx * sx + sy * sy)
+				solid = solid or (sr > 3.5 and sr < 5.2 and sy < 0.0)
+			else:
+				var yy := y - 128
+				solid = yy < 5
+				# hanging scallops, a drop at each cusp
+				var ax := float(x % 32) - 16.0
+				var ay := float(yy) - 4.0
+				var ar := sqrt(ax * ax + ay * ay)
+				solid = solid or (ar > 13.0 and ar < 16.0 and ay > 0.0)
+				solid = solid or (ar > 6.0 and ar < 8.0 and ay > 0.0)
+				var dx := float((x + 16) % 32) - 16.0
+				solid = solid or (absf(dx) < 1.5 and yy < 26) or (absf(dx) < 3.0 and yy > 22 and yy < 28)
+				solid = solid or (x % 4 < 1 and yy < 12 and ar > 16.0)
+			var o := (y * W + x) * 4
+			if solid:
+				data[o] = 18; data[o + 1] = 17; data[o + 2] = 16; data[o + 3] = 255
+			else:
+				data[o + 3] = 0
+	# one atlas for the whole gallery (one draw per detail cell): lace on top, the fern below
+	var img := Image.create(W, H * 2, false, Image.FORMAT_RGBA8)
+	img.blit_rect(Image.create_from_data(W, H, false, Image.FORMAT_RGBA8, data), Rect2i(0, 0, W, H), Vector2i.ZERO)
+	var fern := _fern_image()
+	fern.resize(W, H, Image.INTERPOLATE_BILINEAR)
+	img.blit_rect(fern, Rect2i(0, 0, W, H), Vector2i(0, H))
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
+
+
+## Hanging Boston fern: drooping fronds from a basket at the top centre.
+func _fern_image() -> Image:
+	var S := 128
+	var img := Image.create(S, S, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var r := RandomNumberGenerator.new()
+	r.seed = 77
+	for k in 15:
+		var ang := lerpf(-1.35, 1.35, (k + r.randf() * 0.6) / 15.0)
+		var length := r.randf_range(52.0, 92.0)
+		var dir := Vector2(sin(ang), -cos(ang) * 0.35).normalized()
+		var p0 := Vector2(64 + r.randf_range(-6, 6), 12)
+		var g := r.randf_range(0.65, 1.0)
+		var col := Color(0.16 * g, 0.34 * g, 0.1 * g, 1.0)
+		var steps := int(length)
+		for s in steps:
+			var t := float(s) / steps
+			var p := p0 + dir * length * t * 0.8 + Vector2(0, length * t * t * 0.9)
+			var tangent := (dir * 0.8 + Vector2(0, 1.8 * t)).normalized()
+			var nrm := Vector2(-tangent.y, tangent.x)
+			var leaf := (1.0 - t) * 9.0 + 2.0
+			for side: float in [-1.0, 1.0]:
+				for q in int(leaf):
+					var lp := p + nrm * side * q + tangent * q * 0.45
+					var ix := int(lp.x)
+					var iy := int(lp.y)
+					if ix >= 0 and ix < S and iy >= 0 and iy < S and (s % 3 != 0 or q < 2):
+						img.set_pixel(ix, iy, col.lightened(0.15 * (1.0 - q / leaf)))
+	# basket
+	for y in range(4, 16):
+		for x in range(50, 78):
+			var dx := (x - 64) / 14.0
+			var dy := (y - 4) / 12.0
+			if dx * dx + dy * dy * 0.6 < 1.0 and y > 6:
+				img.set_pixel(x, y, Color(0.12, 0.09, 0.06, 1.0))
+	return img
+
+
+## Stained glass atlas (512 x 256). Left: the rose window (radial tracery, amber
+## and ruby with cobalt accents). Right: two lancet cells with leaded panes and a
+## saint in a medallion. Returns [albedo, emission].
+func _stained_textures() -> Array:
+	var W := 512
+	var H := 256
+	var alb := PackedByteArray(); alb.resize(W * H * 3)
+	var emi := PackedByteArray(); emi.resize(W * H * 3)
+	var fine := _noise_img(256, 0.12, 121, 2)
+	var pal := [Color(1.0, 0.62, 0.18), Color(1.0, 0.5, 0.12), Color(0.95, 0.72, 0.3), Color(0.85, 0.2, 0.08),
+		Color(1.0, 0.58, 0.2), Color(0.2, 0.3, 0.75), Color(1.0, 0.8, 0.4), Color(0.75, 0.3, 0.1)]
+	var stone := Color(0.3, 0.29, 0.27)
+	for y in H:
+		for x in W:
+			var o := (y * W + x) * 3
+			var f := fine[(y % 256) * 256 + (x % 256)] / 255.0
+			var lead := false
+			var trac := false
+			var c := Color.BLACK
+			if x < 256:
+				var dx := x - 127.5
+				var dy := y - 127.5
+				var r := sqrt(dx * dx + dy * dy)
+				var a := atan2(dy, dx) + PI
+				var seg := 0
+				if r > 125.0:
+					trac = true
+				elif r < 22.0:
+					seg = 0
+					trac = r > 19.0
+					lead = absf(fmod(a * 6.0 / PI, 1.0) - 0.5) > 0.46
+				elif r < 64.0:
+					var sa := a * 12.0 / TAU
+					seg = 1 + int(sa)
+					trac = r < 25.0 or r > 61.0 or absf(sa - roundf(sa)) * (r * TAU / 12.0) < 2.2
+					lead = absf(r - 43.0) < 1.0
+				elif r < 100.0:
+					# 24 trefoil-headed petals
+					var sa := a * 24.0 / TAU
+					var fa := sa - floorf(sa)
+					seg = 20 + int(sa)
+					var lobe := Vector2((fa - 0.5) * (r * TAU / 24.0), r - 88.0)
+					trac = r > 97.0 or absf(fa - 0.5) * (r * TAU / 24.0) > (r * TAU / 48.0) - 2.0
+					trac = trac or (lobe.length() > 7.5 and lobe.length() < 9.5)
+					lead = absf(r - 76.0) < 1.0
+				else:
+					var sa := a * 48.0 / TAU
+					seg = 60 + int(sa)
+					var cc := Vector2((sa - floorf(sa) - 0.5) * (r * TAU / 48.0), r - 112.0)
+					trac = r > 122.0 or cc.length() > 7.5 and cc.length() < 10.0
+					lead = absf(sa - roundf(sa)) * (r * TAU / 48.0) < 0.8
+				if not trac:
+					c = pal[int(_hash(seg, 11) * 8.0) % 8]
+					if seg == 0:
+						c = Color(1.0, 0.85, 0.5)
+			else:
+				var lx := (x - 256) % 128
+				var cell := (x - 256) / 128
+				var ux := lx / 127.0
+				var vy := y / 255.0
+				trac = lx < 6 or lx > 121 or y > 250
+				# diamond quarries with lead cames
+				var qa := (lx + y * 0.6) / 16.0
+				var qb := (lx - y * 0.6) / 16.0
+				lead = absf(qa - roundf(qa)) < 0.07 or absf(qb - roundf(qb)) < 0.07
+				var med := Vector2(ux - 0.5, (vy - 0.48) * 2.0)
+				var md := med.length()
+				c = pal[int(_hash(int(floorf(qa)) + cell * 7, int(floorf(qb)) + 3) * 5.0)]
+				if md < 0.42:
+					lead = absf(md - 0.4) < 0.02
+					c = Color(0.2, 0.28, 0.7) if cell == 1 else Color(0.85, 0.22, 0.1)
+					if cell == 0:
+						# a robed saint with a gold halo
+						var head := Vector2(ux - 0.5, (vy - 0.33) * 2.0).length()
+						var robe := absf(ux - 0.5) < 0.05 + (vy - 0.36) * 0.5 and vy > 0.36 and vy < 0.64
+						if head < 0.13:
+							c = Color(1.0, 0.85, 0.4) if head > 0.08 else Color(0.95, 0.7, 0.5)
+						elif robe:
+							c = Color(0.95, 0.55, 0.15)
+					else:
+						var star := absf(sin(atan2(med.y, med.x) * 4.0)) * 0.22 + 0.08
+						if md < star:
+							c = Color(1.0, 0.7, 0.25)
+			if trac:
+				var k := 0.8 + f * 0.3
+				_put(alb, o, stone.r * k, stone.g * k, stone.b * k)
+				_put(emi, o, 0, 0, 0)
+			elif lead:
+				_put(alb, o, 0.03, 0.03, 0.03)
+				_put(emi, o, 0, 0, 0)
+			else:
+				var gl := 0.75 + f * 0.4
+				_put(alb, o, c.r * 0.22, c.g * 0.22, c.b * 0.22)
+				_put(emi, o, c.r * gl, c.g * gl, c.b * gl)
+	return [_tex(W, H, Image.FORMAT_RGB8, alb), _tex(W, H, Image.FORMAT_RGB8, emi)]
+
+
+## Painted shop interiors seen through the glass, 4 x 2 cells of 128 px:
+## 0 antiques, 1 hoodoo shop, 2 jazz bar, 3 cafe; 4 amber wall, 5 red wall,
+## 6 door with a lit glass light, 7 closed board shutters. Returns [albedo, emission].
+func _shop_textures() -> Array:
+	var C := 128
+	var img := Image.create(C * 4, C * 2, false, Image.FORMAT_RGB8)
+	var em := Image.create(C * 4, C * 2, false, Image.FORMAT_RGB8)
+	var fine := _noise_img(C, 0.1, 131, 2)
+	var r := RandomNumberGenerator.new()
+	r.seed = 5
+	for cell in 8:
+		var ox := (cell % 4) * C
+		var oy := (cell / 4) * C
+		for y in C:
+			for x in C:
+				var u := x / float(C)
+				var v := y / float(C)
+				var f := fine[y * C + x] / 255.0
+				var c := Color.BLACK
+				var e := 1.0
+				match cell:
+					0: # antiques: amber room, shelves of clutter, a lamp and a globe
+						c = Color(1.0, 0.66, 0.32) * (0.55 + (1.0 - v) * 0.3 + f * 0.15)
+						if v > 0.2 and int(v * 128.0) % 26 < 3:
+							c = Color(0.12, 0.07, 0.04)
+						elif v > 0.2 and v < 0.85 and _hash(int(u * 14.0), int(v * 5.0)) < 0.45:
+							c *= 0.35 + _hash(int(u * 23.0), int(v * 9.0)) * 0.4
+						var lamp := Vector2((u - 0.28) * 1.6, v - 0.42)
+						if absf(lamp.x) < 0.12 + lamp.y * 0.5 and lamp.y > -0.08 and lamp.y < 0.08:
+							c = Color(1.0, 0.85, 0.45) * 1.4
+						elif absf(u - 0.28) < 0.015 and v > 0.5 and v < 0.75:
+							c = Color(0.15, 0.1, 0.05)
+						var gl := Vector2(u - 0.72, (v - 0.58) * 1.0).length()
+						if gl < 0.11:
+							c = Color(0.55, 0.45, 0.25) * (0.7 + f * 0.6)
+					1: # hoodoo: oxblood room, rows of candles, skulls and a horned skull
+						c = Color(0.75, 0.12, 0.06) * (0.45 + (1.0 - v) * 0.25 + f * 0.2)
+						for row: float in [0.55, 0.78]:
+							if absf(v - row) < 0.012:
+								c = Color(0.1, 0.03, 0.02)
+							var cx := fmod(u * 9.0 + row * 3.0, 1.0)
+							if absf(cx - 0.5) < 0.12 and v < row and v > row - 0.08:
+								c = Color(0.9, 0.82, 0.65) * 0.8
+							if absf(cx - 0.5) < 0.06 and v < row - 0.08 and v > row - 0.12:
+								c = Color(1.0, 0.75, 0.3) * 1.8
+						var sk := Vector2((u - 0.5) * 1.3, v - 0.3)
+						if sk.length() < 0.1 and not (Vector2(absf(sk.x) - 0.04, sk.y + 0.01).length() < 0.025):
+							c = Color(0.85, 0.8, 0.7)
+						if absf(sk.y + 0.05) < 0.025 and absf(sk.x) > 0.1 and absf(sk.x) < 0.25 + sk.y:
+							c = Color(0.8, 0.75, 0.65)
+					2: # jazz bar: amber-red haze, musicians in silhouette
+						c = Color(1.0, 0.35, 0.12).lerp(Color(1.0, 0.7, 0.35), 1.0 - v) * (0.55 + f * 0.2)
+						for m in 3:
+							var mx := 0.22 + m * 0.28
+							var head := Vector2((u - mx) * 1.2, v - 0.38).length()
+							var body := absf(u - mx) < 0.07 + (v - 0.42) * 0.25 and v > 0.42
+							if head < 0.055 or body:
+								c = Color(0.04, 0.02, 0.02)
+						if Vector2((u - 0.75) * 1.4, v - 0.62).length() < 0.11 or (absf(u - 0.79) < 0.01 and v > 0.3 and v < 0.6):
+							c = Color(0.05, 0.02, 0.01) # the bass
+					3: # cafe: pendant lamps over little tables
+						c = Color(1.0, 0.75, 0.45) * (0.45 + (1.0 - v) * 0.3 + f * 0.15)
+						for m in 3:
+							var mx := 0.2 + m * 0.3
+							if Vector2(u - mx, (v - 0.3) * 1.6).length() < 0.06:
+								c = Color(1.0, 0.92, 0.7) * 1.6
+							if absf(u - mx) < 0.1 and absf(v - 0.72) < 0.015 or absf(u - mx) < 0.012 and v > 0.72:
+								c = Color(0.08, 0.05, 0.03)
+					4:
+						c = Color(1.0, 0.68, 0.36) * (0.45 + (1.0 - v) * 0.3 + f * 0.1)
+					5:
+						c = Color(0.8, 0.18, 0.08) * (0.4 + (1.0 - v) * 0.25 + f * 0.1)
+					6: # door: dark planks, a lit glass light up top
+						c = Color(0.16, 0.1, 0.06) * (0.7 + f * 0.5)
+						e = 0.0
+						if v > 0.08 and v < 0.4 and u > 0.15 and u < 0.85:
+							c = Color(1.0, 0.7, 0.4) * (0.6 + f * 0.2)
+							e = 1.0
+						if absf(u - 0.5) < 0.015 or absf(v - 0.62) < 0.012:
+							c = Color(0.06, 0.04, 0.02)
+							e = 0.0
+					_: # closed louvred board shutters, green
+						var lou := 0.7 + 0.3 * float(int(v * 128.0) % 6 < 3)
+						c = Color(0.1, 0.24, 0.16) * lou * (0.7 + f * 0.5)
+						if absf(u - 0.5) < 0.012 or u < 0.05 or u > 0.95:
+							c = Color(0.04, 0.08, 0.05)
+						e = 0.0
+				img.set_pixel(ox + x, oy + y, Color(minf(c.r, 1.0), minf(c.g, 1.0), minf(c.b, 1.0)) * (0.35 if e > 0.0 else 1.0))
+				em.set_pixel(ox + x, oy + y, Color(minf(c.r, 1.0), minf(c.g, 1.0), minf(c.b, 1.0)) * e)
+	img.generate_mipmaps()
+	em.generate_mipmaps()
+	return [ImageTexture.create_from_image(img), ImageTexture.create_from_image(em)]
+
+
+static func shop_uv(cell: int) -> Array:
+	var e := 0.004
+	var cx := cell % 4
+	var cy := cell / 4
+	return [Vector2(cx / 4.0 + e, cy / 2.0 + e), Vector2((cx + 1) / 4.0 - e, (cy + 1) / 2.0 - e)]
+
+
+## Stone baluster band for the Undercroft balustrade (alpha scissor), 1 tile = 1 m wide.
+func _baluster_texture() -> ImageTexture:
+	var W := 64
+	var H := 64
+	var img := Image.create(W, H, false, Image.FORMAT_RGBA8)
+	var fine := _noise_img(64, 0.15, 141, 2)
+	for y in H:
+		for x in W:
+			var u := (x % 16) / 16.0 - 0.5
+			var v := y / float(H)
+			# vase-shaped baluster profile
+			var w := 0.16 + 0.14 * sin(clampf((v - 0.1) / 0.8, 0.0, 1.0) * PI * 1.15 + 0.4)
+			var solid := absf(u) < w or v < 0.06 or v > 0.94
+			if solid:
+				var k := 0.55 + fine[y * 64 + x] / 255.0 * 0.25 - absf(u) * 0.4
+				img.set_pixel(x, y, Color(k, k * 0.97, k * 0.92, 1.0))
+			else:
+				img.set_pixel(x, y, Color(0, 0, 0, 0))
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
+
+
+const HALO_SHADER := """
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+uniform vec4 tint : source_color = vec4(1.0, 0.7, 0.4, 1.0);
+uniform float strength = 0.0;
+void vertex() {
+	// camera-facing quad, also inside a MultiMesh
+	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
+}
+void fragment() {
+	float d = length(UV - 0.5) * 2.0;
+	float a = pow(clamp(1.0 - d, 0.0, 1.0), 2.4) + 0.6 * pow(clamp(1.0 - d * 2.6, 0.0, 1.0), 2.0);
+	ALBEDO = tint.rgb;
+	ALPHA = a * strength;
+}
+"""
+
+const UPLIGHT_SHADER := """
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+uniform vec4 tint : source_color = vec4(1.0, 0.08, 0.04, 1.0);
+uniform float strength = 1.0;
+uniform float y0 = -3.2;
+uniform float y1 = 2.5;
+varying float h;
+void vertex() { h = VERTEX.y; }
+void fragment() {
+	float t = clamp((h - y0) / (y1 - y0), 0.0, 1.0);
+	float edge = pow(abs(dot(normalize(NORMAL), normalize(VIEW))), 0.8);
+	ALBEDO = tint.rgb;
+	ALPHA = strength * pow(1.0 - t, 1.8) * (0.25 + 0.75 * edge) * 0.55;
+}
+"""
+
+
 # ================================================================ materials
 func _surface_mat(texs: Array, tile_m: float, rough_scale := 1.0, triplanar := true) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -700,7 +1088,6 @@ func _make_materials() -> void:
 	M["concrete"] = _surface_mat(conc, 4.0)
 	M["trim"] = _surface_mat(conc, 6.0, 0.7)
 	M["sidewalk"] = _surface_mat(_sidewalk_textures(), 1.5)
-	M["cobble"] = _surface_mat(_cobble_textures(), 2.0)
 	M["asphalt"] = preload("res://scripts/wet_materials.gd").asphalt() # shared wet-street shader (puddles, rain ripples)
 	M["metal"] = _flat_mat(0.45, 0.5)
 	M["paint"] = _flat_mat(0.5)
@@ -751,22 +1138,69 @@ func _make_materials() -> void:
 	M["neon_flicker"] = neon_flicker_mat
 
 	lamp_mat = StandardMaterial3D.new()
-	lamp_mat.albedo_color = Color(1, 0.85, 0.6)
+	lamp_mat.albedo_color = Color(0.9, 0.62, 0.3)
 	lamp_mat.emission_enabled = true
-	lamp_mat.emission = Color(1, 0.78, 0.5)
+	lamp_mat.emission = Color(1.0, 0.52, 0.18) # gas-mantle amber, not white
 	lamp_mat.emission_energy_multiplier = 0.2
 	M["lamp"] = lamp_mat
 
+	var stx := _stained_textures()
 	stained_mat = StandardMaterial3D.new()
-	stained_mat.albedo_texture = nt
+	stained_mat.albedo_texture = stx[0]
 	stained_mat.emission_enabled = true
-	stained_mat.emission_texture = nt
+	stained_mat.emission_texture = stx[1]
 	stained_mat.emission = Color(1, 1, 1)
 	stained_mat.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
 	stained_mat.emission_energy_multiplier = 0.0
-	stained_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	stained_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	stained_mat.roughness = 0.2
 	M["stained"] = stained_mat
+
+	M["cobble_fan"] = _surface_mat(_fan_cobble_textures(), 1.5, 0.8)
+
+	var lace := StandardMaterial3D.new()
+	lace.albedo_texture = _lace_texture()
+	lace.vertex_color_use_as_albedo = true
+	lace.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	lace.alpha_scissor_threshold = 0.45
+	lace.cull_mode = BaseMaterial3D.CULL_DISABLED
+	lace.roughness = 0.55
+	lace.metallic = 0.25
+	M["lace"] = lace
+
+	var bal := StandardMaterial3D.new()
+	bal.albedo_texture = _baluster_texture()
+	bal.vertex_color_use_as_albedo = true
+	bal.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	bal.alpha_scissor_threshold = 0.5
+	bal.cull_mode = BaseMaterial3D.CULL_DISABLED
+	bal.roughness = 0.75
+	M["baluster"] = bal
+
+	var shx := _shop_textures()
+	shop_mat = StandardMaterial3D.new()
+	shop_mat.albedo_texture = shx[0]
+	shop_mat.emission_enabled = true
+	shop_mat.emission = Color(1, 1, 1)
+	shop_mat.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
+	shop_mat.emission_texture = shx[1]
+	shop_mat.emission_energy_multiplier = 0.0
+	shop_mat.roughness = 0.9
+	shop_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	M["shop"] = shop_mat
+
+	crypt_mat = StandardMaterial3D.new()
+	crypt_mat.albedo_color = Color(0.25, 0.01, 0.01)
+	crypt_mat.emission_enabled = true
+	crypt_mat.emission = Color(1.0, 0.06, 0.03)
+	crypt_mat.emission_energy_multiplier = 2.2
+	crypt_mat.vertex_color_use_as_albedo = true
+	M["crypt_glow"] = crypt_mat
+
+	halo_mat = ShaderMaterial.new()
+	halo_mat.shader = Shader.new()
+	halo_mat.shader.code = HALO_SHADER
+	M["halo"] = halo_mat
 
 	var far := _far_textures()
 	far_mat = StandardMaterial3D.new()
@@ -870,13 +1304,19 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 		var mesh := ArrayMesh.new()
 		var keys: Array = by_chunk[group]
 		keys.sort()
+		# detail chunks ("D<x>_<z>", 40 m cells): local origin at the cell centre and a visibility range
+		var shift := offset
+		var detail: bool = group.begins_with("D")
+		if detail:
+			var xz: PackedStringArray = group.split("|")[0].substr(1).split("_")
+			shift = Vector3((int(xz[0]) + 0.5) * DETAIL_CELL, 0, (int(xz[1]) + 0.5) * DETAIL_CELL)
 		for key in keys:
 			var bt: Batch = batches[key]
 			if bt.i.is_empty():
 				continue
-			if offset != Vector3.ZERO:
+			if shift != Vector3.ZERO:
 				for k in bt.v.size():
-					bt.v[k] -= offset
+					bt.v[k] -= shift
 			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, bt.arrays())
 			mesh.surface_set_material(mesh.get_surface_count() - 1, M[key.split("|")[1]])
 		for key in keys:
@@ -888,7 +1328,30 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 		mi.mesh = mesh
 		if group.ends_with("nocast"):
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if detail:
+			mi.position = shift
+			mi.visibility_range_end = DETAIL_RANGE
+			mi.visibility_range_end_margin = 8.0
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		(parent if parent else self).add_child(mi)
+
+
+const DETAIL_CELL := 40.0
+const DETAIL_RANGE := 85.0
+
+
+## Detail chunk (galleries, lace, ferns, shutters...) for a point: hidden beyond DETAIL_RANGE.
+static func _dk(x: float, z: float) -> String:
+	return "D%d_%d" % [floori(x / DETAIL_CELL), floori(z / DETAIL_CELL)]
+
+
+## Batch in the detail chunk around (x, z).
+func _bd(mat: String, x: float, z: float) -> Batch:
+	var save := ck
+	ck = _dk(x, z)
+	var bt := _b(mat)
+	ck = save
+	return bt
 
 
 # ---------------------------------------------------------------- ground
@@ -905,7 +1368,7 @@ func _build_ground() -> void:
 	ground.add_child(gcol)
 	var bt := Batch.new()
 	var E := 120.0
-	var h := 1.9
+	var h := PIT_HOLE
 	for r in [[-E, -E, E, -h], [-E, h, E, E], [-E, -h, -h, h], [h, -h, E, h]]:
 		var a := Vector3(r[0], 0, r[3])
 		var b := Vector3(r[0], 0, r[1])
@@ -941,8 +1404,8 @@ func _slab(x0: float, z0: float, x1: float, z1: float, top_mat: String, top_col:
 # ---------------------------------------------------------------- blocks
 func _district(cx: float, cz: float) -> String:
 	var d := maxf(absf(cx), absf(cz))
-	if d <= 30.0:
-		return "quarter"
+	if d <= 30.0 or (absf(cx) <= 30.0 and absf(cz) <= 50.0):
+		return "quarter" # the Old Quarter: the plaza and the avenues running north and south of it
 	if cx >= 50.0:
 		return "velvet"
 	if cx <= -50.0:
@@ -953,9 +1416,9 @@ func _district(cx: float, cz: float) -> String:
 func _build_block(cx: float, cz: float) -> void:
 	ck = _chunk_of(cx, cz)
 	var dist := _district(cx, cz)
-	var walk_col := Color(1, 1, 1) if dist != "quarter" else Color(0.92, 0.88, 0.82)
+	var walk_col := Color(1, 1, 1) if dist != "quarter" else Color(0.72, 0.66, 0.6)
 	_slab(cx - GRID * 0.5 + ROAD_HALF, cz - GRID * 0.5 + ROAD_HALF, cx + GRID * 0.5 - ROAD_HALF, cz + GRID * 0.5 - ROAD_HALF,
-		"sidewalk" if dist != "quarter" else "cobble", walk_col, Color(0.62, 0.6, 0.57))
+		"sidewalk" if dist != "quarter" else "cobble_fan", walk_col, Color(0.62, 0.6, 0.57))
 	# split the lot into parcels
 	var L := LOT
 	var parcels: Array = []
@@ -982,19 +1445,46 @@ func _build_block(cx: float, cz: float) -> void:
 			var sz := rng.randf_range(-1.0, 1.0)
 			parcels.append([-L, -L, sx, sz]); parcels.append([sx, -L, L, sz])
 			parcels.append([-L, sz, sx, L]); parcels.append([sx, sz, L, L])
+	# a back alley through some two-parcel blocks (image 04): the split widens into a 2.8 m gap
+	var alley_sides := {} # parcel index -> facade side that faces the alley
+	var alley_p := {"quarter": 0.45, "midtown": 0.6, "docks": 0.6, "velvet": 0.3}
+	# (never on the blocks lining the x = 0 avenue, which keeps its gallery fronts unbroken)
+	if (pattern == 1 or pattern == 2) and rng.randf() < alley_p[dist] and absf(cx) < 75.0 and absf(cz) < 75.0 and not (dist == "quarter" and absf(cx) == 10.0):
+		var AW := 2.8
+		var s := clampf((parcels[0][2] if pattern == 1 else parcels[0][3]), -0.8, 0.8)
+		if pattern == 1:
+			parcels = [[-L, -L, s - AW * 0.5, L], [s + AW * 0.5, -L, L, L]]
+			alley_sides = {0: 2, 1: 3}
+			_alley_floor(Vector3(cx + s, 0, cz), Vector3(0, 0, 1), AW, 2.0 * L)
+		else:
+			parcels = [[-L, -L, L, s - AW * 0.5], [-L, s + AW * 0.5, L, L]]
+			alley_sides = {0: 0, 1: 1}
+			_alley_floor(Vector3(cx, 0, cz + s), Vector3(1, 0, 0), AW, 2.0 * L)
 	var body := StaticBody3D.new()
 	body.name = "Block_%d_%d" % [cx, cz]
 	collider_root.add_child(body)
 	var far := clampf((maxf(absf(cx), absf(cz)) - 30.0) / 40.0, 0.0, 1.0)
-	for p in parcels:
+	var binfo := {"centre": Vector2(cx, cz), "district": dist, "lots": [], "heights": []}
+	blocks.append(binfo)
+	for pi in parcels.size():
+		var p: Array = parcels[pi]
 		var spec := _building_spec(dist, far)
 		spec["x0"] = cx + p[0]
 		spec["z0"] = cz + p[1]
 		spec["x1"] = cx + p[2]
 		spec["z1"] = cz + p[3]
+		spec["bc"] = Vector2(cx, cz)
+		spec["alley"] = alley_sides.get(pi, -1)
+		if spec.alley >= 0 and dist == "quarter":
+			spec["wall"] = "brick" # alley walls are bare brick even in the Quarter
+			spec["wcol"] = BRICK[rng.randi() % BRICK.size()]
 		# which sides face a street
 		spec["ext"] = [is_equal_approx(p[3], L), is_equal_approx(p[1], -L), is_equal_approx(p[2], L), is_equal_approx(p[0], -L)]
 		var H := _building(spec)
+		var fp := Rect2(cx + p[0], cz + p[1], p[2] - p[0], p[3] - p[1])
+		binfo.lots.append(fp)
+		binfo.heights.append(H)
+		lots.append(fp)
 		var col := CollisionShape3D.new()
 		var shape := BoxShape3D.new()
 		shape.size = Vector3(p[2] - p[0], H, p[3] - p[1])
@@ -1006,17 +1496,18 @@ func _build_block(cx: float, cz: float) -> void:
 const STUCCO := [Color(0.85, 0.6, 0.55), Color(0.88, 0.72, 0.48), Color(0.6, 0.74, 0.64), Color(0.7, 0.64, 0.78),
 	Color(0.9, 0.84, 0.72), Color(0.58, 0.68, 0.8), Color(0.78, 0.46, 0.36), Color(0.92, 0.9, 0.85)]
 const BRICK := [Color(1, 1, 1), Color(0.9, 0.82, 0.76), Color(0.78, 0.66, 0.6), Color(1.0, 0.92, 0.86), Color(0.68, 0.68, 0.7), Color(0.6, 0.5, 0.46)]
-const SHUTTER := [Color(0.12, 0.25, 0.17), Color(0.1, 0.18, 0.28), Color(0.06, 0.06, 0.06), Color(0.35, 0.12, 0.1)]
+const SHUTTER := [Color(0.12, 0.25, 0.17), Color(0.08, 0.16, 0.11), Color(0.05, 0.055, 0.05), Color(0.16, 0.3, 0.24)]
 
 
 func _building_spec(dist: String, far: float) -> Dictionary:
 	var s := {"style": dist}
 	match dist:
 		"quarter":
-			s["wall"] = "stucco"
-			s["wcol"] = STUCCO[rng.randi() % STUCCO.size()]
+			# faded pastel stucco or old brick townhouses (images 02 and 12)
+			s["wall"] = "stucco" if rng.randf() < 0.65 else "brick"
+			s["wcol"] = STUCCO[rng.randi() % STUCCO.size()] * Color(0.82, 0.8, 0.78) if s["wall"] == "stucco" else BRICK[rng.randi() % 4]
 			s["tcol"] = Color(0.9, 0.88, 0.82)
-			s["floors"] = rng.randi_range(1, 3)
+			s["floors"] = [2, 2, 3, 3, 3, 1][rng.randi() % 6]
 			s["gh"] = 4.4
 			s["fh"] = 3.7
 			s["shutter"] = SHUTTER[rng.randi() % SHUTTER.size()]
@@ -1154,9 +1645,15 @@ func _building(spec: Dictionary) -> float:
 
 	for side in 4:
 		var f := _facade(spec, side)
+		if side == spec.get("alley", -1):
+			_alley_wall(spec, f, H, par)
+			continue
 		if not ext[side]:
 			# party wall: blank, slightly dirtier
 			fq(wall, f, 0, 0, f.w, H + par, 0.0, dirt)
+			continue
+		if style == "quarter":
+			_quarter_facade(spec, f, H, par)
 			continue
 		var n_cols := maxi(1, int(f.w / bay))
 		var margin := (f.w - n_cols * bay) * 0.5
@@ -1166,31 +1663,24 @@ func _building(spec: Dictionary) -> float:
 		_ground_floor(spec, f, gh, wall, wcol, trim, tcol, glass)
 		# belt course
 		fbox(stone, f, -0.05, gh - 0.12, f.w + 0.05, gh + 0.12, 0.0, 0.1, tcol)
-		# upper floors
-		var holes: Array = []
-		for cu in centers:
-			holes.append([cu - ww * 0.5, cu + ww * 0.5])
+		# upper floors: one wall quad per storey, flush glass with a painted frame and a
+		# flat sill/lintel strip in front (no reveals: the window atlas carries the depth)
+		var near: bool = ck == "C"
+		var upper_h := floors * fh
+		fq(wall, f, 0, gh, f.w, gh + upper_h, 0.0, wcol, Vector2.ZERO, Vector2(f.w, upper_h))
 		for fl in floors:
 			var y0 := gh + fl * fh
 			var ya := y0 + sill
 			var yb := ya + wh
-			fq(wall, f, 0, y0, f.w, ya, 0.0, wcol)
-			_wall_row(wall, f, ya, yb, holes, wcol)
-			fq(wall, f, 0, yb, f.w, y0 + fh, 0.0, wcol)
 			for cu in centers:
 				var wuv: Array = _window_uv(style)
-				_opening(f, cu - ww * 0.5, ya, cu + ww * 0.5, yb, depth, wall, wcol * Color(0.85, 0.85, 0.85), glass_f if wuv[1] else glass, wuv[0], style == "quarter")
-				if style == "quarter":
-					var sc: Color = spec.shutter
-					fbox(trim, f, cu - ww * 0.5 - 0.5, ya, cu - ww * 0.5 - 0.04, yb, 0.0, 0.05, sc)
-					fbox(trim, f, cu + ww * 0.5 + 0.04, ya, cu + ww * 0.5 + 0.5, yb, 0.0, 0.05, sc)
-					fbox(stone, f, cu - ww * 0.5 - 0.12, yb, cu + ww * 0.5 + 0.12, yb + 0.22, 0.0, 0.08, tcol)
-				else:
+				fq(glass_f if wuv[1] and ck == "C" else glass, f, cu - ww * 0.5, ya, cu + ww * 0.5, yb, 0.012, Color.WHITE, wuv[0][0], wuv[0][1])
+				if near:
 					fbox(stone, f, cu - ww * 0.5 - 0.1, ya - 0.08, cu + ww * 0.5 + 0.1, ya, 0.0, 0.12, tcol)
-					if style == "midtown" or style == "docks":
-						fbox(stone, f, cu - ww * 0.5 - 0.08, yb, cu + ww * 0.5 + 0.08, yb + 0.2, 0.0, 0.04, tcol)
-			if style == "quarter":
-				_balcony(f, y0, 0.15, f.w - 0.15)
+				else:
+					fq(stone, f, cu - ww * 0.5 - 0.1, ya - 0.1, cu + ww * 0.5 + 0.1, ya, 0.02, tcol)
+				if style == "midtown" or style == "docks":
+					fq(stone, f, cu - ww * 0.5 - 0.08, yb, cu + ww * 0.5 + 0.08, yb + 0.2, 0.02, tcol)
 		if style == "velvet":
 			# Art Deco piers between the window columns
 			for k in n_cols + 1:
@@ -1231,7 +1721,8 @@ func _ground_floor(spec: Dictionary, f: Facade, gh: float, wall: Batch, wcol: Co
 			cell = 3 if rng.randf() < 0.7 else rng.randi() % 3
 		else:
 			cell = rng.randi() % 3 if rng.randf() < 0.8 else 3
-		_opening(f, u0, 0.0, u1, top, 0.3, trim, dark, glass, cell_uv(cell, 4), false)
+		# painted shop interiors (antiques, hoodoo, jazz, cafe) or a closed shutter
+		_opening(f, u0, 0.0, u1, top, 0.3, trim, dark, _b("shop"), shop_uv(cell if cell != 3 else 7), false)
 		if cell != 3 and style != "quarter":
 			# bulkhead under the shop window
 			fq(trim, f, u0, 0.0, u1, 0.55, -0.28, Color(0.15, 0.13, 0.12))
@@ -1251,6 +1742,269 @@ func _ground_floor(spec: Dictionary, f: Facade, gh: float, wall: Batch, wcol: Co
 				neon.t[q] = nuv
 		if cell != 3 and style != "docks" and rng.randf() < 0.6:
 			_awning(awn, f, u0 - 0.1, u1 + 0.1, top + 0.1, rng.randi() % 4)
+
+
+## Old Quarter street front (image 12): lit shopfronts at street level, tall
+## shuttered French windows above and two levels of cast-iron galleries on thin
+## columns over the sidewalk. Windows are flat textured quads; the depth comes
+## from the galleries, which live in visibility-ranged detail chunks.
+func _quarter_facade(spec: Dictionary, f: Facade, H: float, par: float) -> void:
+	var wall := _b(spec.wall)
+	var wcol: Color = spec.wcol
+	var tcol: Color = spec.tcol
+	var trim := _b("trim")
+	var stone := _b("stone")
+	var glass := _b("glass")
+	var glass_f := _b("glass_flicker")
+	var shop := _b("shop")
+	var floors: int = spec.floors
+	var gh: float = spec.gh
+	var fh: float = spec.fh
+	var mid := f.p(f.w * 0.5, 0, 0)
+	# --- street level: shops, doors and boarded bays
+	var n_bays := maxi(1, int(f.w / 2.5))
+	var bw := f.w / n_bays
+	var top := 3.3
+	var holes: Array = []
+	for k in n_bays:
+		holes.append([k * bw + 0.3, (k + 1) * bw - 0.3])
+	_wall_row(wall, f, 0.0, top, holes, wcol * Color(0.85, 0.85, 0.85))
+	fq(wall, f, 0, top, f.w, gh + floors * fh, 0.0, wcol, Vector2.ZERO, Vector2(f.w, gh + floors * fh - top))
+	var dark := Color(0.08, 0.07, 0.06)
+	for h in holes:
+		var u0: float = h[0]
+		var u1: float = h[1]
+		var r := rng.randf()
+		if r < 0.58:
+			# lit shop: a shallow room with glowing walls and a painted interior at the back
+			var cell := rng.randi() % 4
+			var wcell := 5 if cell == 1 or cell == 2 else 4
+			var wuv := shop_uv(wcell)
+			var d := -0.45
+			shop.quad(f.p(u0, 0.0, d), f.p(u0, top, d), f.p(u0, top, 0), f.p(u0, 0.0, 0), f.r, Color.WHITE, wuv[0], wuv[1])
+			shop.quad(f.p(u1, 0.0, 0), f.p(u1, top, 0), f.p(u1, top, d), f.p(u1, 0.0, d), -f.r, Color.WHITE, wuv[0], wuv[1])
+			shop.quad(f.p(u0, top, d), f.p(u0, top, 0), f.p(u1, top, 0), f.p(u1, top, d), Vector3.DOWN, Color(0.6, 0.6, 0.6), wuv[0], wuv[1])
+			var cuv := shop_uv(cell)
+			fq(shop, f, u0, 0.0, u1, top, d, Color.WHITE, cuv[0], cuv[1])
+			trim.quad(f.p(u0, 0.0, 0), f.p(u0, 0.0, d), f.p(u1, 0.0, d), f.p(u1, 0.0, 0), Vector3.UP, dark)
+			# shop window frame: bulkhead, transom bar and two mullions
+			fq(trim, f, u0, 0.0, u1, 0.55, 0.0, Color(0.1, 0.12, 0.1))
+			fq(trim, f, u0, top - 0.75, u1, top - 0.68, 0.01, dark)
+			for t: float in [0.333, 0.667]:
+				var um := lerpf(u0, u1, t)
+				fq(trim, f, um - 0.03, 0.55, um + 0.03, top, 0.01, dark)
+			# warm spill on the wet sidewalk
+			var spill := f.p((u0 + u1) * 0.5, 0, 0.9)
+			_light_pool(spill, 1.7)
+			_wall_glow(f.p((u0 + u1) * 0.5, -1.6, 0.05), f.n, (u1 - u0) + 2.2, 4.4)
+		elif r < 0.78:
+			var duv := shop_uv(6)
+			_opening(f, u0 + 0.2, 0.0, u1 - 0.2, top - 0.2, 0.22, trim, dark, shop, duv, false)
+			fq(wall, f, u0, 0.0, u0 + 0.2, top, 0.0, wcol * Color(0.85, 0.85, 0.85))
+			fq(wall, f, u1 - 0.2, 0.0, u1, top, 0.0, wcol * Color(0.85, 0.85, 0.85))
+			fq(wall, f, u0 + 0.2, top - 0.2, u1 - 0.2, top, 0.0, wcol * Color(0.85, 0.85, 0.85))
+		else:
+			var suv := shop_uv(7)
+			_opening(f, u0, 0.0, u1, top, 0.12, trim, dark, shop, suv, false)
+		fq(stone, f, u0 - 0.12, top, u1 + 0.12, top + 0.22, 0.03, tcol)
+	# --- upper floors: tall French windows with louvred shutters (flat quads)
+	var bay := 2.1
+	var n_cols := maxi(1, int(f.w / bay))
+	var margin := (f.w - n_cols * bay) * 0.5
+	var sc: Color = spec.shutter
+	for fl in floors:
+		var y0 := gh + fl * fh
+		var ya := y0 + 0.12
+		var yb := y0 + fh - 0.75
+		for k in n_cols:
+			var cu := margin + bay * (k + 0.5)
+			var wuv: Array = _window_uv("quarter")
+			fq(glass_f if wuv[1] and ck == "C" else glass, f, cu - 0.52, ya, cu + 0.52, yb, 0.012, Color.WHITE, wuv[0][0], wuv[0][1])
+			var open := rng.randf() < 0.3
+			var sw := 0.5 if not open else 0.42
+			fq(trim, f, cu - 0.54 - sw, ya, cu - 0.54, yb, 0.03, sc)
+			fq(trim, f, cu + 0.54, ya, cu + 0.54 + sw, yb, 0.03, sc)
+			fq(stone, f, cu - 0.66, yb, cu + 0.66, yb + 0.24, 0.035, tcol)
+	# --- parapet and cornice
+	fq(wall, f, 0, H, f.w, H + par, 0.0, wcol)
+	fbox(stone, f, -0.2, H - 0.4, f.w + 0.2, H - 0.1, 0.0, 0.3, tcol)
+	# --- galleries
+	_gallery(spec, f, mini(floors, 2))
+	if rng.randf() < 0.3:
+		sign_spots.append([f, gh, "quarter", mid])
+
+
+const GAL_DEP := 1.95 # galleries reach almost to the kerb (sidewalks are 2.25 m)
+
+
+func _gallery(spec: Dictionary, f: Facade, levels: int) -> void:
+	if levels <= 0:
+		return
+	var gh: float = spec.gh
+	var fh: float = spec.fh
+	var c := f.p(f.w * 0.5, 0, 0)
+	var lace := _bd("lace", c.x, c.z) # lace, columns and ferns share one atlas: one draw per cell
+	var metal := lace
+	var fern := lace
+	var deck := _b("trim")
+	var deck_col := Color(0.3, 0.27, 0.22)
+	var iron := Color(0.035, 0.035, 0.035)
+	var D := GAL_DEP
+	var roof_y := gh + levels * fh - 0.2
+	for k in levels + 1:
+		var y := gh + k * fh if k < levels else roof_y
+		# deck (or the roof over the top gallery)
+		fbox(deck, f, 0.0, y - 0.14, f.w, y, 0.0, D, deck_col)
+		# scalloped lace frieze under the front edge
+		lace.quad(f.p(0, y - 0.6, D - 0.03), f.p(0, y - 0.14, D - 0.03), f.p(f.w, y - 0.14, D - 0.03), f.p(f.w, y - 0.6, D - 0.03),
+			f.n, Color.WHITE, Vector2(0, 0.25), Vector2(f.w * 0.5, 0.34))
+		if k == levels:
+			break
+		# railing on the front and both ends, with a handrail
+		var rh := 1.05
+		lace.quad(f.p(0, y, D - 0.05), f.p(0, y + rh, D - 0.05), f.p(f.w, y + rh, D - 0.05), f.p(f.w, y, D - 0.05), f.n, Color.WHITE, Vector2(0, 0), Vector2(f.w * 0.5, 0.25))
+		lace.quad(f.p(0.02, y, 0.0), f.p(0.02, y + rh, 0.0), f.p(0.02, y + rh, D - 0.05), f.p(0.02, y, D - 0.05), -f.r, Color.WHITE, Vector2(0, 0), Vector2(D * 0.5, 0.25))
+		lace.quad(f.p(f.w - 0.02, y, D - 0.05), f.p(f.w - 0.02, y + rh, D - 0.05), f.p(f.w - 0.02, y + rh, 0.0), f.p(f.w - 0.02, y, 0.0), f.r, Color.WHITE, Vector2(0, 0), Vector2(D * 0.5, 0.25))
+		var k0 := lace.v.size()
+		fbox(metal, f, 0.0, y + rh - 0.02, f.w, y + rh + 0.04, D - 0.09, D - 0.01, Color.WHITE, true)
+		_solid_uv(lace, k0)
+	# thin cast-iron columns at the kerb edge (none where a street lamp stands)
+	var bc: Vector2 = spec.bc
+	var n_col := maxi(2, int(roundf(f.w / 2.6)) + 1)
+	var cols: Array = []
+	for k in n_col:
+		var u := lerpf(0.1, f.w - 0.1, float(k) / (n_col - 1))
+		var wp := f.p(u, 0, D - 0.1)
+		var along := wp.x - bc.x if absf(f.n.z) > 0.5 else wp.z - bc.y
+		if absf(along) < 0.6:
+			continue
+		cols.append(u)
+		var k1 := lace.v.size()
+		fbox(metal, f, u - 0.05, 0.0, u + 0.05, roof_y - 0.14, D - 0.15, D - 0.05, Color.WHITE, false)
+		_solid_uv(lace, k1)
+	# hanging ferns in baskets between the columns
+	for k in levels:
+		var y := gh + (k + 1) * fh - 0.14 if k + 1 < levels else roof_y - 0.14
+		for j in cols.size() - 1:
+			if rng.randf() < 0.45:
+				continue
+			var u: float = (cols[j] + cols[j + 1]) * 0.5 + rng.randf_range(-0.3, 0.3)
+			var top := f.p(u, y, D - 0.45)
+			var g := rng.randf_range(0.75, 1.15)
+			var fc := Color(g, g * rng.randf_range(0.95, 1.1), g * 0.9)
+			var k2 := lace.v.size()
+			beam(metal, top, top - Vector3(0, 0.25, 0), 0.015, 0.015, Color.WHITE)
+			_solid_uv(lace, k2)
+			var s := rng.randf_range(0.85, 1.15)
+			for q in 2:
+				var a := q * PI * 0.5 + rng.randf() * 0.4
+				var rv := Vector3(cos(a), 0, sin(a)) * 0.55 * s
+				var t := top - Vector3(0, 0.15, 0)
+				var bot := t - Vector3(0, 1.1 * s, 0)
+				fern.quad(bot - rv, t - rv, t + rv, bot + rv, Vector3(-sin(a), 0, cos(a)), fc, Vector2(0, 0.5), Vector2(1, 1))
+	# potted ferns on the lowest gallery rail
+	var y1 := gh
+	for j in int(f.w / 3.0):
+		if rng.randf() < 0.5:
+			continue
+		var p := f.p(rng.randf_range(0.5, f.w - 0.5), y1 + 0.95, D - 0.25)
+		var fc := Color(0.9, 1.0, 0.85)
+		for q in 2:
+			var a := q * PI * 0.5 + 0.4
+			var rv := Vector3(cos(a), 0, sin(a)) * 0.5
+			fern.quad(p - rv - Vector3(0, 0.9, 0), p - rv + Vector3(0, 0.15, 0), p + rv + Vector3(0, 0.15, 0), p + rv - Vector3(0, 0.9, 0), Vector3(-sin(a), 0, cos(a)), fc, Vector2(0, 0.5), Vector2(1, 1))
+
+
+## Points the vertices added since k0 at a solid-iron texel of the lace atlas.
+static func _solid_uv(bt: Batch, k0: int) -> void:
+	for q in range(k0, bt.t.size()):
+		bt.t[q] = Vector2(0.5, 0.004)
+
+
+## A back-alley wall (image 04): bare brick, small grimy windows, a zig-zag fire
+## escape on one side; a steel door under a caged bulb, AC units, posters, a
+## drainpipe, dumpsters and bags on the other.
+func _alley_wall(spec: Dictionary, f: Facade, H: float, par: float) -> void:
+	var wall := _b(spec.wall)
+	var wcol: Color = spec.wcol * Color(0.72, 0.68, 0.64)
+	var floors: int = spec.floors
+	var gh: float = spec.gh
+	var fh: float = spec.fh
+	var c := f.p(f.w * 0.5, 0, 0)
+	var save := ck
+	fq(wall, f, 0, 0, f.w, H + par, 0.0, wcol)
+	var glass := _b("glass")
+	var stone := _b("stone")
+	var n_cols := maxi(1, int(f.w / 2.2))
+	var margin := (f.w - n_cols * 2.2) * 0.5
+	for fl in floors:
+		var ya := gh + fl * fh + 0.9
+		for k in n_cols:
+			var cu := margin + 2.2 * (k + 0.5)
+			var uv := cell_uv(rng.randi() % 4, 2 if rng.randf() < 0.18 else rng.randi() % 2)
+			fq(glass, f, cu - 0.45, ya, cu + 0.45, ya + 1.5, 0.01, Color.WHITE, uv[0], uv[1])
+			fq(stone, f, cu - 0.55, ya - 0.1, cu + 0.55, ya, 0.02, Color(0.45, 0.43, 0.4))
+	var first: bool = spec.alley == 2 or spec.alley == 0
+	var metal := _b("metal")
+	var rust := Color(0.22, 0.12, 0.07)
+	if first:
+		if floors >= 1 and f.w > 2.5:
+			_fire_escape(f, f.w * 0.5, gh, fh, maxi(floors, 2), 0.9, 1.6)
+		if rng.randf() < 0.5 and absf(c.x) < 70.0 and absf(c.z) < 70.0:
+			var nk := 0 if rng.randf() < 0.7 else 2
+			_blade_sign(f, f.w - 0.35, gh + 0.4, ["HOTEL", "BAR", "ROOMS"][rng.randi() % 3], nk)
+		return
+	# steel door with a caged bulb over it
+	var du := clampf(f.w * 0.3, 0.7, f.w - 0.7)
+	fq(_b("trim"), f, du - 0.5, 0.0, du + 0.5, 2.2, 0.02, rust)
+	fq(_b("trim"), f, du - 0.6, 2.2, du + 0.6, 2.3, 0.03, Color(0.1, 0.09, 0.08))
+	var bulb := f.p(du, 2.65, 0.32)
+	box(_b("lamp"), bulb, Vector3(0.14, 0.2, 0.14), Color.WHITE)
+	for s in 4:
+		var a := s * PI * 0.5 + PI * 0.25
+		var o := Vector3(cos(a), 0, sin(a)) * 0.1
+		beam(metal, bulb + o + Vector3(0, -0.13, 0), bulb + o + Vector3(0, 0.13, 0), 0.015, 0.015, Color(0.05, 0.05, 0.05))
+	beam(metal, f.p(du, 2.8, 0.0), bulb + Vector3(0, 0.12, 0), 0.03, 0.03, Color(0.05, 0.05, 0.05))
+	halo_xfs.append(Transform3D(Basis().scaled(Vector3(0.8, 0.8, 0.8)), bulb))
+	_light_pool(f.p(du, 0, 0.9), 2.2)
+	_wall_glow(f.p(du, -0.6, 0.03), f.n, 4.0, 4.5)
+	# wall AC units dripping onto the bricks
+	for k in mini(floors, 2):
+		var au := rng.randf_range(0.6, f.w - 0.6)
+		var ay := gh + k * fh + 0.4
+		fbox(metal, f, au - 0.35, ay, au + 0.35, ay + 0.5, 0.0, 0.55, Color(0.42, 0.42, 0.4), true)
+		fq(metal, f, au - 0.28, ay + 0.06, au + 0.28, ay + 0.44, 0.56, Color(0.08, 0.08, 0.08))
+	# torn posters
+	for k in rng.randi_range(1, 3):
+		var pu := rng.randf_range(0.3, f.w - 0.9)
+		var py := rng.randf_range(0.8, 1.4)
+		var g := rng.randf_range(0.45, 0.75)
+		fq(_b("paint"), f, pu, py, pu + rng.randf_range(0.45, 0.7), py + rng.randf_range(0.6, 0.9), 0.015, Color(g, g * 0.92, g * 0.8))
+	# drainpipe
+	var pu2 := f.w - 0.25
+	beam(metal, f.p(pu2, 0.0, 0.12), f.p(pu2, H, 0.12), 0.1, 0.1, Color(0.15, 0.13, 0.12))
+	# dumpster and bags against the wall
+	var yaw := atan2(f.r.x, f.r.z)
+	var dp := f.p(clampf(du + 1.6, 1.0, f.w - 0.6), WALK_TOP, 0.62)
+	_add_prop("alley_dumpster", Transform3D(Basis(Vector3.UP, yaw + PI * 0.5 + rng.randf_range(-0.08, 0.08)), dp), Color(0.13, 0.24, 0.14))
+	for k in rng.randi_range(2, 4):
+		_trash(dp + f.r * rng.randf_range(-1.6, 1.6) + f.n * rng.randf_range(-0.2, 0.4))
+	if rng.randf() < 0.35 and absf(c.x) < 60.0 and absf(c.z) < 60.0:
+		_steam(f.p(rng.randf_range(0.5, f.w - 0.5), 0.1, 1.0))
+
+
+## Wet asphalt floor of a back alley, with oily puddles.
+func _alley_floor(c: Vector3, along: Vector3, w: float, length: float) -> void:
+	var across := Vector3.UP.cross(along)
+	var a := c - along * length * 0.5
+	var b := c + along * length * 0.5
+	var y := Vector3(0, WALK_TOP + 0.004, 0)
+	var bt := _b("cobble_fan" if _district(c.x, c.z) == "quarter" else "sidewalk")
+	var hw := across * w * 0.5
+	bt.quad(a - hw + y, a + hw + y, b + hw + y, b - hw + y, Vector3.UP, Color(0.42, 0.4, 0.38))
+	for k in rng.randi_range(1, 3):
+		_puddle(c + along * rng.randf_range(-length * 0.4, length * 0.4) + across * rng.randf_range(-0.6, 0.6) + Vector3(0, WALK_TOP + 0.008, 0), rng.randf_range(0.5, 1.0))
+	alleys.append([c, along])
 
 
 func _awning(bt: Batch, f: Facade, u0: float, u1: float, y: float, row: int) -> void:
@@ -1496,10 +2250,10 @@ func _blade_sign(f: Facade, u: float, y0: float, word: String, nk: int) -> void:
 func _build_plaza() -> void:
 	ck = "C"
 	var e := GRID - ROAD_HALF
-	var h := 1.9
-	var cob := _b("cobble")
+	var h := PIT_HOLE
+	var cob := _b("cobble_fan")
 	var y := WALK_TOP
-	var col := Color(0.95, 0.92, 0.88)
+	var col := Color(0.66, 0.6, 0.53)
 	for r in [[-e, -e, e, -h], [-e, h, e, e], [-e, -h, -h, h], [h, -h, e, h]]:
 		cob.quad(Vector3(r[0], y, r[3]), Vector3(r[0], y, r[1]), Vector3(r[2], y, r[1]), Vector3(r[2], y, r[3]), Vector3.UP, col)
 	# kerb all round
@@ -1512,12 +2266,12 @@ func _build_plaza() -> void:
 		k.quad(a, a + Vector3(0, y, 0), b + Vector3(0, y, 0), b, s[2], kc)
 	# a ring of granite paving around the Undercroft
 	var st := _b("stone")
-	for s in 24:
-		var a0 := TAU * s / 24.0
-		var a1 := TAU * (s + 1) / 24.0
-		var p := [Vector3(cos(a0) * 2.9, y + 0.006, sin(a0) * 2.9), Vector3(cos(a0) * 5.5, y + 0.006, sin(a0) * 5.5),
-			Vector3(cos(a1) * 5.5, y + 0.006, sin(a1) * 5.5), Vector3(cos(a1) * 2.9, y + 0.006, sin(a1) * 2.9)]
-		st.quad(p[0], p[1], p[2], p[3], Vector3.UP, Color(0.7, 0.68, 0.64))
+	for s in 32:
+		var a0 := TAU * s / 32.0
+		var a1 := TAU * (s + 1) / 32.0
+		var p := [Vector3(cos(a0) * PIT_R, y + 0.006, sin(a0) * PIT_R), Vector3(cos(a0) * 4.8, y + 0.006, sin(a0) * 4.8),
+			Vector3(cos(a1) * 4.8, y + 0.006, sin(a1) * 4.8), Vector3(cos(a1) * PIT_R, y + 0.006, sin(a1) * PIT_R)]
+		st.quad(p[0], p[1], p[2], p[3], Vector3.UP, Color(0.5, 0.48, 0.45))
 	# benches facing the Undercroft
 	var m := _b("metal")
 	var wood := Color(0.24, 0.16, 0.1)
@@ -1531,17 +2285,23 @@ func _build_plaza() -> void:
 		box(m, c + Vector3(0, 0.75, 0) - fwd * 0.22, Vector3(1.8, 0.4, 0.05), wood, basis * Basis(Vector3.RIGHT, -0.2))
 		for sx: float in [-0.8, 0.8]:
 			box(m, c + right * sx + Vector3(0, 0.22, 0), Vector3(0.06, 0.45, 0.5), Color(0.04, 0.04, 0.04), basis)
-	# live oaks at the corners
+	# palms by the cathedral (image 02), live oaks on the south side
 	for sx: float in [-1.0, 1.0]:
-		for sz: float in [-1.0, 1.0]:
-			_tree(Vector3(sx * 12.5, y, sz * 12.5))
-	# ornate plaza lamps (these six carry real lights)
+		_palm(Vector3(sx * 12.5, y, -12.5))
+		_tree(Vector3(sx * 12.5, y, 12.5))
+	# a steaming grate and standing water on the flagstones (image 01)
+	var grate := Vector3(7.2, y + 0.008, 6.4)
+	box(_b("metal"), grate, Vector3(1.4, 0.02, 0.9), Color(0.05, 0.05, 0.05), Basis(Vector3.UP, 0.5))
+	_steam(grate)
+	for q in [[-5.5, 8.0, 1.6], [4.0, 10.5, 1.2], [-9.5, -3.0, 1.4], [8.5, -6.0, 1.0], [0.5, 12.5, 1.1], [-3.0, -10.0, 1.3]]:
+		_puddle(Vector3(q[0], y + 0.009, q[1]), q[2])
+	# lantern lamps around the square (these six carry real lights)
 	for kk in range(6):
 		var a := kk * TAU / 6.0 + 0.5
-		var p := Vector3(cos(a) * 15.0, 0, sin(a) * 15.0)
+		var p := Vector3(cos(a) * 15.0, y, sin(a) * 15.0)
 		_ornate_lamp(p)
 		var l := OmniLight3D.new()
-		l.position = p + Vector3(0, 4.3, 0)
+		l.position = p + Vector3(0, LANTERN_Y * 1.2, 0)
 		l.omni_range = 13.0
 		l.light_color = Color(1, 0.75, 0.45)
 		add_child(l)
@@ -1549,15 +2309,44 @@ func _build_plaza() -> void:
 
 
 func _ornate_lamp(p: Vector3) -> void:
+	_lantern_post(_b("metal"), _b("lamp"), p, 1.2)
+	lamp_positions.append(p + Vector3(0, LANTERN_Y * 1.2, 0))
+	halo_xfs.append(Transform3D(Basis().scaled(Vector3(1.2, 1.2, 1.2)), p + Vector3(0, LANTERN_Y * 1.2, 0)))
+	_light_pool(p, 4.5)
+
+
+## Cabbage palm: a leaning ringed trunk and a crown of drooping fronds (alpha cards).
+func _palm(p: Vector3) -> void:
 	var m := _b("metal")
-	var black := Color(0.04, 0.04, 0.045)
-	cyl(m, p, 0.22, 0.18, 0.5, 8, black)
-	cyl(m, p + Vector3(0, 0.5, 0), 0.09, 0.07, 3.6, 8, black, false)
-	cyl(m, p + Vector3(0, 4.1, 0), 0.16, 0.22, 0.12, 8, black)
-	var lamp := _b("lamp")
-	cyl(lamp, p + Vector3(0, 4.22, 0), 0.17, 0.24, 0.55, 6, Color.WHITE)
-	cyl(m, p + Vector3(0, 4.77, 0), 0.3, 0.05, 0.3, 6, black)
-	lamp_positions.append(p + Vector3(0, 4.5, 0))
+	var bark := Color(0.32, 0.27, 0.22)
+	var lean := Vector3(rng.randf_range(-0.4, 0.4), 0, rng.randf_range(-0.4, 0.4))
+	var prev := p
+	var h := 8.5
+	for k in 6:
+		var t := (k + 1) / 6.0
+		var q := p + Vector3(0, h * t, 0) + lean * t * t * 1.5
+		cyl(m, prev, 0.26 - k * 0.02, 0.24 - k * 0.02, prev.distance_to(q), 6, bark * (0.9 + 0.1 * (k % 2)), false)
+		prev = q
+	var lv := _b("lace")
+	var top := prev
+	for k in 9:
+		var a := k * TAU / 9.0 + rng.randf() * 0.3
+		var d := Vector3(cos(a), 0, sin(a))
+		var side := Vector3(-d.z, 0, d.x) * 0.55
+		var tip := top + d * 3.0 + Vector3(0, -1.6, 0)
+		var midp := top + d * 1.6 + Vector3(0, 0.3, 0)
+		lv.quad(top - side * 0.3, midp - side, midp + side, top + side * 0.3, Vector3.UP, Color(1.0, 1.0, 0.8), Vector2(0, 0.5), Vector2(1, 0.75))
+		lv.quad(midp - side, tip - side * 0.4, tip + side * 0.4, midp + side, Vector3.UP, Color(1.0, 1.0, 0.8), Vector2(0, 0.75), Vector2(1, 1))
+	var body := StaticBody3D.new()
+	body.position = p
+	collider_root.add_child(body)
+	var cs := CollisionShape3D.new()
+	var sh := CylinderShape3D.new()
+	sh.radius = 0.4
+	sh.height = 3.0
+	cs.shape = sh
+	cs.position.y = 1.5
+	body.add_child(cs)
 
 
 func _tree(p: Vector3) -> void:
@@ -1602,8 +2391,8 @@ func _foliage(bt: Batch, c: Vector3, r: float) -> void:
 func _build_cathedral() -> void:
 	ck = "C"
 	var st := _b("stone")
-	var sc := Color(0.78, 0.76, 0.72)
-	var dark := Color(0.5, 0.48, 0.46)
+	var sc := Color(0.8, 0.75, 0.66)
+	var dark := Color(0.5, 0.47, 0.42)
 	var zf := -GRID - FACADE # facade plane, z = -26
 	var zb := zf - 2.0 * LOT # back, z = -34
 	var tower_h := 27.0
@@ -1628,10 +2417,25 @@ func _build_cathedral() -> void:
 					box(st, Vector3(bx, bh * 0.5, bz), Vector3(bw, bh, bw), sc * Color(0.95, 0.95, 0.95), Basis.IDENTITY, 8)
 				# pinnacle
 				cyl(st, Vector3(bx, tower_h, bz), 0.5, 0.0, 3.2, 4, sc)
-		# octagonal spire
-		cyl(st, Vector3(cx, tower_h + 5.0, (zf + zb) * 0.5), 2.6, 0.0, 12.0, 8, Color(0.42, 0.42, 0.44))
-		cyl(_b("metal"), Vector3(cx, tower_h + 17.0, (zf + zb) * 0.5), 0.05, 0.05, 1.6, 4, Color(0.1, 0.1, 0.1))
-		box(_b("metal"), Vector3(cx, tower_h + 18.1, (zf + zb) * 0.5), Vector3(0.8, 0.06, 0.06), Color(0.1, 0.1, 0.1))
+		# octagonal spire ringed by four pinnacles, belfry lancets below
+		var sp := Vector3(cx, tower_h + 5.0, (zf + zb) * 0.5)
+		cyl(st, sp, 2.7, 0.0, 16.0, 8, Color(0.46, 0.45, 0.45))
+		for k in 4:
+			var a := k * PI * 0.5 + PI * 0.25
+			var pp := sp + Vector3(cos(a), 0, sin(a)) * 2.9
+			cyl(st, pp - Vector3(0, 0.6, 0), 0.4, 0.4, 1.4, 4, sc, false, Basis(Vector3.UP, PI * 0.25))
+			cyl(st, pp + Vector3(0, 0.8, 0), 0.45, 0.0, 4.0, 4, sc, true, Basis(Vector3.UP, PI * 0.25))
+		var bf := Facade.new()
+		bf.o = Vector3(lo + 1.1, 0, zf - 1.1)
+		bf.r = Vector3(1, 0, 0)
+		bf.n = Vector3(0, 0, 1)
+		bf.w = hi - lo - 2.2
+		for k in 2:
+			var bu := bf.w * (0.3 + 0.4 * k)
+			fq(_b("trim"), bf, bu - 0.45, tower_h + 0.6, bu + 0.45, tower_h + 3.6, 0.02, Color(0.05, 0.05, 0.06))
+			_pointed_arch(st, bf, bu, 0.55, tower_h + 3.6, 0.18, 0.12, sc, 0.2)
+		cyl(_b("metal"), sp + Vector3(0, 16.0, 0), 0.05, 0.05, 1.6, 4, Color(0.1, 0.1, 0.1))
+		box(_b("metal"), sp + Vector3(0, 17.1, 0), Vector3(0.8, 0.06, 0.06), Color(0.1, 0.1, 0.1))
 		# portal: recessed pointed-arch door with stepped archivolts
 		var f := Facade.new()
 		f.o = Vector3(lo + 0.3, 0, zf - 0.3)
@@ -1639,25 +2443,58 @@ func _build_cathedral() -> void:
 		f.n = Vector3(0, 0, 1)
 		f.w = hi - lo - 0.6
 		var pc := f.w * 0.5
+		# a gabled porch with stepped archivolts, statues and broad steps up to the doors
+		var PD := 1.4
+		var pw := 2.0
+		var pcol := sc * Color(0.9, 0.9, 0.9)
+		fbox(st, f, pc - pw - 0.7, 0.0, pc - pw, 5.6, 0.0, PD, pcol, false)
+		fbox(st, f, pc + pw, 0.0, pc + pw + 0.7, 5.6, 0.0, PD, pcol, false)
 		for ring in 3:
-			var hw := 1.5 - ring * 0.25
-			_pointed_arch(st, f, pc, hw, 3.2, 0.25, 0.2 - ring * 0.12, sc * Color(0.9, 0.9, 0.9))
-		fq(_b("trim"), f, pc - 1.0, 0.0, pc + 1.0, 3.0, -0.1, Color(0.16, 0.09, 0.06))
-		_lancet(f, pc, 3.9, 1.2, 0.5, 1.6) # tympanum glow
+			_pointed_arch(st, f, pc, pw - 0.1 - ring * 0.3, 3.4, 0.28, PD - ring * 0.4, pcol, 0.4)
+		for i in 3:
+			fbox(st, f, pc - pw, 0.0, pc + pw, 0.15 * (i + 1), 0.0, PD - i * 0.45, dark, false)
+		fq(_b("trim"), f, pc - 1.0, 0.45, pc + 1.0, 3.3, -0.1, Color(0.16, 0.09, 0.06))
+		_lancet(f, pc, 4.4, 1.0, 0.5, 1.1) # glow in the tympanum
+		var gab_l := f.p(pc - pw - 0.8, 5.6, PD)
+		var gab_r := f.p(pc + pw + 0.8, 5.6, PD)
+		var gab_t := f.p(pc, 9.6, PD)
+		st.tri(gab_l, gab_t, gab_r, f.n, pcol)
+		_b("concrete").quad(gab_l + Vector3(0, 0, -PD), gab_t + Vector3(0, 0, -PD), gab_t, gab_l, (f.r * -4.0 + Vector3.UP * 2.8).normalized(), Color(0.3, 0.3, 0.33))
+		_b("concrete").quad(gab_r, gab_t, gab_t + Vector3(0, 0, -PD), gab_r + Vector3(0, 0, -PD), (f.r * 4.0 + Vector3.UP * 2.8).normalized(), Color(0.3, 0.3, 0.33))
+		cyl(st, gab_t, 0.25, 0.0, 1.4, 4, pcol)
+		for sd: float in [-1.0, 1.0]:
+			cyl(st, f.p(pc + sd * (pw + 0.35), 5.6, PD - 0.35), 0.32, 0.0, 2.2, 4, pcol)
+			# jamb saints inside the porch and one on each pier front
+			for k in 2:
+				_statue(st, f.p(pc + sd * (pw - 0.25), 0.45 + 0.15 * (1 - k), 0.35 + k * 0.6), 1.55, sc * Color(0.85, 0.85, 0.82))
+			box(st, f.p(pc + sd * (pw + 0.35), 2.35, PD + 0.12), Vector3(0.5, 0.15, 0.3), pcol)
+			_statue(st, f.p(pc + sd * (pw + 0.35), 2.42, PD + 0.12), 1.5, sc * Color(0.85, 0.85, 0.82))
+		for k in 5:
+			_statue(st, f.p(pc - 0.9 + k * 0.45, 3.35, 0.08), 0.85, sc * Color(0.8, 0.8, 0.78))
+		var porch := CollisionShape3D.new()
+		var porch_shape := BoxShape3D.new()
+		porch_shape.size = Vector3(2.0 * pw + 1.4, 5.6, PD - 0.3)
+		porch.shape = porch_shape
+		porch.position = Vector3(cx, 2.8, zf + (PD - 0.3) * 0.5)
+		body.add_child(porch)
 		# tall lancet windows up the tower
 		for row in 2:
-			var y := 9.0 + row * 8.0
+			var y := 11.0 + row * 7.5
 			for k in 2:
-				_lancet(f, pc + (k - 0.5) * 2.2, y, 0.8, 5.0, 1.2)
+				_lancet(f, pc + (k - 0.5) * 2.4, y, 1.15, 5.0, 1.5)
 		# string courses
-		for y: float in [7.5, 15.5, 23.5]:
+		for y: float in [10.2, 18.0, 25.5]:
 			fbox(st, f, -0.3, y, f.w + 0.3, y + 0.35, 0.0, 0.25, dark)
+		lots.append(Rect2(lo, zb, hi - lo, zf - zb))
 		var cs := CollisionShape3D.new()
 		var shape := BoxShape3D.new()
 		shape.size = Vector3(hi - lo, tower_h, zf - zb)
 		cs.shape = shape
 		cs.position = Vector3(cx, tower_h * 0.5, (zf + zb) * 0.5)
 		body.add_child(cs)
+	# warm light from the plaza lamps washing the west front
+	for gx: float in [-10.0, 0.0, 10.0]:
+		_wall_glow(Vector3(gx, 0.0, zf + (1.2 if gx != 0.0 else 0.1)), Vector3(0, 0, 1), 9.0, 11.0)
 	# central screen over the street: great arch, rose window, gable
 	var f := Facade.new()
 	f.o = Vector3(-FACADE, 0, zf)
@@ -1684,24 +2521,36 @@ func _build_cathedral() -> void:
 	c.quad(ridge_l + back, apex + back, apex, ridge_l, (Vector3(-7.0, 6.5, 0)).normalized(), roof)
 	c.quad(ridge_r, apex, apex + back, ridge_r + back, (Vector3(7.0, 6.5, 0)).normalized(), roof)
 	fbox(st, f, 0.0, arch_y + 2.4, f.w, top, -8.0, -7.0, sc, false)
-	# rose window
-	var rose := f.p(f.w * 0.5, 16.0, 0.05)
+	# great rose window: leaded glass disc with a carved stone rim
+	var rose := f.p(f.w * 0.5, 15.6, 0.06)
 	var sg := _b("stained")
-	for s in 16:
-		var a0 := TAU * s / 16.0
-		var a1 := TAU * (s + 1) / 16.0
-		var p0 := rose + (Vector3(cos(a0), sin(a0), 0)) * 3.2
-		var p1 := rose + (Vector3(cos(a1), sin(a1), 0)) * 3.2
-		var uvc := neon_uv([0, 7, 3, 4, 7, 2, 1, 4][s % 8])
-		sg.tri(rose, p0, p1, Vector3(0, 0, 1), Color.WHITE, uvc, uvc, uvc)
-		# tracery spokes and rim
-		beam(st, rose + Vector3(0, 0, 0.05), rose + Vector3(cos(a0), sin(a0), 0) * 3.2 + Vector3(0, 0, 0.05), 0.12, 0.12, sc, Vector3(0, 0, 1))
-		beam(st, p0 + Vector3(0, 0, 0.05), p1 + Vector3(0, 0, 0.05), 0.35, 0.3, sc, Vector3(0, 0, 1))
-	cyl(st, rose, 0.5, 0.5, 0.25, 12, sc, true, Basis(Vector3.RIGHT, Vector3(0, 0, 1), Vector3(0, -1, 0)))
-	# a row of blind arcading under the rose
-	for k in 7:
-		var u := 1.6 + k * 1.47
-		_pointed_arch(st, f, u, 0.45, 11.0, 0.1, 0.12, dark, 1.6)
+	var RR := 4.3
+	for s in 32:
+		var a0 := TAU * s / 32.0
+		var a1 := TAU * (s + 1) / 32.0
+		var p0 := rose + Vector3(cos(a0), sin(a0), 0) * RR
+		var p1 := rose + Vector3(cos(a1), sin(a1), 0) * RR
+		# atlas left half: u 0..0.5, v 0..1 (image y runs down)
+		sg.tri(rose, p0, p1, Vector3(0, 0, 1), Color.WHITE, Vector2(0.25, 0.5),
+			Vector2(0.25 + cos(a0) * 0.245, 0.5 - sin(a0) * 0.49), Vector2(0.25 + cos(a1) * 0.245, 0.5 - sin(a1) * 0.49))
+		if s % 2 == 0:
+			var q0 := rose + Vector3(cos(a0), sin(a0), 0) * (RR + 0.25) + Vector3(0, 0, 0.12)
+			var q1 := rose + Vector3(cos(TAU * (s + 2) / 32.0), sin(TAU * (s + 2) / 32.0), 0) * (RR + 0.25) + Vector3(0, 0, 0.12)
+			beam(st, q0, q1, 0.55, 0.35, sc, Vector3(0, 0, 1))
+	# a square frame with carved spandrels around the rose
+	fbox(st, f, f.w * 0.5 - RR - 0.9, 15.6 - RR - 0.9, f.w * 0.5 + RR + 0.9, 15.6 - RR - 0.5, 0.0, 0.3, sc, false)
+	fbox(st, f, f.w * 0.5 - RR - 0.9, 15.6 + RR + 0.5, f.w * 0.5 + RR + 0.9, 15.6 + RR + 0.9, 0.0, 0.3, sc, false)
+	# pinnacled gable crown over the screen
+	for sd: float in [-1.0, 1.0]:
+		cyl(st, f.p(f.w * 0.5 + sd * (f.w * 0.5 + 0.2), top, 0.0), 0.45, 0.0, 4.5, 4, sc)
+	cyl(st, f.p(f.w * 0.5, top + 7.0, -0.3), 0.35, 0.0, 2.5, 4, sc)
+
+
+## Simple carved saint: robed body, shoulders and head.
+static func _statue(bt: Batch, base: Vector3, h: float, col: Color) -> void:
+	cyl(bt, base, 0.2 * h / 1.5, 0.13 * h / 1.5, h * 0.78, 6, col)
+	cyl(bt, base + Vector3(0, h * 0.78, 0), 0.13 * h / 1.5, 0.08 * h / 1.5, h * 0.08, 6, col)
+	cyl(bt, base + Vector3(0, h * 0.86, 0), 0.075 * h / 1.5, 0.06 * h / 1.5, h * 0.14, 5, col)
 
 
 ## Pointed (two-centred) arch of voussoir blocks springing at y, half-width hw.
@@ -1726,14 +2575,17 @@ func _pointed_arch(bt: Batch, f: Facade, cu: float, hw: float, y: float, thick: 
 		fbox(bt, f, cu + side * hw - thick * 0.5, 0.0, cu + side * hw + thick * 0.5, y, d - depth, d, col, false)
 
 
-## Lancet window: glass rectangle with a pointed head, glowing at night.
+## Lancet window: leaded glass with a pointed head, glowing amber at night.
 func _lancet(f: Facade, cu: float, y: float, w: float, h: float, head: float) -> void:
 	var sg := _b("stained")
-	var uv := neon_uv([7, 0, 4, 2][rng.randi() % 4])
+	var cell := rng.randi() % 2
+	var ua := 0.5 + cell * 0.25 + 0.003
+	var ub := 0.75 + cell * 0.25 - 0.003
+	var vh := head / (h + head)
 	var u0 := cu - w * 0.5
 	var u1 := cu + w * 0.5
-	sg.quad(f.p(u0, y, 0.04), f.p(u0, y + h, 0.04), f.p(u1, y + h, 0.04), f.p(u1, y, 0.04), f.n, Color.WHITE, uv, uv)
-	sg.tri(f.p(u0, y + h, 0.04), f.p(cu, y + h + head, 0.04), f.p(u1, y + h, 0.04), f.n, Color.WHITE, uv, uv, uv)
+	sg.quad(f.p(u0, y, 0.04), f.p(u0, y + h, 0.04), f.p(u1, y + h, 0.04), f.p(u1, y, 0.04), f.n, Color.WHITE, Vector2(ua, vh), Vector2(ub, 0.99))
+	sg.tri(f.p(u0, y + h, 0.04), f.p(cu, y + h + head, 0.04), f.p(u1, y + h, 0.04), f.n, Color.WHITE, Vector2(ua, vh), Vector2((ua + ub) * 0.5, 0.0), Vector2(ub, vh))
 	var st := _b("stone")
 	var sc := Color(0.7, 0.68, 0.64)
 	fbox(st, f, cu - 0.05, y, cu + 0.05, y + h, 0.04, 0.12, sc, false)
@@ -1769,14 +2621,18 @@ func _build_streets() -> void:
 				# double yellow centre line between the crosswalks
 				for off: float in [-0.12, 0.12]:
 					_strip(paint, base + across * off + along * 6.6, base + across * off + along * (GRID - 6.6), 0.1, yellow)
-				# zebra crossings and stop lines at both ends
+				# cobbled crosswalks (pale bands of granite setts, image 12) and stop lines
+				var setts := _b("stone")
 				for end: float in [0.0, 1.0]:
 					var e0 := base + along * (GRID * end)
 					var sgn := 1.0 if end == 0.0 else -1.0
-					var k := -ROAD_HALF + 0.35
+					var c0 := e0 + along * sgn * 3.9 + Vector3(0, 0.002, 0)
+					var c1 := e0 + along * sgn * 6.1 + Vector3(0, 0.002, 0)
+					_strip(setts, c0, c1, ROAD_HALF * 2.0, Color(0.42, 0.41, 0.39))
+					var k := -ROAD_HALF + 0.3
 					while k < ROAD_HALF - 0.3:
-						_strip(paint, e0 + across * k + along * sgn * 4.0, e0 + across * k + along * sgn * 6.0, 0.4, white)
-						k += 0.85
+						_strip(setts, c0 + across * (k + 0.25) + Vector3(0, 0.003, 0), c1 + across * (k + 0.25) + Vector3(0, 0.003, 0), 0.5, Color(1.0, 0.98, 0.94))
+						k += 1.0
 					var stop_side := -1.0 if end == 0.0 else 1.0
 					_strip(paint, e0 + along * sgn * 6.4 + across * stop_side * 0.2, e0 + along * sgn * 6.4 + across * stop_side * (ROAD_HALF - 0.2), 0.0, white, 0.3)
 				# manhole, sometimes steaming
@@ -1799,12 +2655,15 @@ func _build_streets() -> void:
 				# street lamps on one kerb
 				if absf(s) <= lim:
 					var lside := 1.0 if (a + b) % 2 == 0 else -1.0
-					var lp := Vector3(px, 0.0, pz) + across * lside * (ROAD_HALF + 0.45)
+					var lp := Vector3(px, WALK_TOP, pz) + across * lside * (ROAD_HALF + 0.45)
 					_add_prop("lamp", Transform3D(Basis(Vector3.UP, atan2(-across.x * lside, -across.z * lside)), lp), Color.WHITE)
-					lamp_positions.append(lp + Vector3(0, 4.9, 0) - across * lside * 1.0)
-					_light_pool(lp - across * lside * 1.0, 4.2)
+					lamp_positions.append(lp + Vector3(0, LANTERN_Y, 0))
+					halo_xfs.append(Transform3D(Basis(), lp + Vector3(0, LANTERN_Y, 0)))
+					_light_pool(lp - across * lside * 0.6, 4.4)
+					# the lantern washes the facade behind it
+					_wall_glow(Vector3(px, 0.0, pz) + across * lside * (FACADE - 0.04), -across * lside, 7.0, 7.5)
 				# telephone poles and sagging wires on the outer, older streets
-				if (absf(s) == 60.0 or absf(s) == 80.0) and absf(mid) < lim:
+				if ((absf(s) == 60.0 or absf(s) == 80.0) and absf(mid) < lim) or (a == 0 and axis == 0 and mid > 20.0 and mid < 70.0):
 					_pole_span(Vector3(px, 0.0, pz) - along * GRID * 0.5 - across * (ROAD_HALF + 0.4), along)
 
 
@@ -1828,6 +2687,15 @@ func _puddle(p: Vector3, r: float) -> void:
 	var fwd := Vector3(-sin(a), 0, cos(a)) * r * rng.randf_range(0.5, 0.9)
 	var u := Vector2(rng.randf_range(-0.15, 0.15), rng.randf_range(-0.15, 0.15))
 	bt.quad(p - right - fwd, p - right + fwd, p + right + fwd, p + right - fwd, Vector3.UP, Color.WHITE, u, u + Vector2.ONE)
+
+
+## Additive splash of lamplight on a wall: centre on the wall at ground level, n = facing.
+func _wall_glow(base: Vector3, n: Vector3, w: float, h: float) -> void:
+	var bt := _b("pool")
+	var r := Vector3.UP.cross(n) * w * 0.5
+	var c := base + Vector3(0, 3.4, 0)
+	var up := Vector3(0, h * 0.5, 0)
+	bt.quad(c - r - up, c - r + up, c + r + up, c + r - up, n, Color.WHITE)
 
 
 func _light_pool(p: Vector3, r: float) -> void:
@@ -2032,7 +2900,7 @@ func _build_props() -> void:
 				meshes = [[_hydrant_mesh(), prop, false]]
 			"newsbox":
 				meshes = [[_newsbox_mesh(), prop, true]]
-			"dumpster":
+			"dumpster", "alley_dumpster":
 				meshes = [[_dumpster_mesh(), prop, true]]
 			"trash":
 				meshes = [[_trash_mesh(), bag, true]]
@@ -2065,12 +2933,29 @@ func _build_props() -> void:
 			var big: bool = kind == "sedan" or kind == "van" or kind == "dumpster"
 			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if big and entry[2] else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(mmi)
+	# warm halos round every lantern: camera-facing quads in one MultiMesh
+	if not halo_xfs.is_empty():
+		var hm := MultiMesh.new()
+		hm.transform_format = MultiMesh.TRANSFORM_3D
+		var q := QuadMesh.new()
+		q.size = Vector2(1.7, 1.7)
+		hm.mesh = q
+		hm.instance_count = halo_xfs.size()
+		for k in halo_xfs.size():
+			hm.set_instance_transform(k, halo_xfs[k])
+		halo_mm = hm
+		var hmi := MultiMeshInstance3D.new()
+		hmi.name = "LanternHalos"
+		hmi.multimesh = hm
+		hmi.material_override = halo_mat
+		hmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(hmi)
 
 
 const PropsScript = preload("res://scripts/props.gd")
 const GLB_PROPS := {"sedan": "sedan", "hydrant": "hydrant", "newsbox": "news_box", "dumpster": "dumpster", "trash": "trash_pile"}
 const GLB_THIN := {"trash": 6, "newsbox": 3, "hydrant": 2, "dumpster": 2}
-const PROP_CELL := 40.0 # instances are bucketed into cells so off-screen ones are culled
+const PROP_CELL := 80.0 # instances are bucketed into quadrants so off-screen ones are culled (fewer draw calls than 40 m cells)
 
 
 func _glb_multimeshes(kind: String, glb: Dictionary, xfs: Array) -> void:
@@ -2156,18 +3041,38 @@ func _car_mesh(van: bool) -> Array:
 	return [_mesh_of(body), _mesh_of(glass), _mesh_of(rub)]
 
 
-## Returns [post, lantern]. Faces +z: the arm reaches over the road.
+## Gas lantern on a cast-iron post (images 01 and 12). Returns [post, lantern glass].
+## Origin at the foot of the post; the flame sits LANTERN_Y up.
+const LANTERN_Y := 3.7
+
+
 func _lamp_mesh() -> Array:
 	var post := Batch.new()
 	var head := Batch.new()
-	var c := Color(0.06, 0.065, 0.07)
-	cyl(post, Vector3.ZERO, 0.2, 0.16, 0.6, 8, c)
-	cyl(post, Vector3(0, 0.6, 0), 0.08, 0.06, 4.5, 8, c, false)
-	beam(post, Vector3(0, 4.8, 0), Vector3(0, 5.05, 1.0), 0.06, 0.06, c)
-	beam(post, Vector3(0, 4.3, 0), Vector3(0, 4.95, 0.7), 0.035, 0.035, c)
-	box(post, Vector3(0, 5.1, 1.05), Vector3(0.45, 0.1, 0.7), c)
-	box(head, Vector3(0, 4.98, 1.05), Vector3(0.36, 0.14, 0.58), Color.WHITE)
+	_lantern_post(post, head, Vector3.ZERO, 1.0)
 	return [_mesh_of(post), _mesh_of(head)]
+
+
+## Writes a lantern post into two batches; s scales the whole thing.
+static func _lantern_post(post: Batch, head: Batch, p: Vector3, s: float) -> void:
+	var c := Color(0.045, 0.05, 0.05)
+	cyl(post, p, 0.2 * s, 0.17 * s, 0.35 * s, 6, c)
+	cyl(post, p + Vector3(0, 0.35, 0) * s, 0.15 * s, 0.07 * s, 0.6 * s, 6, c, false)
+	cyl(post, p + Vector3(0, 0.95, 0) * s, 0.065 * s, 0.05 * s, 2.15 * s, 6, c, false)
+	# ladder rest and collar under the lantern
+	box(post, p + Vector3(0, 2.75, 0) * s, Vector3(0.62, 0.04, 0.04) * s, c)
+	cyl(post, p + Vector3(0, 3.1, 0) * s, 0.06 * s, 0.17 * s, 0.25 * s, 6, c)
+	# lantern: tapered glass body with corner bars, a pagoda cap and a finial
+	var y0 := 3.35 * s
+	var y1 := 4.05 * s
+	cyl(head, p + Vector3(0, y0, 0), 0.15 * s, 0.24 * s, y1 - y0, 4, Color.WHITE, true, Basis(Vector3.UP, PI * 0.25))
+	for k in 4:
+		var a := k * PI * 0.5
+		var d := Vector3(cos(a), 0, sin(a))
+		beam(post, p + Vector3(0, y0, 0) + d * 0.15 * s, p + Vector3(0, y1, 0) + d * 0.24 * s, 0.025 * s, 0.025 * s, c)
+	cyl(post, p + Vector3(0, y0 - 0.06 * s, 0), 0.19 * s, 0.19 * s, 0.07 * s, 4, c, true, Basis(Vector3.UP, PI * 0.25))
+	cyl(post, p + Vector3(0, y1, 0), 0.33 * s, 0.06 * s, 0.3 * s, 4, c, true, Basis(Vector3.UP, PI * 0.25))
+	cyl(post, p + Vector3(0, y1 + 0.3 * s, 0), 0.05 * s, 0.0, 0.25 * s, 4, c)
 
 
 func _hydrant_mesh() -> ArrayMesh:
@@ -2234,110 +3139,212 @@ func _trash_mesh() -> ArrayMesh:
 
 
 # ================================================================ lair
-## The Undercroft entrance: a weathered stone well-head under a Gothic stone canopy,
-## an iron grate over the shaft and a red glow far below. Colliders match the old ones.
+const PIT_R := 3.0 # radius of the stair well (inside the balustrade)
+const PIT_HOLE := 3.05 # half-size of the square hole left in the plaza paving
+const PIT_DEPTH := 3.4
+
+
+## The Undercroft entrance (image 01): a sunken circular stair well under a carved
+## balustrade, curved steps sweeping down to a crypt arcade glowing red, a gothic
+## arch (generated model) over the head of the stairs, flanked by two weeping
+## angels on pedestals. A solid ring collider keeps everyone out of the well; the
+## drink prompt stays reachable at the ring (radius ~3.4 m).
 func build_lair(root: Node3D) -> void:
 	var save_ck := ck
 	ck = "L"
 	var st := _b("stone")
-	var sc := Color(0.72, 0.7, 0.66)
-	var moss := Color(0.45, 0.5, 0.4)
-	# well-head ring: outer wall, coping annulus, inner shaft wall
-	var segs := 24
+	var sc := Color(0.6, 0.58, 0.54)
+	var moss := Color(0.42, 0.46, 0.37)
+	var dark := sc * Color(0.42, 0.4, 0.4)
+	var R := PIT_R
+	var D := PIT_DEPTH
+	var y0 := WALK_TOP
+	var segs := 32
+	var dirs: Array = []
+	for s in segs + 1:
+		var a := TAU * s / segs
+		dirs.append(Vector3(cos(a), 0, sin(a)))
+	# shaft wall, seen from inside
 	for s in segs:
-		var a0 := TAU * s / segs
-		var a1 := TAU * (s + 1) / segs
-		var d0 := Vector3(cos(a0), 0, sin(a0))
-		var d1 := Vector3(cos(a1), 0, sin(a1))
-		st.quad_sm(d0 * 2.8, d0 * 2.65 + Vector3(0, 0.5, 0), d1 * 2.65 + Vector3(0, 0.5, 0), d1 * 2.8, d0, d0, d1, d1, moss)
-		st.quad(d0 * 1.8 + Vector3(0, 0.5, 0), d0 * 2.65 + Vector3(0, 0.5, 0), d1 * 2.65 + Vector3(0, 0.5, 0), d1 * 1.8 + Vector3(0, 0.5, 0), Vector3.UP, sc)
-		st.quad_sm(d1 * 1.8 + Vector3(0, -3.2, 0), d1 * 1.8 + Vector3(0, 0.5, 0), d0 * 1.8 + Vector3(0, 0.5, 0), d0 * 1.8 + Vector3(0, -3.2, 0), -d1, -d1, -d0, -d0, sc * Color(0.5, 0.5, 0.5))
-	# stone steps spiralling down the shaft
-	for k in 14:
-		var a := k * 0.42
+		var d0: Vector3 = dirs[s]
+		var d1: Vector3 = dirs[s + 1]
+		st.quad_sm(d1 * R + Vector3(0, -D, 0), d1 * R + Vector3(0, y0, 0), d0 * R + Vector3(0, y0, 0), d0 * R + Vector3(0, -D, 0), -d1, -d1, -d0, -d0, dark)
+	# curved steps sweeping down the south half of the well (an amphitheatre stair)
+	var N := 11
+	var tread := (R - 1.0) / N
+	var rise := (D + y0) / N
+	var a_lo := PI * 0.5 - 1.3
+	var a_hi := PI * 0.5 + 1.3
+	var ss := 14
+	for k in N:
+		var ro := R - k * tread
+		var ri := R - (k + 1) * tread
+		var yt := y0 - (k + 1) * rise
+		var col := sc * Color(0.78, 0.76, 0.74) * (0.85 + 0.15 * float(k % 2))
+		for q in ss:
+			var a0 := lerpf(a_lo, a_hi, float(q) / ss)
+			var a1 := lerpf(a_lo, a_hi, float(q + 1) / ss)
+			var d0 := Vector3(cos(a0), 0, sin(a0))
+			var d1 := Vector3(cos(a1), 0, sin(a1))
+			st.quad(d0 * ri + Vector3(0, yt, 0), d0 * ro + Vector3(0, yt, 0), d1 * ro + Vector3(0, yt, 0), d1 * ri + Vector3(0, yt, 0), Vector3.UP, col)
+			st.quad_sm(d0 * ri + Vector3(0, yt - rise, 0), d0 * ri + Vector3(0, yt, 0), d1 * ri + Vector3(0, yt, 0), d1 * ri + Vector3(0, yt - rise, 0), -d0, -d0, -d1, -d1, col * Color(0.7, 0.7, 0.7))
+		for a: float in [a_lo, a_hi]:
+			var d := Vector3(cos(a), 0, sin(a))
+			var t := Vector3(-sin(a), 0, cos(a)) * (1.0 if a == a_lo else -1.0)
+			st.quad(d * ri + Vector3(0, -D, 0), d * ri + Vector3(0, yt, 0), d * ro + Vector3(0, yt, 0), d * ro + Vector3(0, -D, 0), -t, dark)
+	# the crypt arcade on the far side: three pointed arches breathing red light
+	var glow := _b("crypt_glow")
+	for k in 3:
+		var a := -PI * 0.5 + (k - 1) * 0.62
 		var d := Vector3(cos(a), 0, sin(a))
-		var basis := Basis(Vector3.UP, -a)
-		box(st, d * 1.35 + Vector3(0, 0.1 - k * 0.24, 0), Vector3(0.9, 0.18, 0.7), sc * Color(0.6, 0.6, 0.6), basis)
-	# iron grate over the shaft
-	var iron := _b("iron")
-	for s in segs:
-		var a0 := TAU * s / segs
-		var a1 := TAU * (s + 1) / segs
-		var p0 := Vector3(cos(a0), 0, sin(a0)) * 1.82
-		var p1 := Vector3(cos(a1), 0, sin(a1)) * 1.82
-		var y := Vector3(0, 0.46, 0)
-		iron.tri(y, y + p0, y + p1, Vector3.UP, Color.WHITE, Vector2(0.5, 0.75), Vector2(0.5 + p0.x * 0.45, 0.75 + p0.z * 0.12), Vector2(0.5 + p1.x * 0.45, 0.75 + p1.z * 0.12))
-	# four Gothic piers carrying pointed arches and a stone spirelet
-	var r := 3.2
-	var pts: Array = []
-	for k in 4:
-		var a := k * TAU / 4.0 + PI / 4.0
-		var p := Vector3(cos(a) * r, 0, sin(a) * r)
-		pts.append(p)
-		box(st, p + Vector3(0, 0.2, 0), Vector3(0.85, 0.4, 0.85), moss)
-		box(st, p + Vector3(0, 1.95, 0), Vector3(0.6, 3.1, 0.6), sc, Basis.IDENTITY, 12)
-		box(st, p + Vector3(0, 3.55, 0), Vector3(0.78, 0.25, 0.78), sc)
-		# lantern on each pier, facing out
-		var out := Vector3(cos(a), 0, sin(a))
-		box(_b("metal"), p + out * 0.36 + Vector3(0, 2.6, 0), Vector3(0.08, 0.08, 0.08), Color(0.05, 0.05, 0.05))
-		box(_b("lamp"), p + out * 0.45 + Vector3(0, 2.45, 0), Vector3(0.18, 0.28, 0.18), Color.WHITE)
-	for k in 4:
-		var a: Vector3 = pts[k]
-		var b: Vector3 = pts[(k + 1) % 4]
 		var f := Facade.new()
-		var mid := (a + b) * 0.5
-		f.r = (b - a).normalized()
-		f.n = mid.normalized()
-		f.w = a.distance_to(b)
-		f.o = a + f.n * 0.0
-		_pointed_arch(st, f, f.w * 0.5, f.w * 0.5 - 0.3, 3.67, 0.4, 0.2, sc, 0.5)
-		# low wrought-iron fence on three sides; the side facing +z stays open
-		if mid.z < 1.0:
-			var y0 := 0.0
-			iron.quad(f.p(0.45, y0, 0.0), f.p(0.45, y0 + 1.0, 0.0), f.p(f.w - 0.45, y0 + 1.0, 0.0), f.p(f.w - 0.45, y0, 0.0), f.n, Color.WHITE, Vector2(0, 0), Vector2((f.w - 0.9) * 0.5, 0.5))
-	# lintel ring and spirelet
-	var top := 6.3
-	for k in 4:
-		var a: Vector3 = pts[k]
-		var b: Vector3 = pts[(k + 1) % 4]
-		beam(st, a + Vector3(0, top, 0), b + Vector3(0, top, 0), 0.5, 0.4, sc)
-	cyl(st, Vector3(0, top + 0.2, 0), 3.2, 0.0, 4.5, 4, Color(0.5, 0.49, 0.47), true, Basis(Vector3.UP, PI / 4.0))
-	for p in pts:
-		cyl(st, p + Vector3(0, top - 0.1, 0), 0.4, 0.0, 1.6, 4, sc)
-	var m := _b("metal")
-	beam(m, Vector3(0, top + 4.6, 0), Vector3(0, top + 5.8, 0), 0.08, 0.08, Color(0.05, 0.05, 0.05))
-	beam(m, Vector3(-0.35, top + 5.4, 0), Vector3(0.35, top + 5.4, 0), 0.07, 0.07, Color(0.05, 0.05, 0.05))
+		f.n = -d
+		f.r = Vector3(-sin(a), 0, cos(a)) * -1.0
+		f.w = 1.7
+		f.o = d * (R - 0.03) - f.r * f.w * 0.5 + Vector3(0, -D, 0)
+		fq(glow, f, 0.2, 0.0, 1.5, 1.9, 0.01, Color(0.3, 0.3, 0.3))
+		glow.tri(f.p(0.2, 1.9, 0.01), f.p(0.85, 2.7, 0.01), f.p(1.5, 1.9, 0.01), f.n, Color(0.3, 0.3, 0.3))
+		_pointed_arch(st, f, 0.85, 0.68, 1.9, 0.2, 0.18, sc * Color(0.7, 0.68, 0.66), 0.2)
+	# floor of the well: wet flags lit from the crypt
+	_disc(glow, Vector3(0, -D + 0.01, 0), R, segs, Color(0.22, 0.22, 0.22))
+	# carved balustrade around the well, open under the arch at the south
+	var bal := _b("baluster")
+	var gap := 0.45 # radians either side of +z
+	for s in segs:
+		var am := TAU * (s + 0.5) / segs
+		if absf(wrapf(am - PI * 0.5, -PI, PI)) < gap:
+			continue
+		var d0: Vector3 = dirs[s]
+		var d1: Vector3 = dirs[s + 1]
+		var arc := TAU * 3.2 / segs
+		# plinth
+		st.quad_sm(d0 * 3.42 + Vector3(0, y0, 0), d0 * 3.42 + Vector3(0, y0 + 0.24, 0), d1 * 3.42 + Vector3(0, y0 + 0.24, 0), d1 * 3.42 + Vector3(0, y0, 0), d0, d0, d1, d1, moss)
+		st.quad(d0 * (R - 0.02) + Vector3(0, y0 + 0.24, 0), d0 * 3.42 + Vector3(0, y0 + 0.24, 0), d1 * 3.42 + Vector3(0, y0 + 0.24, 0), d1 * (R - 0.02) + Vector3(0, y0 + 0.24, 0), Vector3.UP, sc)
+		st.quad_sm(d1 * (R - 0.02) + Vector3(0, y0, 0), d1 * (R - 0.02) + Vector3(0, y0 + 0.24, 0), d0 * (R - 0.02) + Vector3(0, y0 + 0.24, 0), d0 * (R - 0.02) + Vector3(0, y0, 0), -d1, -d1, -d0, -d0, dark)
+		# balusters (alpha-scissor band)
+		bal.quad(d0 * 3.2 + Vector3(0, y0 + 0.24, 0), d0 * 3.2 + Vector3(0, y0 + 0.86, 0), d1 * 3.2 + Vector3(0, y0 + 0.86, 0), d1 * 3.2 + Vector3(0, y0 + 0.24, 0),
+			(d0 + d1).normalized(), sc * Color(1.15, 1.15, 1.15), Vector2(0, 0), Vector2(arc, 1))
+		# moulded rail
+		var ry := y0 + 0.86
+		st.quad_sm(d0 * 3.4 + Vector3(0, ry, 0), d0 * 3.4 + Vector3(0, ry + 0.16, 0), d1 * 3.4 + Vector3(0, ry + 0.16, 0), d1 * 3.4 + Vector3(0, ry, 0), d0, d0, d1, d1, sc)
+		st.quad(d0 * R + Vector3(0, ry + 0.16, 0), d0 * 3.4 + Vector3(0, ry + 0.16, 0), d1 * 3.4 + Vector3(0, ry + 0.16, 0), d1 * R + Vector3(0, ry + 0.16, 0), Vector3.UP, sc * Color(1.05, 1.05, 1.05))
+		st.quad_sm(d1 * R + Vector3(0, ry, 0), d1 * R + Vector3(0, ry + 0.16, 0), d0 * R + Vector3(0, ry + 0.16, 0), d0 * R + Vector3(0, ry, 0), -d1, -d1, -d0, -d0, sc * Color(0.8, 0.8, 0.8))
+		st.quad(d1 * R + Vector3(0, ry, 0), d1 * 3.4 + Vector3(0, ry, 0), d0 * 3.4 + Vector3(0, ry, 0), d0 * R + Vector3(0, ry, 0), Vector3.DOWN, dark)
+		if s % 4 == 0:
+			box(st, d0 * 3.2 + Vector3(0, y0 + 0.55, 0), Vector3(0.36, 0.62, 0.36), sc, Basis(Vector3.UP, -TAU * s / segs))
+	# newel posts at the head of the stairs
+	for sd: float in [-1.0, 1.0]:
+		var a := PI * 0.5 + sd * gap
+		var d := Vector3(cos(a), 0, sin(a))
+		box(st, d * 3.2 + Vector3(0, y0 + 0.6, 0), Vector3(0.5, 1.2, 0.5), sc, Basis(Vector3.UP, -a))
+		cyl(st, d * 3.2 + Vector3(0, y0 + 1.2, 0), 0.22, 0.0, 0.5, 4, sc, true, Basis(Vector3.UP, PI * 0.25 - a))
+	# two angel pedestals flanking the arch
+	var ped_pos: Array = []
+	for sd: float in [-1.0, 1.0]:
+		var pp := Vector3(sd * 3.75, y0, 2.35)
+		ped_pos.append(pp)
+		box(st, pp + Vector3(0, 0.15, 0), Vector3(1.35, 0.3, 1.35), moss)
+		box(st, pp + Vector3(0, 0.95, 0), Vector3(1.0, 1.3, 1.0), sc, Basis.IDENTITY, 12)
+		box(st, pp + Vector3(0, 1.67, 0), Vector3(1.22, 0.16, 1.22), sc * Color(1.05, 1.05, 1.05))
+	# a lantern hanging in the arch
+	var lt := Vector3(0, 4.15, R + 0.15)
+	box(_b("lamp"), lt, Vector3(0.22, 0.36, 0.22), Color.WHITE)
+	beam(_b("metal"), lt + Vector3(0, 0.18, 0), lt + Vector3(0, 1.0, 0), 0.03, 0.03, Color(0.04, 0.04, 0.04))
+	box(_b("metal"), lt + Vector3(0, 0.22, 0), Vector3(0.3, 0.06, 0.3), Color(0.04, 0.04, 0.04))
 	_flush("L", root)
 	ck = save_ck
-	# red glow at the bottom of the shaft
-	var glow := StandardMaterial3D.new()
-	glow.albedo_color = Color(0.8, 0.0, 0.05)
-	glow.emission_enabled = true
-	glow.emission = Color(0.8, 0.0, 0.05)
-	glow.emission_energy_multiplier = 2.5
-	var disc := CylinderMesh.new()
-	disc.top_radius = 1.8
-	disc.bottom_radius = 1.8
-	disc.height = 0.05
-	disc.radial_segments = 24
-	var mi := MeshInstance3D.new()
-	mi.mesh = disc
-	mi.material_override = glow
-	mi.position = Vector3(0, -3.15, 0)
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(mi)
-	# colliders: the stone ring and the four piers
+	# generated props: the arch over the stair head and the two weeping angels
+	var arch := _glb_into(root, "gothic_arch", 6.4, Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(0, y0 - 0.05, R + 0.15)))
+	for k in 2:
+		var pp: Vector3 = ped_pos[k]
+		var sd := -1.0 if k == 0 else 1.0
+		_glb_into(root, "angel", 2.25, Transform3D(Basis(Vector3.UP, -PI * 0.5 - sd * 0.35), pp + Vector3(0, 1.75, 0)), false)
+	_add_halo(root.global_transform * lt)
+	# red light rising out of the well
+	uplight_mat = ShaderMaterial.new()
+	uplight_mat.shader = Shader.new()
+	uplight_mat.shader.code = UPLIGHT_SHADER
+	var col_h := D + 2.6
+	uplight_mat.set_shader_parameter("y0", -col_h * 0.5)
+	uplight_mat.set_shader_parameter("y1", col_h * 0.5)
+	var cm := CylinderMesh.new()
+	cm.top_radius = R - 0.1
+	cm.bottom_radius = R - 0.4
+	cm.height = col_h
+	cm.cap_top = false
+	cm.cap_bottom = false
+	cm.radial_segments = 24
+	cm.rings = 1
+	var up := MeshInstance3D.new()
+	up.mesh = cm
+	up.material_override = uplight_mat
+	up.position = Vector3(0, -D + col_h * 0.5, 0)
+	up.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(up)
+	var pit_light := OmniLight3D.new()
+	pit_light.position = Vector3(0, -1.8, -0.8)
+	pit_light.light_color = Color(1.0, 0.12, 0.06)
+	pit_light.light_energy = 2.2
+	pit_light.omni_range = 6.5
+	root.add_child(pit_light)
+	# colliders: a solid ring over the well, the pedestals and the arch piers
 	var ring := StaticBody3D.new()
 	root.add_child(ring)
 	var ring_col := CollisionShape3D.new()
 	var ring_shape := CylinderShape3D.new()
-	ring_shape.radius = 2.8
-	ring_shape.height = 0.5
+	ring_shape.radius = R + 0.05
+	ring_shape.height = 1.0
 	ring_col.shape = ring_shape
-	ring_col.position.y = 0.25
+	ring_col.position.y = 0.5
 	ring.add_child(ring_col)
-	for p in pts:
-		_static_box(Vector3(0.6, 3.5, 0.6), p + Vector3(0, 1.75, 0), root)
+	for pp in ped_pos:
+		_static_box(Vector3(1.2, 4.0, 1.2), pp + Vector3(0, 2.0, 0), root)
+	var aw: float = arch.x if arch != Vector3.ZERO else 5.0
+	for sd: float in [-1.0, 1.0]:
+		_static_box(Vector3(0.8, 5.0, 1.0), Vector3(sd * (aw * 0.5 - 0.45), 2.5, R + 0.15), root)
+
+
+## Adds one more lantern halo after the city is built (the Undercroft's lantern).
+func _add_halo(p: Vector3) -> void:
+	halo_xfs.append(Transform3D(Basis(), p))
+	if halo_mm == null:
+		return
+	halo_mm.instance_count = halo_xfs.size()
+	for k in halo_xfs.size():
+		halo_mm.set_instance_transform(k, halo_xfs[k])
+
+
+## Places a generated GLB under `parent`, scaled to `height` m with its base at the
+## transform's origin. Returns its scaled size in world axes, or ZERO.
+func _glb_into(parent: Node3D, name: String, height: float, xf: Transform3D, shadow := true) -> Vector3:
+	var path := "res://assets/props/%s.glb" % name
+	if not ResourceLoader.exists(path):
+		return Vector3.ZERO
+	var scene := load(path) as PackedScene
+	if scene == null:
+		return Vector3.ZERO
+	var inst := scene.instantiate()
+	var found: Array = []
+	PropsScript._collect_meshes(inst, Transform3D.IDENTITY, found)
+	inst.free()
+	if found.is_empty():
+		return Vector3.ZERO
+	var bb := AABB()
+	for k in found.size():
+		var b: AABB = found[k][1] * (found[k][0] as Mesh).get_aabb()
+		bb = b if k == 0 else bb.merge(b)
+	var s := height / maxf(bb.size.y, 0.0001)
+	var c := bb.get_center()
+	var norm := Transform3D(Basis().scaled(Vector3(s, s, s)), -Vector3(c.x, bb.position.y, c.z) * s)
+	for fnd in found:
+		var mi := MeshInstance3D.new()
+		mi.mesh = fnd[0]
+		mi.transform = xf * norm * fnd[1]
+		mi.name = name
+		if not shadow:
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		parent.add_child(mi)
+	return (xf.basis * bb.size).abs() * s
 
 
 # ================================================================ animation
@@ -2355,6 +3362,11 @@ func _process(delta: float) -> void:
 	neon_mat.emission_energy_multiplier = neon_e
 	neon_flicker_mat.emission_energy_multiplier = neon_e * (0.05 if nbuzz > 1.4 else 1.0)
 	far_mat.emission_energy_multiplier = win * 0.9
-	stained_mat.emission_energy_multiplier = night * 1.4
-	var pool := night * 0.22
+	stained_mat.emission_energy_multiplier = 0.15 + night * 2.6
+	shop_mat.emission_energy_multiplier = 0.15 + win * 0.5
+	halo_mat.set_shader_parameter("strength", night * 0.55)
+	if uplight_mat != null:
+		uplight_mat.set_shader_parameter("strength", 0.35 + night * 0.5)
+	crypt_mat.emission_energy_multiplier = 0.5 + night * 0.7
+	var pool := night * 0.42
 	pool_mat.albedo_color = Color(1.0 * pool, 0.72 * pool, 0.42 * pool)
