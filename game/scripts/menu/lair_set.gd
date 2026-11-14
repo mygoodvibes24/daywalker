@@ -1202,11 +1202,11 @@ func _lights() -> void:
 	# 1. the work lamp: warm key on Sol's hands and face
 	var lamp := SpotLight3D.new()
 	lamp.position = BENCH_POS + Vector3(-0.45, BENCH_TOP + 0.58, -0.2)
-	lamp.look_at_from_position(lamp.position, SOL_POS + Vector3(-0.35, 1.0, 0.55), Vector3.UP)
+	lamp.look_at_from_position(lamp.position, SOL_POS + Vector3(-0.15, 1.12, 0.42), Vector3.UP)
 	lamp.light_color = Color(1.0, 0.74, 0.45)
 	lamp.light_energy = 2.6 if cinematic else 2.4
 	lamp.spot_range = 5.0
-	lamp.spot_angle = 62.0
+	lamp.spot_angle = 60.0
 	lamp.spot_attenuation = 0.9
 	lamp.shadow_enabled = true
 	lamp.shadow_blur = 1.5
