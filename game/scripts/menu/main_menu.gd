@@ -209,7 +209,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 # ---------------------------------------------------------------- start the game
-## The hub's "Begin the Hunt": main.tscn starts a Hunt (hunt_director.gd) instead of free roam.
+## The hub's "Begin the Hunt" (its default focused button): main.tscn starts a Hunt
+## (hunt_director.gd). main.tscn runs a Hunt however it's reached; free roam is debug-only.
 func _begin_hunt() -> void:
 	HuntDirector.requested = true
 	hub.visible = false

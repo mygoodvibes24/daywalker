@@ -3,25 +3,16 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d4l5h0rwr6yd6"
-path.s3tc="res://.godot/imported/sol_mod_sword_sabre_NormalGL_81bc0e33-6d84-4263-a1fc-5a5c7ea78fe1.png-c5f5134274fb0f6062292c51210f8504.s3tc.ctex"
-metadata={
-"imported_formats": ["s3tc_bptc"],
-"vram_texture": true
-}
-generator_parameters={
-"md5": "8f955aadebfb596936570e84c08b57f3"
-}
 
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_sword_sabre_NormalGL_81bc0e33-6d84-4263-a1fc-5a5c7ea78fe1.png"
-dest_files=["res://.godot/imported/sol_mod_sword_sabre_NormalGL_81bc0e33-6d84-4263-a1fc-5a5c7ea78fe1.png-c5f5134274fb0f6062292c51210f8504.s3tc.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.9
 compress/hdr_compression=1
 compress/normal_map=1
 compress/channel_pack=0
@@ -34,5 +25,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
-detect_3d/compress_to=1
+process/size_limit=512
+detect_3d/compress_to=0

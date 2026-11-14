@@ -3,25 +3,16 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b6p588lyem1fe"
-path.s3tc="res://.godot/imported/sol_mod_coat_src_ORM_35b4b241-49b0-48e6-9a07-e7ec9d577eda.jpg-0a7d605fe86a49c6cec212630d57f063.s3tc.ctex"
-metadata={
-"imported_formats": ["s3tc_bptc"],
-"vram_texture": true
-}
-generator_parameters={
-"md5": "cf32310f1e8b2d02356e5e7e39f8c0cb"
-}
 
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_coat_src_ORM_35b4b241-49b0-48e6-9a07-e7ec9d577eda.jpg"
-dest_files=["res://.godot/imported/sol_mod_coat_src_ORM_35b4b241-49b0-48e6-9a07-e7ec9d577eda.jpg-0a7d605fe86a49c6cec212630d57f063.s3tc.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.85
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
@@ -34,5 +25,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=2048
-detect_3d/compress_to=1
+process/size_limit=512
+detect_3d/compress_to=0

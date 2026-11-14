@@ -58,6 +58,7 @@ var levelup_ui: CanvasLayer
 var pause_menu: CanvasLayer # Esc: Resume / Options / Controls / Quit to Menu
 var ui_block_until := 0 # ms; swallows the button press that closed a menu
 var hunt: Node3D = null # HUNT HOOK: hunt_director.gd while a Hunt runs (null in free roam)
+var free_roam := false # debug only (--freeroam / ?freeroam): plaza start + the old roaming spawner
 
 
 func _ready() -> void:
@@ -78,6 +79,8 @@ func _ready() -> void:
 	player.main = self
 	player.position = Vector3(0, 0.2, 6)
 	add_child(player)
+	if hunt != null:
+		hunt.stage_player() # HUNT HOOK: Sol waits at his deployment point, never the plaza
 	hud = HudScript.new()
 	hud.main = self
 	add_child(hud)
@@ -110,9 +113,11 @@ func start_game() -> void:
 	Dialogue.play("hunt_start") # AUDIO HOOK
 
 
-## HUNT HOOK: a Hunt runs when the hub asked for one (or --hunt / --shorthunt / ?hunt).
+## HUNT HOOK: the Hunt is the game. main.tscn always runs one (from the hub, a direct load,
+## "Hunt again"), except behind the debug flag --freeroam / ?freeroam.
 func _setup_hunt() -> void:
 	if not HuntDirector.wanted(self):
+		free_roam = true
 		return
 	hunt = HuntDirector.new()
 	hunt.name = "Hunt"
@@ -300,7 +305,8 @@ func _process(delta: float) -> void:
 		hud.announce("SUNRISE\nVampires burn. The blood bank is restocked.\nCoffins and crates are full again.")
 		Dialogue.play(["bark_sunrise", "nia_sunrise"].pick_random()) # AUDIO HOOK
 	_update_lighting()
-	_update_spawning(delta)
+	if free_roam:
+		_update_spawning(delta) # the old chase-the-player spawner: free roam (debug) only
 
 
 func _update_lighting() -> void:

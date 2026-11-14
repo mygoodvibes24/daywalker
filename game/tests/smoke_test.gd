@@ -8,12 +8,16 @@ func _initialize() -> void:
 	load("res://scripts/progression.gd").save_path = SMOKE_SAVE
 	if FileAccess.file_exists(SMOKE_SAVE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SMOKE_SAVE))
+	# the free-roam sandbox is debug-only now (--freeroam / ?freeroam); these checks use it
+	var HD = load("res://scripts/hunt/hunt_director.gd")
+	HD.force_freeroam = true
 	var main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame
 	await physics_frame
 	var p = main.player
 	var ok := true
+	ok = _check("free roam only behind the debug flag", main.hunt == null and main.free_roam) and ok
 	# the world waits behind the title screen
 	var t0: float = main.time_of_day
 	for i in 20: await physics_frame
@@ -608,6 +612,12 @@ func _menu_checks(main) -> bool:
 	ok = _check("Controls screen opens", menu.controls.visible) and ok
 	menu._back()
 	ok = _check("Back returns to the menu", menu.menu_box.visible and menu.state == "menu") and ok
+	menu.debug_show("hub")
+	await process_frame
+	await process_frame
+	var hub_panel = menu.hub.get_child(0)
+	ok = _check("Start opens the hub with Begin the Hunt focused", menu.hub.visible and hub_panel.begin_button.has_focus()) and ok
+	menu._back()
 	menu.queue_free()
 	await process_frame
 	# coming from the menu, main.tscn starts at once without the title overlay
@@ -652,6 +662,49 @@ func _hunt_checks() -> bool:
 	Meta.data.loadout = [1, -1, -1] # wear High John Root from the armoury
 	Meta.save_meta()
 	ok = _check("--shorthunt flag parses", HD.short_flag(PackedStringArray(["--shorthunt"])) and not HD.short_flag(PackedStringArray([])) and HD.short_flag(PackedStringArray([]), true)) and ok
+	# no flags at all (a direct load, Start, a restart): main.tscn is a Hunt, never free roam
+	HD.force_freeroam = false
+	HD.requested = false
+	HD.force_short = false
+	HD.seed_override = 77
+	var m0 = await _start_hunt()
+	var h0 = m0.hunt
+	var p0 = m0.player
+	ok = _check("main.tscn without flags starts a Hunt", h0 != null and not m0.free_roam and h0.state == "deploy") and ok
+	var dp0: Vector3 = h0.deploy_point.pos
+	ok = _check("...and deploys away from the plaza (point %.0f m out, Sol %.0f m out)" % [Vector2(dp0.x, dp0.z).length(), Vector2(p0.global_position.x, p0.global_position.z).length()],
+		Vector2(dp0.x, dp0.z).length() > 50.0 and Vector2(p0.global_position.x, p0.global_position.z).length() > 40.0) and ok
+	await _wait_physics(20)
+	h0.deploy.finish()
+	p0.hp = 1e9
+	p0.max_hp = 1e9
+	await _wait_physics(240) # four seconds of the first day
+	var near := 0
+	var chasing := 0
+	for e in m0.enemies_root.get_children():
+		if e.dead:
+			continue
+		if e.global_position.distance_to(p0.global_position) < Cfg.AGGRO_RANGE:
+			near += 1
+		if Vector2(e.velocity.x, e.velocity.z).length() > 1.0:
+			chasing += 1
+	ok = _check("nothing chases you at the start (%d enemies, %d near, %d moving, %d roamers)" % [m0.living_enemies(), near, chasing, h0.roamers.size()],
+		near == 0 and chasing == 0 and h0.roamers.is_empty() and h0.state == "explore") and ok
+	# stragglers appear out of sight and stand idle until Sol comes close
+	h0.phase_t = Cfg.ROAM_GRACE + 1.0
+	h0.roam_t = 0.0
+	await _wait_physics(2)
+	if h0.roamers.size() > 0:
+		var r = h0.roamers[0].e
+		var d0: float = r.global_position.distance_to(p0.global_position)
+		await _wait_physics(30)
+		var r0: Vector3 = r.global_position
+		await _wait_physics(60)
+		ok = _check("a straggler turns up out of sight (%.0f m) and holds its ground" % d0, d0 > Cfg.ROAM_MIN_DIST - 1.0 and Vector2(r.global_position.x - r0.x, r.global_position.z - r0.z).length() < 1.0 and r.speed == 0.0) and ok
+	else:
+		ok = _check("a straggler spawns once the grace period is over", false) and ok
+	m0.queue_free()
+	await process_frame
 	HD.requested = true
 	HD.force_short = true
 	HD.seed_override = 4242

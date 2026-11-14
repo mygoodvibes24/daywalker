@@ -3,25 +3,16 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://drgasbjqfncxb"
-path.s3tc="res://.godot/imported/sol_mod_hand_src_Color_a94f08b2-ced1-440b-9819-29ad52f06a61.jpg-4979c1e0c6e1c37e06526123c1eb2c92.s3tc.ctex"
-metadata={
-"imported_formats": ["s3tc_bptc"],
-"vram_texture": true
-}
-generator_parameters={
-"md5": "71e6f64cdaefb3a3e646eb44086b2407"
-}
 
 [deps]
 
 source_file="res://assets/characters/sol/sol_mod_hand_src_Color_a94f08b2-ced1-440b-9819-29ad52f06a61.jpg"
-dest_files=["res://.godot/imported/sol_mod_hand_src_Color_a94f08b2-ced1-440b-9819-29ad52f06a61.jpg-4979c1e0c6e1c37e06526123c1eb2c92.s3tc.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.85
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
@@ -35,4 +26,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=1024
-detect_3d/compress_to=1
+detect_3d/compress_to=0

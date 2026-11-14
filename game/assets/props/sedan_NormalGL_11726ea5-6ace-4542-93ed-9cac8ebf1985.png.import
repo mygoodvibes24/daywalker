@@ -3,25 +3,16 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cpqoigg5vv26d"
-path.s3tc="res://.godot/imported/sedan_NormalGL_11726ea5-6ace-4542-93ed-9cac8ebf1985.png-8cf3cbbc4bfac46248760a5443faa832.s3tc.ctex"
-metadata={
-"imported_formats": ["s3tc_bptc"],
-"vram_texture": true
-}
-generator_parameters={
-"md5": "b62dcffad97cffa348988725df20cd61"
-}
 
 [deps]
 
 source_file="res://assets/props/sedan_NormalGL_11726ea5-6ace-4542-93ed-9cac8ebf1985.png"
-dest_files=["res://.godot/imported/sedan_NormalGL_11726ea5-6ace-4542-93ed-9cac8ebf1985.png-8cf3cbbc4bfac46248760a5443faa832.s3tc.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.9
 compress/hdr_compression=1
 compress/normal_map=1
 compress/channel_pack=0
@@ -34,5 +25,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
+process/size_limit=512
 detect_3d/compress_to=0

@@ -16,8 +16,13 @@ const MAX_ACTIVE_ENEMIES := 14
 const ACTIVATE_RANGE := 60.0 # POI enemies exist only within this distance of Sol
 const SLEEP_RANGE := 80.0 # ...and go back to sleep (if never roused) beyond this
 const AGGRO_RANGE := 17.0
-const ROAM_EVERY := 18.0 # a light trickle of roaming spawns
+const ROAM_EVERY := 18.0 # a light trickle of stragglers between the camps...
 const ROAM_CAP := 5
+const ROAM_GRACE := 45.0 # ...that only starts this long into a day's explore phase...
+const ROAM_MIN_DIST := 40.0 # ...turns up out of sight...
+const ROAM_MAX_DIST := 65.0
+## ...and stands idle where it appeared until Sol comes within AGGRO_RANGE (x1.5 once the
+## Curfew falls) or hits one (hunt_director._hold_roamers). Nothing runs at Sol across the map.
 
 # ---------------------------------------------------------------- the Red Curfew
 const CURFEW_NAME := "the Red Curfew"

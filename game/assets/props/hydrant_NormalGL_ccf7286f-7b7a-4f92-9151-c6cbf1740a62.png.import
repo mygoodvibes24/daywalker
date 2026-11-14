@@ -3,25 +3,16 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cfxtls0em0saa"
-path.s3tc="res://.godot/imported/hydrant_NormalGL_ccf7286f-7b7a-4f92-9151-c6cbf1740a62.png-42a87e2ca8c3a73fd0730e69d5da1769.s3tc.ctex"
-metadata={
-"imported_formats": ["s3tc_bptc"],
-"vram_texture": true
-}
-generator_parameters={
-"md5": "178d8ea486059614c4db71b70d2ec9bb"
-}
 
 [deps]
 
 source_file="res://assets/props/hydrant_NormalGL_ccf7286f-7b7a-4f92-9151-c6cbf1740a62.png"
-dest_files=["res://.godot/imported/hydrant_NormalGL_ccf7286f-7b7a-4f92-9151-c6cbf1740a62.png-42a87e2ca8c3a73fd0730e69d5da1769.s3tc.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.9
 compress/hdr_compression=1
 compress/normal_map=1
 compress/channel_pack=0
@@ -34,5 +25,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
+process/size_limit=512
 detect_3d/compress_to=0

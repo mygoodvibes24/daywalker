@@ -3,25 +3,16 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://djbyggb3s5t2s"
-path.s3tc="res://.godot/imported/trash_pile_NormalGL_48cb2d94-3233-4960-b55a-0abb2115d7ff.png-839b2801217644e2dee4b02bbd15494d.s3tc.ctex"
-metadata={
-"imported_formats": ["s3tc_bptc"],
-"vram_texture": true
-}
-generator_parameters={
-"md5": "3d25ee6cb3133d9189459bc0a66785dc"
-}
 
 [deps]
 
 source_file="res://assets/props/trash_pile_NormalGL_48cb2d94-3233-4960-b55a-0abb2115d7ff.png"
-dest_files=["res://.godot/imported/trash_pile_NormalGL_48cb2d94-3233-4960-b55a-0abb2115d7ff.png-839b2801217644e2dee4b02bbd15494d.s3tc.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.9
 compress/hdr_compression=1
 compress/normal_map=1
 compress/channel_pack=0
@@ -34,5 +25,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
+process/size_limit=512
 detect_3d/compress_to=0

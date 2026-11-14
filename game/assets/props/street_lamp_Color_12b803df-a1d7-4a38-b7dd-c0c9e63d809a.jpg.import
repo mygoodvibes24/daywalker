@@ -3,25 +3,16 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://rgcy7flrce3v"
-path.s3tc="res://.godot/imported/street_lamp_Color_12b803df-a1d7-4a38-b7dd-c0c9e63d809a.jpg-01ac54514db5a6d6b999ace94cd979ce.s3tc.ctex"
-metadata={
-"imported_formats": ["s3tc_bptc"],
-"vram_texture": true
-}
-generator_parameters={
-"md5": "109b8b7ef2a2f202ab72fa98e2923e69"
-}
 
 [deps]
 
 source_file="res://assets/props/street_lamp_Color_12b803df-a1d7-4a38-b7dd-c0c9e63d809a.jpg"
-dest_files=["res://.godot/imported/street_lamp_Color_12b803df-a1d7-4a38-b7dd-c0c9e63d809a.jpg-01ac54514db5a6d6b999ace94cd979ce.s3tc.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.85
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
@@ -34,5 +25,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
+process/size_limit=512
 detect_3d/compress_to=0

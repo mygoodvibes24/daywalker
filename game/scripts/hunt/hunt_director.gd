@@ -21,8 +21,11 @@ const MapScreen = preload("res://scripts/ui/map_screen.gd")
 const ResultsScreen = preload("res://scripts/ui/results_screen.gd")
 const MerchantUI = preload("res://scripts/ui/merchant_ui.gd")
 
-## Set by the hub's "Begin the Hunt" (or --hunt / ?hunt) before main.tscn loads.
+## Set by the hub's "Begin the Hunt" (or --hunt / ?hunt) before main.tscn loads. The Hunt is
+## THE game: main.tscn runs one however it was reached, unless free roam was asked for.
 static var requested := false
+## Debug only: the old free-roam sandbox (--freeroam / ?freeroam). Tests set this directly.
+static var force_freeroam := false
 ## Tests force the short timings; otherwise --shorthunt / ?shorthunt.
 static var force_short := false
 static var seed_override := -1
@@ -70,7 +73,14 @@ var _interaction := {}
 
 static func wanted(main_) -> bool:
 	var args := OS.get_cmdline_user_args()
-	return requested or force_short or "--hunt" in args or "--shorthunt" in args or main_._url_flag("hunt") or main_._url_flag("shorthunt")
+	if requested or force_short or "--hunt" in args or "--shorthunt" in args or main_._url_flag("hunt") or main_._url_flag("shorthunt"):
+		return true
+	return not freeroam_wanted(main_)
+
+
+## Free roam (spawn at the plaza, roaming spawns that chase you) exists only behind a debug flag.
+static func freeroam_wanted(main_) -> bool:
+	return force_freeroam or "--freeroam" in OS.get_cmdline_user_args() or main_._url_flag("freeroam")
 
 
 static func short_flag(args: PackedStringArray, url_short := false) -> bool:
@@ -113,6 +123,19 @@ func build_world() -> void:
 	ring.main = main
 	add_child(ring)
 	_set_arena(0)
+	# where Sol drops in is known up front, so he never stands in the plaza, even behind
+	# the title overlay of a direct load
+	deploy_point = Cfg.DEPLOY_POINTS[rng.randi() % Cfg.DEPLOY_POINTS.size()]
+
+
+## main.gd, right after the player exists: park Sol at his deployment point (never the plaza).
+func stage_player() -> void:
+	var p = main.player
+	if p == null or deploy_point.is_empty():
+		return
+	var pos: Vector3 = deploy_point.pos
+	var face: Vector3 = deploy_point.face
+	p.position = pos + face * 1.2 + Vector3(0, 0.2, 0)
 
 
 # ---------------------------------------------------------------- start
@@ -148,7 +171,8 @@ func start() -> void:
 	results = ResultsScreen.new()
 	results.director = self
 	add_child(results)
-	deploy_point = Cfg.DEPLOY_POINTS[rng.randi() % Cfg.DEPLOY_POINTS.size()]
+	if deploy_point.is_empty():
+		deploy_point = Cfg.DEPLOY_POINTS[rng.randi() % Cfg.DEPLOY_POINTS.size()]
 	deploy = DeployScript.new()
 	deploy.main = main
 	add_child(deploy)
@@ -203,6 +227,7 @@ func _physics_process(delta: float) -> void:
 	run_time += delta
 	phase_t += delta
 	_tick_pois(delta)
+	_hold_roamers()
 	match state:
 		"explore":
 			_clock("explore", phase_t / T.explore)
@@ -286,17 +311,72 @@ func _tick_pois(delta: float) -> void:
 		budget -= poi.tick(delta, p.global_position, maxi(budget, 0))
 
 
+## Stragglers between the camps: a light trickle that turns up out of sight (well away from
+## Sol, on a street inside the Curfew) and then STAYS PUT, idle, like a camp's members: it
+## only comes for him once he walks into it or hits it (_hold_roamers). Nothing hunts him
+## from the start of a day; the trickle begins once he has had time to pick a direction.
 func _roam(delta: float) -> void:
+	if state == "explore" and phase_t < Cfg.ROAM_GRACE:
+		return
 	roam_t -= delta
 	if roam_t > 0.0:
 		return
 	roam_t = Cfg.ROAM_EVERY * (0.6 if not main.is_day() else 1.0)
-	for i in range(roamers.size() - 1, -1, -1):
-		if not is_instance_valid(roamers[i]) or roamers[i].dead:
-			roamers.remove_at(i)
 	if roamers.size() < Cfg.ROAM_CAP and living_enemies() < Cfg.MAX_ACTIVE_ENEMIES:
-		main.spawn_enemy()
-		roamers.append(main.enemies_root.get_child(main.enemies_root.get_child_count() - 1))
+		_spawn_roamer()
+
+
+func _spawn_roamer() -> void:
+	var p = main.player
+	if p == null:
+		return
+	var pos := Vector3.INF
+	for attempt in 32:
+		var along := rng.randf_range(-76.0, 76.0)
+		var lane: float = rng.randi_range(-3, 3) * float(main.GRID) + rng.randf_range(-2.0, 2.0)
+		var c: Vector3 = Vector3(lane, 0.5, along) if rng.randf() < 0.5 else Vector3(along, 0.5, lane)
+		var d := c.distance_to(p.global_position)
+		if d > Cfg.ROAM_MIN_DIST and d < Cfg.ROAM_MAX_DIST and ring.outside_by(c) <= -4.0:
+			pos = c
+			break
+	if pos == Vector3.INF:
+		return # nowhere quiet enough this time
+	var e: CharacterBody3D = EnemyScript.new()
+	e.main = main
+	if main.is_day():
+		e.kind = 1 # the Pack in human form; vampires sleep by day
+	elif main.is_full_moon():
+		e.kind = 1 if rng.randf() < 0.7 else 0
+	else:
+		e.kind = 0 if rng.randf() < 0.6 else 1
+	e.position = pos
+	main.enemies_root.add_child(e)
+	e.visual.rotation.y = rng.randf() * TAU
+	roamers.append({"e": e, "roused": false})
+
+
+## Park idle stragglers (speed 0, standing in their idle clip) until Sol comes close or hurts
+## one; runs every frame, before the enemies' own physics (process_physics_priority -10).
+func _hold_roamers() -> void:
+	var p = main.player
+	var range_: float = Cfg.AGGRO_RANGE if state == "explore" else Cfg.AGGRO_RANGE * 1.5 # the Curfew makes them twitchy
+	for i in range(roamers.size() - 1, -1, -1):
+		var r: Dictionary = roamers[i]
+		var e = r.e
+		if not is_instance_valid(e) or e.dead:
+			roamers.remove_at(i)
+			continue
+		if not r.roused and p != null:
+			if e.global_position.distance_to(p.global_position) < range_ or e.hp < e.max_hp - 0.01 or e.staggered:
+				r.roused = true
+		if not r.roused:
+			if e.speed > 0.0:
+				r["speed"] = e.speed # also picks up a wolf transform's new speed
+				e.speed = 0.0
+		elif r.has("speed"):
+			if e.speed <= 0.0:
+				e.speed = r.speed
+			r.erase("speed")
 
 
 # ---------------------------------------------------------------- the Red Curfew
