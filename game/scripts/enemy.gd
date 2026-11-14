@@ -39,13 +39,20 @@ var skin_color: Color
 var eye_color: Color
 var marker: MeshInstance3D
 
-# Character models (baked by tools/bake_rigs.gd). The primitive bodies stay as a fallback.
+# Character models. *_anim.scn (tools/build_enemy_anims.gd) carries an auto-rigged skeleton and
+# real clips; *_rig.scn (tools/bake_rigs.gd) is the older hand-made rig posed procedurally; the
+# primitive bodies are the last fallback.
+const ANIM_PATHS := {
+	"vampire": "res://assets/characters/vampire/vampire_anim.scn",
+	"werewolf": "res://assets/characters/werewolf/werewolf_anim.scn",
+	"civilian": "res://assets/characters/civilian/civilian_anim.scn",
+}
 const MODEL_PATHS := {
 	"vampire": "res://assets/characters/vampire/vampire_rig.scn",
 	"werewolf": "res://assets/characters/werewolf/werewolf_rig.scn",
 	"civilian": "res://assets/characters/civilian/civilian_rig.scn",
 }
-static var _scene_cache := {} # shared PackedScenes
+static var _scene_cache := {} # shared PackedScenes (their AnimationLibraries are shared too)
 static var _eye_meshes := {}
 var model: Node3D
 var model_name := ""
@@ -56,6 +63,13 @@ var bone := {}
 var run_blend := 0.0
 var windup_blend := 0.0
 var stagger_blend := 0.0
+# skeletal animation (only with an *_anim.scn model)
+var anim: AnimationPlayer
+var anim_state := "" # idle / run / sprint / attack / hit / stagger / death / transform
+var anim_lock_t := 0.0 # one-shot clip time left before locomotion takes over again
+var strike_time := 1.0 # clip time of the attack's strike
+var anim_accum := 0.0
+var anim_slot := 0
 
 
 func _ready() -> void:
@@ -96,8 +110,13 @@ func _ready() -> void:
 
 static func _model_scene(n: String) -> PackedScene:
 	if not _scene_cache.has(n):
-		var path: String = MODEL_PATHS[n]
-		_scene_cache[n] = (load(path) as PackedScene) if ResourceLoader.exists(path) else null
+		var ps: PackedScene = null
+		for path in [ANIM_PATHS[n], MODEL_PATHS[n]]:
+			if ResourceLoader.exists(path):
+				ps = load(path) as PackedScene
+				if ps != null:
+					break
+		_scene_cache[n] = ps
 	return _scene_cache[n]
 
 
@@ -122,6 +141,17 @@ func _set_model(n: String) -> bool:
 	skel = sk
 	body_mesh = sk.get_node("Body")
 	visual.add_child(model)
+	anim = model.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	anim_state = ""
+	anim_lock_t = 0.0
+	if anim != null:
+		# advanced by hand in _process so far-away enemies can update less often
+		anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+		anim.playback_default_blend_time = 0.15
+		strike_time = model.get_meta("strike_time", 1.0)
+		anim_slot = randi() % 6
+		_play("idle", 0.0)
+		anim.seek(randf() * anim.current_animation_length, true)
 	bone.clear()
 	for i in skel.get_bone_count():
 		bone[skel.get_bone_name(i)] = i
@@ -136,11 +166,12 @@ func _set_model(n: String) -> bool:
 		_eye_meshes[r] = U.sphere(r)
 	var att := BoneAttachment3D.new()
 	skel.add_child(att)
-	att.bone_name = "head"
+	att.bone_name = model.get_meta("head_bone", "head")
 	var head_rest: Vector3 = model.get_meta("head_rest", Vector3(0, 1.5, 0))
 	att.visible = n != "civilian"
 	for key in ["eye_l", "eye_r"]:
-		var e := U.part(att, _eye_meshes[r], eye_mat, model.get_meta(key, head_rest) - head_rest)
+		var off: Vector3 = model.get_meta(key + "_local") if model.has_meta(key + "_local") else model.get_meta(key, head_rest) - head_rest
+		var e := U.part(att, _eye_meshes[r], eye_mat, off)
 		e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return true
 
@@ -159,6 +190,89 @@ func _set_overlay(c: Color) -> void:
 
 func _rot(b: String, q: Quaternion) -> void:
 	skel.set_bone_pose_rotation(bone[b], q)
+
+
+func _play(clip: String, blend := -1.0, spd := 1.0, from := -1.0) -> void:
+	anim_state = clip
+	anim.play(clip, blend)
+	anim.speed_scale = spd
+	if from >= 0.0:
+		anim.seek(from, true)
+
+
+## Wind-up started: run the slash so its strike frame lands when the wind-up ends.
+func _anim_attack(windup: float) -> void:
+	if anim == null:
+		return
+	var lead := minf(strike_time, 0.9) # skip the clip's idle lead-in
+	_play("attack", 0.08, lead / maxf(windup, 0.05), strike_time - lead)
+	anim_lock_t = windup + 0.6
+
+
+func _anim_strike() -> void:
+	if anim != null and anim_state == "attack":
+		anim.speed_scale = 1.5 # follow-through, then back to locomotion
+		anim_lock_t = 0.45
+
+
+func _anim_hit() -> void:
+	if anim == null or dead:
+		return
+	if staggered:
+		_play("hit", 0.08, 1.2, 0.0)
+		anim_state = "stagger"
+	else:
+		_play("hit", 0.06, 1.6, 0.05)
+		anim_lock_t = 0.45
+
+
+## Skeletal animation: locomotion by speed, one-shots on top (driven from _animate).
+func _anim_update(delta: float, spd: float) -> void:
+	anim_lock_t = maxf(anim_lock_t - delta, 0.0)
+	if dead:
+		return
+	if transform_t > 0.0:
+		if anim_state != "transform":
+			_play("hit", 0.1, 0.7, 0.2) # writhing through the change
+			anim_state = "transform"
+		return
+	if staggered:
+		if anim_state != "stagger":
+			_play("hit", 0.1, 1.2, 0.0)
+			anim_state = "stagger"
+		# hold the slump at the bottom of the flinch
+		anim.speed_scale = 0.0 if anim.current_animation_position >= 0.5 else 1.2
+		return
+	if anim_lock_t > 0.0 and anim_state in ["attack", "hit"]:
+		return
+	var want := "idle"
+	if spd > 0.4:
+		want = "sprint" if spd > (6.0 if anim_state != "sprint" else 5.4) else "run"
+	if want != anim_state:
+		_play(want, 0.2)
+	match want:
+		"run":
+			anim.speed_scale = clampf(spd / 4.2, 0.6, 1.5)
+		"sprint":
+			anim.speed_scale = clampf(spd / 8.0, 0.8, 1.3)
+		_:
+			anim.speed_scale = 1.0
+
+
+func _process(delta: float) -> void:
+	if anim == null or not is_instance_valid(anim):
+		return
+	anim_accum += delta
+	# full rate up close, every 2nd frame past 25 m, every 3rd past 45 m
+	var step := 1
+	var cam := get_viewport().get_camera_3d()
+	if cam != null:
+		var d2 := cam.global_position.distance_squared_to(global_position)
+		step = 3 if d2 > 2025.0 else (2 if d2 > 625.0 else 1)
+	if step > 1 and (Engine.get_process_frames() + anim_slot) % step != 0:
+		return
+	anim.advance(anim_accum)
+	anim_accum = 0.0
 
 
 ## Procedural pose on the baked skeleton (rest pose is a T-pose, +Z forward).
@@ -356,6 +470,7 @@ func _physics_process(delta: float) -> void:
 					strike_dir = to / dist if dist > 0.01 else Vector3(sin(visual.rotation.y), 0, cos(visual.rotation.y))
 					windup_t = 0.38 if kind == VAMPIRE else 0.45
 					attack_cd = 1.1 if kind == VAMPIRE else 1.3
+					_anim_attack(windup_t)
 			elif not token and dist < 5.5:
 				hvel = _circle(to, dist) # wait for a turn: ring the player
 			else:
@@ -393,6 +508,7 @@ func _circle(to: Vector3, dist: float) -> Vector3:
 
 func _resolve_strike(player) -> void:
 	main.release_attack_token(self)
+	_anim_strike()
 	var to: Vector3 = player.global_position - global_position
 	to.y = 0.0
 	var dist := to.length()
@@ -431,14 +547,25 @@ func _apply_velocity(hvel: Vector3, delta: float) -> void:
 
 func _animate(delta: float, spd: float) -> void:
 	phase += delta * (4.0 + spd * 1.2)
-	visual.position.y = absf(sin(phase)) * 0.06 * clampf(spd / 5.0, 0.0, 1.0)
 	var lean := 0.0
-	if staggered:
-		lean = 0.55
-	elif windup_t > 0.0:
-		lean = -0.25 # rear back before the strike
-	elif transformed:
-		lean = 0.3
+	if anim != null: # the clips carry the bob and most of the body language
+		visual.position.y = 0.0
+		if staggered:
+			lean = 0.2
+		elif windup_t > 0.0:
+			lean = -0.1
+		elif transformed:
+			lean = 0.12
+		# burning: a shiver on top of whatever clip is playing
+		visual.rotation.z = (sin(phase * 9.0) * 0.035) if burning else 0.0
+	else:
+		visual.position.y = absf(sin(phase)) * 0.06 * clampf(spd / 5.0, 0.0, 1.0)
+		if staggered:
+			lean = 0.55
+		elif windup_t > 0.0:
+			lean = -0.25 # rear back before the strike
+		elif transformed:
+			lean = 0.3
 	visual.rotation.x = lerpf(visual.rotation.x, lean, 10.0 * delta)
 	if transform_t <= 0.0:
 		var c := body_color
@@ -456,7 +583,10 @@ func _animate(delta: float, spd: float) -> void:
 		if flash_t > 0.0:
 			o = o.lerp(Color(1, 1, 1, 0.9), flash_t / 0.12)
 		_set_overlay(o)
-		_pose(delta, spd)
+		if anim != null:
+			_anim_update(delta, spd)
+		else:
+			_pose(delta, spd)
 	eye_mat.emission_energy_multiplier = (9.0 if windup_t > 0.0 else 5.0) if (kind == VAMPIRE or transformed) else 0.0
 	if staggered:
 		marker.position.y = 2.7 + sin(phase * 0.6) * 0.12
@@ -478,6 +608,7 @@ func take_hit(amount: float, dir: Vector3) -> void:
 		stagger_t = 3.0
 		marker.visible = true
 		hp = maxf(hp, 1.0)
+	_anim_hit()
 
 
 ## Called when the Daywalker bites. Returns blood type: 0 human, 1 vampire, 2 wolf.
@@ -499,8 +630,15 @@ func _die(_drained: bool) -> void:
 	collision_mask = 0
 	main.on_enemy_killed(self, _drained)
 	var tw := create_tween()
+	if anim != null:
+		visual.rotation.z = 0.0
+		_play("death", 0.1, 2.0 if kind == VAMPIRE else 1.25, 0.0)
 	if kind == VAMPIRE:
-		if model != null: # turn to ash: grey, shaded overlay
+		if anim != null: # crumple into the fall while greying, then collapse to ash
+			overlay_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+			_set_overlay(Color(0.3, 0.3, 0.3, 0.05))
+			tw.tween_property(overlay_mat, "albedo_color", Color(0.3, 0.3, 0.3, 0.92), 0.7)
+		elif model != null: # turn to ash: grey, shaded overlay
 			overlay_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 			_set_overlay(Color(0.3, 0.3, 0.3, 0.05))
 			tw.tween_property(overlay_mat, "albedo_color", Color(0.3, 0.3, 0.3, 0.92), 0.25)
@@ -510,7 +648,10 @@ func _die(_drained: bool) -> void:
 		tw.tween_property(visual, "scale", Vector3(1.4, 0.02, 1.4), 0.45)
 	else:
 		_set_overlay(Color(1, 1, 1, 0))
-		tw.tween_property(visual, "rotation:x", -1.5, 0.45).set_ease(Tween.EASE_IN)
-		tw.tween_interval(1.2)
+		if anim != null: # the clip does the fall; lie there, then sink away
+			tw.tween_interval(3.0)
+		else:
+			tw.tween_property(visual, "rotation:x", -1.5, 0.45).set_ease(Tween.EASE_IN)
+			tw.tween_interval(1.2)
 		tw.tween_property(visual, "scale", Vector3.ZERO, 0.4)
 	tw.tween_callback(queue_free)

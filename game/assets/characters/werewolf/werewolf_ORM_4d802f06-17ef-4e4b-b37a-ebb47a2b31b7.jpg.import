@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://drr3khdxt3gww"
-path="res://.godot/imported/werewolf_ORM_4d802f06-17ef-4e4b-b37a-ebb47a2b31b7.jpg-5665947dcb7a6f2348e1fddc21deb7a2.ctex"
+path.s3tc="res://.godot/imported/werewolf_ORM_4d802f06-17ef-4e4b-b37a-ebb47a2b31b7.jpg-5665947dcb7a6f2348e1fddc21deb7a2.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "64f0ea657a0706f69d7d1bc03fe5317b"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/werewolf/werewolf_ORM_4d802f06-17ef-4e4b-b37a-ebb47a2b31b7.jpg"
-dest_files=["res://.godot/imported/werewolf_ORM_4d802f06-17ef-4e4b-b37a-ebb47a2b31b7.jpg-5665947dcb7a6f2348e1fddc21deb7a2.ctex"]
+dest_files=["res://.godot/imported/werewolf_ORM_4d802f06-17ef-4e4b-b37a-ebb47a2b31b7.jpg-5665947dcb7a6f2348e1fddc21deb7a2.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
