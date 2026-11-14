@@ -51,6 +51,8 @@ var vow_choices: Array = [] # the three offered and not yet picked
 var death_drop := {} # {"pos": [x, y, z], "amount": n} — Tithe lost at the last death
 var stats := {}
 var rng := RandomNumberGenerator.new()
+## HUNT HOOK: false during a Hunt, where rank / Tithe / Vows / the Coat are run-scoped.
+var persist := true
 
 
 func _ready() -> void:
@@ -266,6 +268,8 @@ func from_dict(d: Dictionary) -> void:
 
 
 func save() -> bool:
+	if not persist:
+		return true # HUNT HOOK: nothing run-scoped is written
 	var f := FileAccess.open(save_path, FileAccess.WRITE)
 	if f == null:
 		return false
