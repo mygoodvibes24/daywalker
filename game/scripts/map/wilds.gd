@@ -298,7 +298,7 @@ static func _water_tower(c, base: Vector3) -> void:
 		for k in 4:
 			var a0 := k * TAU / 4.0 + PI / 4.0
 			var a1 := (k + 1) * TAU / 4.0 + PI / 4.0
-			var s := rr * (1.25 - 0.45 * y / leg)
+			var s: float = rr * (1.25 - 0.45 * y / leg)
 			c.beam(m, base + Vector3(cos(a0) * s, y, sin(a0) * s), base + Vector3(cos(a1) * s, y, sin(a1) * s), 0.15, 0.15, steel)
 			c.beam(m, base + Vector3(cos(a0) * s, y, sin(a0) * s), base + Vector3(cos(a1) * s, y + 5.0, sin(a1) * s) * Vector3(1, 1, 1), 0.08, 0.08, steel)
 	var tank := base + Vector3(0, leg, 0)

@@ -76,7 +76,7 @@ static func _streetcar(c, p: Vector3) -> void:
 	c.box(paint, p + Vector3(0, 3.45, 0), Vector3(2.2, 0.3, L - 1.0), Color(0.18, 0.17, 0.16))
 	var glass = c._b("glass")
 	for sx in [-1.0, 1.0]:
-		var x := p.x + sx * 1.31
+		var x: float = p.x + sx * 1.31
 		var n := Vector3(sx, 0, 0)
 		var zz := -L * 0.5 + 0.6
 		while zz < L * 0.5 - 1.4:
@@ -244,7 +244,7 @@ static func _clubs(c, r: RandomNumberGenerator) -> void:
 				continue
 			if side > 0 and Layout.VM_OPERA.has_point(Vector2i(8, j)):
 				continue
-			var fx := MILE_X + side * 16.0 # the frontage line (x 134 / 166)
+			var fx: float = MILE_X + side * 16.0 # the frontage line (x 134 / 166)
 			var n := Vector3(-side, 0, 0) # facing the Mile
 			c.ck = c._chunk_of(fx, cz)
 			var door := Vector3(fx, 0, cz)
@@ -252,8 +252,8 @@ static func _clubs(c, r: RandomNumberGenerator) -> void:
 			var rt := Vector3.UP.cross(n).normalized()
 			var p = c._b("paint")
 			for s in [-1.0, 1.0]:
-				var a := door + n * 0.08 + rt * s * 1.4
-				var b := door + n * 0.08 + rt * s * 0.6
+				var a: Vector3 = door + n * 0.08 + rt * s * 1.4
+				var b: Vector3 = door + n * 0.08 + rt * s * 0.6
 				p.quad(a, a + Vector3(0, 3.2, 0), b + Vector3(0, 3.2, 0), b, n, Color(0.5, 0.02, 0.05))
 			c._b("shop").quad(door + n * 0.05 - rt * 0.6, door + n * 0.05 - rt * 0.6 + Vector3(0, 3.2, 0), door + n * 0.05 + rt * 0.6 + Vector3(0, 3.2, 0), door + n * 0.05 + rt * 0.6, n, Color.WHITE, c.shop_uv(2)[0], c.shop_uv(2)[1])
 			_marquee(c, door + Vector3(0, 3.7, 0) + n * 0.1, n, 4.2, [0, 2, 3][r.randi() % 3])

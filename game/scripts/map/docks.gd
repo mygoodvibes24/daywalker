@@ -118,7 +118,7 @@ static func _yard(c, r: RandomNumberGenerator) -> void:
 		for cx in [-172.0, -150.0]:
 			if r.randf() < 0.08:
 				continue # a gap to slip through
-			var h := [1, 2, 2, 3, 3, 4][r.randi() % 6]
+			var h: int = [1, 2, 2, 3, 3, 4][r.randi() % 6]
 			var p := Vector3(cx + r.randf_range(-0.3, 0.3), 0.0, z)
 			c.ck = c._chunk_of(p.x, p.z)
 			var bt = c._b("corrugated")
