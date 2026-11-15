@@ -3367,8 +3367,8 @@ func _make_map_materials() -> void:
 	for k in ["water", "swamp"]:
 		var wm := StandardMaterial3D.new()
 		wm.albedo_color = Color(0.004, 0.006, 0.008) if k == "water" else Color(0.006, 0.012, 0.009)
-		wm.roughness = 0.12 if k == "water" else 0.22
-		wm.metallic_specular = 0.18
+		wm.roughness = 0.12 if k == "water" else 0.3
+		wm.metallic_specular = 0.12 if k == "water" else 0.06
 		M[k] = wm
 	M["corrugated"] = _surface_mat(_corrugated_textures(), 2.0, 0.9)
 	M["wood"] = _surface_mat(_plank_textures(), 2.0)
