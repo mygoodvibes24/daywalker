@@ -6,6 +6,12 @@ const SolAnim = preload("res://scripts/sol_anim.gd")
 const SOL_SCENE := "res://assets/characters/sol/sol.scn"
 const SOL_MODULAR := "res://assets/characters/sol/sol_modular.scn"
 const SolModularAnim = preload("res://scripts/sol_modular_anim.gd")
+const SolMoves = preload("res://scripts/sol_moves.gd") # the sword moves as data (clips, timing, damage)
+const WeaponVisual = preload("res://scripts/items/weapon_visual.gd")
+const HEAVY_HOLD := 0.4 # hold attack this long for the charged slash
+const DASH_ATTACK_WINDOW := 0.3 # attack within this long after a Blood Dash ends: the thrust
+const PARRY_WINDOW := 0.3 # seconds a parry press catches an enemy's wind-up
+const COMBAT_RANGE := 10.0 # enemies this close put Sol in his combat stance
 
 const WALK := 7.5
 const SPRINT := 13.0
@@ -24,6 +30,8 @@ signal hit_enemy(enemy: Node, dmg: float)
 signal bit_enemy(enemy: Node, blood: int)
 signal dashed(dir: Vector3)
 signal hurt(amount: float, src)
+signal parried(enemy: Node)
+signal special_move(name: String) # charged / dash / sprint / finisher / parry started
 
 var main
 var max_hp := 100.0
@@ -61,6 +69,15 @@ var ghost_tweens: Array = []
 var ghost_next := 0
 var bite_ready := false # a staggered enemy is in bite reach (the bite owns E / Y then)
 var weapon_visual: Node3D # set_weapon_visual()
+var weapon_item := {} # the equipped blade (picks the combo chain)
+# sword moves (scripts/sol_moves.gd)
+var move_name := "" # the move last started
+var hold_t := -1.0 # seconds attack has been held since the press that started a combo (-1: not held)
+var pending := {} # a strike waiting for its clip's strike frame: {t, move, target}
+var lunge_speed := 9.0
+var parry_t := 0.0
+var parry_cd := 0.0
+var finisher_t := 0.0
 
 var pivot: Node3D
 var spring: SpringArm3D
@@ -83,6 +100,7 @@ func _ready() -> void:
 	col.position.y = 0.925
 	add_child(col)
 	_build_body()
+	_setup_combat_input()
 	pivot = Node3D.new()
 	pivot.position.y = 1.8 # a touch higher: reads the street and the lights better
 	add_child(pivot)
@@ -266,12 +284,14 @@ func _physics_process(delta: float) -> void:
 		velocity.y = maxf(velocity.y, 0.0)
 	elif bite_t > 0.0:
 		hv = Vector3.ZERO
+	elif finisher_t > 0.0:
+		hv = _forward() * lunge_speed if lunge_t > 0.0 else Vector3.ZERO # rooted in the execution
 	else:
 		hv = dir * spd
 		if swing_t > 0.0:
 			hv *= 0.3
 		if lunge_t > 0.0:
-			hv += _forward() * 9.0
+			hv += _forward() * lunge_speed
 	velocity.x = hv.x
 	velocity.z = hv.z
 	move_and_slide()
@@ -283,8 +303,11 @@ func _physics_process(delta: float) -> void:
 	visual.rotation.y = lerp_angle(visual.rotation.y, facing, 16.0 * delta)
 
 	# actions
-	if Input.is_action_just_pressed("attack") and attack_cd <= 0.0 and bite_t <= 0.0 and Time.get_ticks_msec() >= attack_block_until:
-		_attack()
+	_combat_tick(delta)
+	if Input.is_action_just_pressed("attack") and attack_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0 and Time.get_ticks_msec() >= attack_block_until:
+		_attack_pressed()
+	if Input.is_action_just_pressed("parry") and parry_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0:
+		_parry()
 	var bite_target = _nearest_enemy(BITE_RANGE, 1)
 	bite_ready = bite_target != null
 	if Input.is_action_just_pressed("bite") and bite_t <= 0.0 and bite_target != null:
@@ -392,6 +415,7 @@ func _bite_mult() -> float:
 ## Show the equipped weapon in Sol's hand. Hides the default blade mesh and puts the
 ## item's blade (items/weapon_visual.gd — swap in a real sword model there) in its place.
 func set_weapon_visual(item: Dictionary) -> void:
+	weapon_item = item
 	if weapon_visual != null and is_instance_valid(weapon_visual):
 		weapon_visual.queue_free()
 		weapon_visual = null
@@ -448,9 +472,11 @@ func _nearest_enemy(max_dist: float, staggered: int):
 func _attack() -> void:
 	combo = combo + 1 if (combo_t > 0.0 and combo < 3) else 1
 	combo_t = 0.7
+	move_name = SolMoves.combo_step(WeaponVisual.combo_for(weapon_item), combo)
+	var step := SolMoves.move(move_name)
 	attack_cd = 0.22 if combo < 3 else 0.4
 	swing_t = 0.22
-	lunge_t = 0.08
+	_lunge(float(step.lunge), 0.08)
 	# soft-lock prefers fighting enemies, so you don't kill the one you meant to bite
 	var target = _nearest_enemy(5.0, -1)
 	if target == null:
@@ -468,7 +494,7 @@ func _attack() -> void:
 	attacked.emit(combo, fwd)
 	Audio.play("sword_swing", -2.0 if combo < 3 else 1.0, 0.1) # AUDIO HOOK
 	if mod_anim != null:
-		mod_anim.swing(combo, w.spd)
+		mod_anim.play_move(step, w.spd, combo == 2)
 	var hit := false
 	for e in main.enemies_root.get_children():
 		if e.dead or (e.staggered and e != target):
@@ -486,6 +512,230 @@ func _attack() -> void:
 		shake = maxf(shake, 0.12 if combo < 3 else 0.28)
 		main.rumble(0.4, 0.0 if combo < 3 else 0.5, 0.08)
 		main.set_slowmo(0.06, 0.05 if combo < 3 else 0.09)
+
+
+# ---------------------------------------------------------------- sword moves (sol_moves.gd)
+## The parry action: keyboard C / middle mouse, L3 on a pad (sprint keeps LT). Registered here, like
+## atmosphere.gd's rain toggle, so the binding lives with the move it drives.
+func _setup_combat_input() -> void:
+	if InputMap.has_action("parry"):
+		return
+	InputMap.add_action("parry", 0.25)
+	var k := InputEventKey.new()
+	k.physical_keycode = KEY_C
+	InputMap.action_add_event("parry", k)
+	var mb := InputEventMouseButton.new()
+	mb.button_index = MOUSE_BUTTON_MIDDLE
+	InputMap.action_add_event("parry", mb)
+	var pb := InputEventJoypadButton.new()
+	pb.button_index = JOY_BUTTON_LEFT_STICK
+	InputMap.action_add_event("parry", pb)
+	if InputMap.has_action("sprint"):
+		for ev in InputMap.action_get_events("sprint"):
+			if ev is InputEventJoypadButton and ev.button_index == JOY_BUTTON_LEFT_STICK:
+				InputMap.action_erase_event("sprint", ev) # sprint is LT on a pad now
+
+
+## Attack pressed: an execution on a staggered enemy in reach, the thrust out of a Blood Dash, the
+## running slash while sprinting, else the next step of the combo (held on, it becomes the charged slash).
+func _attack_pressed() -> void:
+	hold_t = -1.0
+	var fin = _finisher_target()
+	if fin != null:
+		_finisher(fin)
+	elif dash_t > 0.0 or dashed_recently(DASH_TIME + DASH_ATTACK_WINDOW):
+		_special("dash")
+	elif sprinting and Vector2(velocity.x, velocity.z).length() > WALK + 1.0:
+		_special("sprint")
+	else:
+		_attack()
+		hold_t = 0.0
+
+
+func _lunge(dist: float, t: float) -> void:
+	lunge_t = t
+	lunge_speed = dist / maxf(t, 0.02)
+
+
+## Heavy-blade family swords (the cleavers) swing the heavy combo.
+func _combo_chain() -> String:
+	return WeaponVisual.combo_for(weapon_item)
+
+
+## The charged / dash / sprint moves: play the clip now, strike on its strike frame.
+func _special(name: String) -> void:
+	var m := SolMoves.move(name)
+	move_name = name
+	combo = 0
+	combo_t = 0.0
+	hold_t = -1.0
+	var target = _nearest_enemy(5.0, -1)
+	if target != null:
+		var tt: Vector3 = target.global_position - global_position
+		facing = atan2(tt.x, tt.z)
+		visual.rotation.y = facing
+	# PROGRESSION HOOK: the blade's speed scales the move like the combo
+	var w := weapon_stats()
+	attack_cd = float(m.cd) / maxf(w.spd, 0.3)
+	swing_t = float(m.lock)
+	var delay := (float(m.hit) - float(m.from)) / (float(m.speed) * maxf(w.spd, 0.3))
+	if mod_anim != null:
+		delay = mod_anim.play_move(m, w.spd)
+	_lunge(float(m.lunge), maxf(delay, 0.1))
+	pending = {"t": delay, "move": name, "target": target}
+	attacked.emit(3 if name == "charged" else 1, _forward())
+	special_move.emit(name)
+	Audio.play("sword_swing", 1.0 if name == "charged" else -1.0, 0.1) # AUDIO HOOK
+
+
+## A staggered enemy close in front, nearer than any enemy still fighting: the execution target.
+func _finisher_target():
+	var st = _nearest_enemy(3.0, 1)
+	if st == null:
+		return null
+	var to: Vector3 = st.global_position - global_position
+	to.y = 0.0
+	var d := to.length()
+	var fighter = _nearest_enemy(d, -1)
+	if fighter != null:
+		return null
+	return st
+
+
+## Sword Judgment: Sol closes in and executes a staggered enemy (the kill and its drops come from the
+## enemy's own death path on the strike frame). Rooted, untouchable, camera pulled in.
+func _finisher(e) -> void:
+	var m := SolMoves.move("finisher")
+	move_name = "finisher"
+	combo = 0
+	combo_t = 0.0
+	var to: Vector3 = e.global_position - global_position
+	to.y = 0.0
+	facing = atan2(to.x, to.z)
+	visual.rotation.y = facing
+	e.stagger_t = maxf(e.stagger_t, float(m.lock) + 0.5) # he stays down for it
+	finisher_t = float(m.lock)
+	swing_t = float(m.lock)
+	invuln_t = maxf(invuln_t, float(m.lock))
+	attack_cd = float(m.lock) + float(m.cd)
+	var delay := (float(m.hit) - float(m.from)) / float(m.speed)
+	if mod_anim != null:
+		delay = mod_anim.play_move(m, 1.0)
+	_lunge(maxf(to.length() - 1.2, 0.0), maxf(delay * 0.7, 0.1))
+	pending = {"t": delay, "move": "finisher", "target": e}
+	attacked.emit(1, _forward())
+	special_move.emit("finisher")
+	Audio.play("sword_swing", 0.0, 0.1) # AUDIO HOOK
+
+
+## The strike frame of a delayed move: damage, hit-stop, shake (the same rules as the combo).
+func _strike(name: String, target) -> void:
+	var m := SolMoves.move(name)
+	var fwd := _forward()
+	var w := weapon_stats()
+	if name == "finisher":
+		if target == null or not is_instance_valid(target) or target.dead:
+			return
+		var fd: float = w.dmg * 2.0 * (1.0 + stat("finisher")) * damage_mult() * _vs_mult(target)
+		target.take_hit(fd, fwd) # staggered: this is the kill (death, drops and Tithe as usual)
+		Audio.play_at("sword_hit", target.global_position, 4.0) # AUDIO HOOK
+		hit_enemy.emit(target, fd)
+		shake = maxf(shake, float(m.shake))
+		main.rumble(0.6, 0.9, 0.2)
+		main.set_slowmo(0.15, float(m.stop) * 2.0)
+		return
+	var dmg: float = w.dmg * float(m.dmg) * damage_mult()
+	if name == "charged":
+		dmg *= 1.0 + stat("finisher") # PROGRESSION HOOK: the heavy hit counts as a finisher
+	var reach: float = float(m.reach) + w.reach
+	var hit := false
+	for e in main.enemies_root.get_children():
+		if e.dead or (e.staggered and e != target):
+			continue
+		var to: Vector3 = e.global_position - global_position
+		to.y = 0.0
+		var d := to.length()
+		if d < reach and (d < 0.9 or fwd.dot(to / d) > 0.3):
+			var hd: float = dmg * _vs_mult(e)
+			e.take_hit(hd, to.normalized() if d > 0.01 else fwd)
+			hit_enemy.emit(e, hd)
+			hit = true
+			Audio.play_at("sword_hit", e.global_position, 3.0 if name == "charged" else 0.0) # AUDIO HOOK
+			if name == "charged" and not e.dead:
+				_stagger_enemy(e, 2.5) # the heavy hit knocks them reeling
+	if hit:
+		shake = maxf(shake, float(m.shake))
+		main.rumble(0.5, 0.6, 0.12)
+		main.set_slowmo(0.06, float(m.stop))
+
+
+## Parry: a short guard; an enemy whose wind-up is under way in reach is turned aside.
+func _parry() -> void:
+	var m := SolMoves.move("parry")
+	move_name = "parry"
+	parry_t = PARRY_WINDOW
+	parry_cd = float(m.cd)
+	swing_t = float(m.lock)
+	if mod_anim != null:
+		mod_anim.play_move(m, 1.0)
+	special_move.emit("parry")
+
+
+func _parry_success(e) -> void:
+	parry_t = 0.0
+	parry_cd = 0.0
+	var to: Vector3 = e.global_position - global_position
+	facing = atan2(to.x, to.z)
+	_stagger_enemy(e, 2.5)
+	shake = maxf(shake, 0.25)
+	main.rumble(0.6, 0.4, 0.15)
+	main.set_slowmo(0.25, 0.45)
+	main.hud.popup("PARRY")
+	parried.emit(e)
+	Audio.play_at("sword_hit", e.global_position, 2.0, 0.15) # AUDIO HOOK
+
+
+## Put an enemy into its stagger (the state the bite and the execution need), from outside enemy.gd.
+func _stagger_enemy(e, t: float) -> void:
+	if e.dead:
+		return
+	e.windup_t = 0.0
+	main.release_attack_token(e)
+	e.staggered = true
+	e.stagger_t = maxf(e.stagger_t, t)
+	if e.marker != null:
+		e.marker.visible = true
+	if e.has_method("_anim_hit"):
+		e._anim_hit()
+
+
+## Per physics frame: the charge hold, the pending strike, the parry window and the move timers.
+func _combat_tick(delta: float) -> void:
+	parry_cd = maxf(parry_cd - delta, 0.0)
+	finisher_t = maxf(finisher_t - delta, 0.0)
+	if hold_t >= 0.0:
+		if Input.is_action_pressed("attack"):
+			hold_t += delta
+			if hold_t >= HEAVY_HOLD:
+				_special("charged")
+		else:
+			hold_t = -1.0
+	if not pending.is_empty():
+		pending.t -= delta
+		if pending.t <= 0.0:
+			var p := pending
+			pending = {}
+			_strike(p.move, p.target)
+	if parry_t > 0.0:
+		parry_t -= delta
+		for e in main.enemies_root.get_children():
+			if e.dead or e.windup_t <= 0.0:
+				continue
+			var to: Vector3 = e.global_position - global_position
+			to.y = 0.0
+			if to.length() < e.attack_range + 1.4:
+				_parry_success(e)
+				break
 
 
 func _bite(target) -> void:
@@ -536,6 +786,9 @@ func take_damage(amount: float, _src) -> void:
 		main.perfect_dodge()
 		return
 	if invuln_t > 0.0:
+		return
+	if parry_t > 0.0 and _src != null and is_instance_valid(_src) and _src.get("windup_t") != null:
+		_parry_success(_src) # the strike landed inside the parry window: turned aside
 		return
 	if frenzy_t > 0.0:
 		amount *= 0.5
@@ -589,6 +842,10 @@ func _process(delta: float) -> void:
 	elif sprinting:
 		target_fov = 78.0
 	camera.fov = lerpf(camera.fov, target_fov, 10.0 * delta)
+	# the execution: the camera arm pulls in tight, then eases back out
+	if finisher_t > 0.0:
+		camera.fov = lerpf(camera.fov, 55.0, 8.0 * delta)
+	spring.spring_length = lerpf(spring.spring_length, 2.7 if finisher_t > 0.0 else 4.8, (7.0 if finisher_t > 0.0 else 3.0) * delta)
 	if dead:
 		return
 
@@ -622,6 +879,7 @@ func _process(delta: float) -> void:
 		})
 	elif mod_anim != null:
 		lean *= 0.5 # small additive tilt on top of the clips (dash lunge, bite lean)
+		mod_anim.in_combat = _nearest_enemy(COMBAT_RANGE, 0) != null
 		mod_anim.update(delta, {"speed": hs, "on_floor": is_on_floor()})
 	visual.rotation.x = lerpf(visual.rotation.x, lean, 12.0 * delta)
 
