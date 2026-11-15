@@ -199,7 +199,9 @@ func debug_view_camp() -> void:
 	if best == null:
 		return
 	var c: Vector3 = best.global_position
-	var dir := Vector3(-c.x, 0.0, -c.z).normalized()
+	# back off along the camp's street (streets run on the GRID lines), towards the map centre
+	var on_x_lane := absf(c.x - roundf(c.x / main.GRID) * main.GRID) < absf(c.z - roundf(c.z / main.GRID) * main.GRID)
+	var dir := Vector3(0, 0, -signf(c.z) if c.z != 0.0 else 1.0) if on_x_lane else Vector3(-signf(c.x) if c.x != 0.0 else 1.0, 0, 0)
 	var to := c + dir * 22.0
 	var nav_map: RID = get_world_3d().navigation_map
 	if NavigationServer3D.map_get_iteration_id(nav_map) > 0:
