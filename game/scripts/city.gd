@@ -167,7 +167,7 @@ func _b(mat: String) -> Batch:
 
 
 const CHUNK := 80.0 # main geometry is merged per 80 m cell...
-const MAIN_RANGE := 130.0
+const MAIN_RANGE := 115.0
 const FOG_SCALE := 0.72 # atmosphere.gd's fog_scale for this map # ...drawn up to this far, then swapped for its HLOD boxes
 var _near := true # the building being made is close to the hub: a little more relief
 
@@ -1486,7 +1486,7 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 
 
 const DETAIL_CELL := 40.0
-const DETAIL_RANGE := 85.0
+const DETAIL_RANGE := 72.0
 
 
 ## Detail chunk (galleries, lace, ferns, shutters...) for a point: hidden beyond DETAIL_RANGE.
