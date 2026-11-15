@@ -682,14 +682,18 @@ func _hunt_checks() -> bool:
 		if Vector2(poi.global_position.x, poi.global_position.z).length() < 20.0:
 			far_ok = false
 	ok = _check("POIs stay off the plaza", far_ok) and ok
+	var dists := {}
+	for poi in h.pois:
+		dists[load("res://scripts/map/map_layout.gd").district_at(poi.global_position.x, poi.global_position.z)] = true
+	ok = _check("POIs spread over the districts (%d POIs in %d districts)" % [h.pois.size(), dists.size()], h.pois.size() >= 18 and dists.size() >= 5) and ok
 	var camp = null
 	for poi in h.pois:
 		if poi.type == "camp":
 			camp = poi
 			break
 	var start: Vector3 = camp.global_position + Vector3(45.0, 0.0, 0.0)
-	if absf(start.x) > 78.0:
-		start = camp.global_position - Vector3(45.0, 0.0, 0.0)
+	if not m.city.play_rect.grow(-3.0).has_point(Vector2(start.x, start.z)):
+		start = camp.global_position - Vector3(45.0, 0.0, 0.0) # stay inside the map's walls
 	p.global_position = start + Vector3(0, 0.2, 0)
 	p.hp = 1e9
 	p.max_hp = 1e9

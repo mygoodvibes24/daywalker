@@ -167,7 +167,7 @@ func _b(mat: String) -> Batch:
 
 
 const CHUNK := 80.0 # main geometry is merged per 80 m cell...
-const MAIN_RANGE := 175.0
+const MAIN_RANGE := 130.0
 const FOG_SCALE := 0.72 # atmosphere.gd's fog_scale for this map # ...drawn up to this far, then swapped for its HLOD boxes
 var _near := true # the building being made is close to the hub: a little more relief
 
@@ -3147,7 +3147,7 @@ func _build_props() -> void:
 				mmi.multimesh = mm
 				mmi.material_override = entry[1]
 				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if big and entry[2] else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				mmi.visibility_range_end = 150.0 if kind == "lamp" else 110.0
+				mmi.visibility_range_end = 100.0 if kind == "lamp" else 80.0
 				add_child(mmi)
 	# warm halos round every lantern: camera-facing quads in one MultiMesh
 	if not halo_xfs.is_empty():
@@ -3196,7 +3196,7 @@ func _glb_multimeshes(kind: String, glb: Dictionary, xfs: Array) -> void:
 			mmi.name = "Glb_%s_%d_%d" % [kind, key.x, key.y]
 			mmi.multimesh = mm
 			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if big else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			mmi.visibility_range_end = 120.0 if big else 60.0
+			mmi.visibility_range_end = 55.0 if big else 40.0
 			add_child(mmi)
 	print("city props: %d x %s (generated model)" % [xfs.size(), kind])
 
@@ -3360,16 +3360,16 @@ const WetMats = preload("res://scripts/wet_materials.gd")
 
 func _make_map_materials() -> void:
 	M["mud"] = WetMats._make(Color(0.085, 0.062, 0.042), 0.62, 1.0) # rutted wet dirt roads
-	M["earth"] = WetMats._make(Color(0.045, 0.045, 0.034), 0.22, 0.8) # forest floor, cemetery gravel
-	M["dock"] = WetMats._make(Color(0.15, 0.145, 0.14), 0.42, 0.7) # quay concrete
-	var water: ShaderMaterial = WetMats._make(Color(0.004, 0.006, 0.008), 1.0, 0.35)
-	for k in ["dry_roughness", "damp_roughness", "puddle_roughness"]:
-		water.set_shader_parameter(k, 0.03)
-	M["water"] = water
-	var swamp: ShaderMaterial = WetMats._make(Color(0.008, 0.014, 0.01), 1.0, 0.3)
-	for k in ["dry_roughness", "damp_roughness", "puddle_roughness"]:
-		swamp.set_shader_parameter(k, 0.06)
-	M["swamp"] = swamp
+	M["earth"] = WetMats._make(Color(0.04, 0.038, 0.03), 0.08, 0.8) # forest floor, cemetery gravel
+	M["earth"].set_shader_parameter("damp_roughness", 0.7)
+	M["dock"] = WetMats._make(Color(0.1, 0.098, 0.095), 0.3, 0.7) # quay concrete
+	# open water: near-black with a weak, glossy sheen (a full mirror reads as snow at grazing angles)
+	for k in ["water", "swamp"]:
+		var wm := StandardMaterial3D.new()
+		wm.albedo_color = Color(0.004, 0.006, 0.008) if k == "water" else Color(0.006, 0.012, 0.009)
+		wm.roughness = 0.12 if k == "water" else 0.22
+		wm.metallic_specular = 0.18
+		M[k] = wm
 	M["corrugated"] = _surface_mat(_corrugated_textures(), 2.0, 0.9)
 	M["wood"] = _surface_mat(_plank_textures(), 2.0)
 	M["pine"] = _surface_mat(_needle_textures(), 2.0)
@@ -3396,6 +3396,14 @@ func _make_map_materials() -> void:
 	beacon.albedo_color = Color(1.0, 0.08, 0.05)
 	beacon.vertex_color_use_as_albedo = true
 	M["beacon"] = beacon # always-lit signal lamps (crane tops, the water tower), read through fog
+	var pn := StandardMaterial3D.new()
+	pn.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	pn.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	pn.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	pn.albedo_texture = pool_mat.albedo_texture
+	pn.albedo_color = Color(0.55, 0.04, 0.22)
+	pn.disable_receive_shadows = true
+	M["pool_neon"] = pn # magenta neon spill on wet ground and walls (the Velvet Mile)
 	var sodium := StandardMaterial3D.new()
 	sodium.albedo_color = Color(1.0, 0.6, 0.25)
 	sodium.emission_enabled = true
@@ -3907,3 +3915,4 @@ func _process(delta: float) -> void:
 	crypt_mat.emission_energy_multiplier = 0.5 + night * 0.7
 	var pool := night * 0.42
 	pool_mat.albedo_color = Color(1.0 * pool, 0.72 * pool, 0.42 * pool)
+	M["pool_neon"].albedo_color = Color(0.55, 0.04, 0.22) * (0.25 + night * 0.75)

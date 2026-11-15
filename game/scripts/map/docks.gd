@@ -317,6 +317,13 @@ static func _crane(c, p: Vector3) -> void:
 		c.ck = c._chunk_of(p.x, p.z)
 		c._light_pool(Vector3(p.x, 0, f.z), 8.0)
 		c.ck = "M"
+	var l := OmniLight3D.new() # one real sodium flood per crane
+	l.position = p + Vector3(6.0, 14.0, 0)
+	l.light_color = Color(1.0, 0.55, 0.22)
+	l.light_energy = 2.5
+	l.omni_range = 30.0
+	l.omni_attenuation = 1.2
+	c.add_child(l)
 
 
 ## The cargo ship moored off the quay: hull, deck stacks, bridge house, lights.

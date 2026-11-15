@@ -261,6 +261,21 @@ static func _clubs(c, r: RandomNumberGenerator) -> void:
 			c._b("paint").quad(door + rt * 0.8 + Vector3(0, 0.105, 0), door + rt * 0.8 + n * 2.0 + Vector3(0, 0.105, 0), door - rt * 0.8 + n * 2.0 + Vector3(0, 0.105, 0), door - rt * 0.8 + Vector3(0, 0.105, 0), Vector3.UP, Color(0.35, 0.02, 0.04))
 			_ropes(c, door + Vector3(0, 0.1, 0) + n * 1.2 + rt * 1.2, rt, 4.5)
 			c._light_pool(door + n * 1.5, 3.0)
+			# crimson and magenta neon tubes up the piers, spilling onto the wet street
+			var neon = c._b("neon")
+			var k0: int = neon.v.size()
+			var nk: int = [0, 0, 2, 3][r.randi() % 4]
+			for s in [-1.0, 1.0]:
+				var base: Vector3 = door + rt * s * 2.6 + n * 0.12
+				c.beam(neon, base + Vector3(0, 4.6, 0), base + Vector3(0, 14.0, 0), 0.12, 0.12, Color.WHITE)
+			c.beam(neon, door - rt * 2.6 + n * 0.12 + Vector3(0, 4.6, 0), door + rt * 2.6 + n * 0.12 + Vector3(0, 4.6, 0), 0.1, 0.1, Color.WHITE)
+			for q in range(k0, neon.v.size()):
+				neon.t[q] = c.neon_uv(nk)
+			var pool = c._b("pool_neon")
+			var gp: Vector3 = door + n * 4.5 + Vector3(0, 0.115, 0)
+			pool.quad(gp + Vector3(-5, 0, 5), gp + Vector3(-5, 0, -5), gp + Vector3(5, 0, -5), gp + Vector3(5, 0, 5), Vector3.UP, Color.WHITE)
+			var wc: Vector3 = door + n * 0.06 + Vector3(0, 6.0, 0)
+			pool.quad(wc - rt * 5.0 - Vector3(0, 6, 0), wc - rt * 5.0 + Vector3(0, 6, 0), wc + rt * 5.0 + Vector3(0, 6, 0), wc + rt * 5.0 - Vector3(0, 6, 0), n, Color.WHITE)
 
 
 ## The harbour promenade along the south waterfront: flagstones, a railing, lanterns.
