@@ -359,10 +359,15 @@ func _spawn_roamer() -> void:
 	if p == null:
 		return
 	var pos := Vector3.INF
-	for attempt in 32:
-		var along := rng.randf_range(-76.0, 76.0)
-		var lane: float = rng.randi_range(-3, 3) * float(main.GRID) + rng.randf_range(-2.0, 2.0)
-		var c: Vector3 = Vector3(lane, 0.5, along) if rng.randf() < 0.5 else Vector3(along, 0.5, lane)
+	var roads: PackedVector3Array = main.city.road_points if main.city != null else PackedVector3Array() # MAP HOOK: the large map's roads
+	for attempt in 48:
+		var c: Vector3
+		if not roads.is_empty():
+			c = roads[rng.randi() % roads.size()] + Vector3(rng.randf_range(-2.0, 2.0), 0.5, rng.randf_range(-2.0, 2.0))
+		else:
+			var along := rng.randf_range(-76.0, 76.0)
+			var lane: float = rng.randi_range(-3, 3) * float(main.GRID) + rng.randf_range(-2.0, 2.0)
+			c = Vector3(lane, 0.5, along) if rng.randf() < 0.5 else Vector3(along, 0.5, lane)
 		var d := c.distance_to(p.global_position)
 		if d > Cfg.ROAM_MIN_DIST and d < Cfg.ROAM_MAX_DIST and ring.outside_by(c) <= -4.0:
 			pos = c

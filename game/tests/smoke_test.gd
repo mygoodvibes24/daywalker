@@ -410,6 +410,7 @@ func _coat_checks(main) -> bool:
 	main.inventory_ui.close()
 	main.levelup_ui.close()
 	main.clear_slowmo()
+	main.spawn_timer = 9999.0 # no new arrivals (an enemy within 10 m switches Sol to his combat stance)
 	_clear_enemies(main)
 	p.dead = false
 	p.hp = p.max_hp
