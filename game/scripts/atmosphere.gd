@@ -16,6 +16,8 @@ const PostFxScript = preload("res://scripts/post_fx.gd")
 const SOL_LIGHT_LAYER := 1 << 19 # render layer 20: only Sol receives the rim and fill lights
 
 var tier := "web"
+## Exposed setting: scales the fog density (the map sets it so landmarks read at range).
+var fog_scale := 1.0
 var cinematic := false
 var main: Node3D
 var world_env: WorldEnvironment
@@ -313,14 +315,14 @@ func update_lighting(d: float, night: float, full_moon: bool) -> void:
 	env.fog_light_color = fog_col
 	env.fog_light_energy = 1.0
 	if cinematic:
-		env.fog_density = lerpf(0.0035, 0.006, night)
-		env.volumetric_fog_density = lerpf(0.012, 0.032, night)
+		env.fog_density = lerpf(0.0035, 0.006, night) * fog_scale
+		env.volumetric_fog_density = lerpf(0.012, 0.032, night) * fog_scale
 		env.volumetric_fog_albedo = Color(0.75, 0.8, 0.9).lerp(Color(0.62, 0.7, 0.95), night)
 		var glow := Color(0.02, 0.025, 0.05) if not full_moon else Color(0.04, 0.03, 0.06)
 		env.volumetric_fog_emission = glow * night
 		env.volumetric_fog_emission_energy = 1.0
 	else:
-		env.fog_density = lerpf(0.009, 0.016, night)
+		env.fog_density = lerpf(0.009, 0.016, night) * fog_scale
 	# ambient: cool and present at night so the city never goes pitch black
 	env.ambient_light_color = Color(0.3, 0.38, 0.6).lerp(Color(0.68, 0.7, 0.76), d)
 	env.ambient_light_energy = lerpf(0.55 if cinematic else 0.6, 0.65, d)

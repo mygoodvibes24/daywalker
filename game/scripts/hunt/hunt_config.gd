@@ -4,9 +4,9 @@ extends RefCounted
 
 # ---------------------------------------------------------------- timings (seconds)
 ## One "day" = explore -> the Curfew closes (stage 1) -> hold -> closes again (stage 2) -> night boss.
-## Two days and a Final Night: ~4.9 min per day + three boss fights = roughly 14-17 minutes.
+## Two days and a Final Night: ~6 min per day on the large map + three boss fights = roughly 17-21 minutes.
 const TIMINGS := {
-	"normal": {"explore": 170.0, "shrink1": 35.0, "hold": 55.0, "shrink2": 35.0, "victory": 9.0, "final_dusk": 20.0, "boss_hp": 1.0},
+	"normal": {"explore": 215.0, "shrink1": 55.0, "hold": 55.0, "shrink2": 35.0, "victory": 9.0, "final_dusk": 20.0, "boss_hp": 1.0},
 	"short": {"explore": 20.0, "shrink1": 6.0, "hold": 8.0, "shrink2": 6.0, "victory": 4.0, "final_dusk": 5.0, "boss_hp": 0.35},
 }
 ## time_of_day at the start / end of each phase (0.75 is dusk: night falls as the Curfew first closes).
@@ -21,31 +21,19 @@ const ROAM_CAP := 5
 
 # ---------------------------------------------------------------- the Red Curfew
 const CURFEW_NAME := "the Red Curfew"
-const RING_STAGE1 := 55.0 # radius after the first close
+const RING_STAGE1 := 110.0 # radius after the first close (the large map: ~480 m across)
 const RING_DAMAGE := 5.0 # HP/s the moment you're outside...
 const RING_RAMP := 4.0 # ...plus this per second you stay out
 const RING_DAMAGE_MAX := 32.0
 
-# ---------------------------------------------------------------- deployment ("the Descent")
-## Around the map edge on street centrelines, never the plaza. type: subway | manhole | rooftop.
-const DEPLOY_POINTS := [
-	{"name": "Dockside Station", "type": "subway", "pos": Vector3(-60, 0, -72), "face": Vector3(0, 0, 1)},
-	{"name": "Velvet Mile Station", "type": "subway", "pos": Vector3(72, 0, 40), "face": Vector3(-1, 0, 0)},
-	{"name": "Storm Drain 9", "type": "manhole", "pos": Vector3(-72, 0, 20), "face": Vector3(1, 0, 0)},
-	{"name": "Midtown Storm Drain", "type": "manhole", "pos": Vector3(20, 0, 74), "face": Vector3(0, 0, -1)},
-	{"name": "St. Roch Rooftops", "type": "rooftop", "pos": Vector3(40, 0, -72), "face": Vector3(0, 0, 1)},
-	{"name": "Cannery Rooftops", "type": "rooftop", "pos": Vector3(-40, 0, 72), "face": Vector3(0, 0, -1)},
-]
-
-# ---------------------------------------------------------------- boss arenas
-## Night 1 and Night 2 draw from ARENAS; the Final Night is always fought at FINAL_ARENA.
-const ARENAS := [
-	{"id": "cathedral", "name": "the Cathedral Steps", "pos": Vector3(0, 0, -20), "radius": 15.0},
-	{"id": "pier", "name": "Pier Nine Crossing", "pos": Vector3(-60, 0, 40), "radius": 15.0},
-	{"id": "velvet", "name": "Velvet Mile Crossing", "pos": Vector3(60, 0, -20), "radius": 15.0},
-	{"id": "midtown", "name": "the Foundry Crossing", "pos": Vector3(40, 0, 60), "radius": 15.0},
-]
-const FINAL_ARENA := {"id": "plaza", "name": "the Undercroft Plaza", "pos": Vector3(0, 0, 6), "radius": 16.0}
+# ---------------------------------------------------------------- deployment and arenas
+## Map data, owned by the map (scripts/map/map_layout.gd): deployment points round the map
+## edge across the districts (type: subway | manhole | rooftop | ladder | trail | boat), one
+## boss arena per district for nights 1 and 2, and the Undercroft Plaza for the Final Night.
+const MapLayout = preload("res://scripts/map/map_layout.gd")
+const DEPLOY_POINTS := MapLayout.DEPLOY_POINTS
+const ARENAS := MapLayout.ARENAS
+const FINAL_ARENA := MapLayout.FINAL_ARENA
 
 # ---------------------------------------------------------------- bosses
 const BOSSES := [
@@ -58,21 +46,21 @@ const BOSSES := [
 ## n = how many per Hunt. Enemy specs: {kind 0 vampire | 1 Pack civilian, n, elite?}.
 ## "day" / "night" groups: who is there in that light (a nest's vampires only rise at night).
 const POI_TYPES := {
-	"nest": {"label": "Velvet Nest", "n": 3, "color": Color(0.95, 0.12, 0.22),
+	"nest": {"label": "Velvet Nest", "n": 4, "districts": ["velvet", "cemetery", "quarter"], "color": Color(0.95, 0.12, 0.22),
 		"day": [{"kind": 1, "n": 2}], "night": [{"kind": 0, "n": 3}, {"kind": 0, "n": 1, "elite": "courtier"}],
 		"coffins": 2, "tithe": 60, "reward": 1,
 		"blurb": "Sleeping by day: raid the coffins. Awake at night."},
-	"camp": {"label": "Hollow Camp", "n": 3, "color": Color(1.0, 0.55, 0.12),
+	"camp": {"label": "Hollow Camp", "n": 4, "districts": ["pines", "bayou"], "color": Color(1.0, 0.55, 0.12),
 		"day": [{"kind": 1, "n": 3}, {"kind": 1, "n": 1, "elite": "pack_leader"}], "night": [],
 		"tithe": 55, "reward": 1, "blurb": "Pack squatters. They turn when the sun goes down."},
-	"market": {"label": "Blood Market", "n": 2, "color": Color(1.0, 0.82, 0.3),
+	"market": {"label": "Blood Market", "n": 3, "districts": ["docks"], "color": Color(1.0, 0.82, 0.3),
 		"day": [{"kind": 1, "n": 3}, {"kind": 1, "n": 1, "elite": "fence"}], "night": [{"kind": 0, "n": 1}],
 		"tithe": 70, "reward": 2, "blurb": "A smugglers' crate fort. A guaranteed Hallowed find."},
-	"fieldboss": {"label": "Landmark", "n": 2, "color": Color(0.8, 0.4, 1.0),
+	"fieldboss": {"label": "Landmark", "n": 3, "districts": ["velvet", "bayou", "docks", "pines"], "tags": ["landmark", "pit", "tanks", "clearing"], "color": Color(0.8, 0.4, 1.0),
 		"day": [], "night": [], "tithe": 150, "reward": 3, "blurb": "A named horror guards an Eclipse relic-blade."},
-	"chapel": {"label": "Wayside Chapel", "n": 3, "color": Color(1.0, 0.92, 0.7),
+	"chapel": {"label": "Wayside Chapel", "n": 4, "districts": ["quarter", "cemetery", "pines", "docks", "velvet", "bayou"], "color": Color(1.0, 0.92, 0.7),
 		"day": [], "night": [], "tithe": 0, "reward": -1, "blurb": "Keep Vigil here: spend Tithe to rise a rank."},
-	"merchant": {"label": "Night Merchant", "n": 2, "color": Color(0.45, 1.0, 0.6),
+	"merchant": {"label": "Night Merchant", "n": 3, "districts": ["quarter", "docks", "velvet", "pines", "bayou", "cemetery"], "color": Color(0.45, 1.0, 0.6),
 		"day": [], "night": [], "tithe": 0, "reward": -1, "blurb": "Spend Tithe on vials and blades."},
 }
 ## Field bosses: one of these per Landmark (no repeats while there are spares).

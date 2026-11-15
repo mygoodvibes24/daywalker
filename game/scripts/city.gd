@@ -12,7 +12,11 @@ const ROAD_HALF := 3.75 # kerb line, measured from the street centre
 const FACADE := 6.0 # building line, measured from the street centre
 const LOT := GRID * 0.5 - FACADE # half-size of a block's building lot (4 m)
 const WALK_TOP := 0.1 # sidewalks are visual only (no collider), so they stay this low
-const BLOCKS := 4 # blocks run from -BLOCKS..BLOCKS-1 on each axis
+const Layout = preload("res://scripts/map/map_layout.gd")
+const Docks = preload("res://scripts/map/docks.gd")
+const Velvet = preload("res://scripts/map/velvet.gd")
+const Wilds = preload("res://scripts/map/wilds.gd")
+const Cemetery = preload("res://scripts/map/cemetery.gd")
 const SEED := 1859
 const ATLAS_COLS := 4.0
 const ATLAS_ROWS := 5.0
@@ -50,7 +54,24 @@ var lots: Array[Rect2] = []
 const PLAZA_RECT := Rect2(-GRID + ROAD_HALF, -GRID + ROAD_HALF, 2.0 * (GRID - ROAD_HALF), 2.0 * (GRID - ROAD_HALF))
 var collider_root: Node3D
 var car_bodies: StaticBody3D
-var signs_left := 7
+var signs_left := 16
+## Map data for the Hunt, loot, the navmesh bake and the map screen (see map_layout.gd).
+var bounds: Rect2 = Layout.BOUNDS
+var play_rect: Rect2 = Layout.PLAY
+var districts: Array = Layout.DISTRICTS
+var landmarks: Array = Layout.LANDMARKS
+var deploy_points: Array = Layout.DEPLOY_POINTS
+var arenas: Array = Layout.ARENAS
+var final_arena: Dictionary = Layout.FINAL_ARENA
+## Open spots for points of interest: [{pos: Vector3, district: String, tag: String}]
+var poi_anchors: Array = []
+## Loot cache spots: [{pos, yaw, coffin}]
+var cache_spots: Array = []
+## Points on walkable roads/paths, for roaming spawns.
+var road_points := PackedVector3Array()
+## Block cells (Vector2i) that got buildings, and every cell whose edges are streets.
+var block_cells: Array = []
+var street_cells := {}
 var sign_spots: Array = []
 var _t := 0.0
 
@@ -116,6 +137,26 @@ class Batch:
 		return a
 
 
+func new_batch() -> Batch:
+	return Batch.new()
+
+
+func new_facade() -> Facade:
+	return Facade.new()
+
+
+## Mesh from a set of batches: [[Batch, material name], ...].
+func batches_mesh(parts: Array) -> ArrayMesh:
+	var mesh := ArrayMesh.new()
+	for part in parts:
+		var bt: Batch = part[0]
+		if bt.i.is_empty():
+			continue
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, bt.arrays())
+		mesh.surface_set_material(mesh.get_surface_count() - 1, M[part[1]])
+	return mesh
+
+
 func _b(mat: String) -> Batch:
 	var key := ck + "|" + mat
 	var bt: Batch = batches.get(key)
@@ -125,16 +166,14 @@ func _b(mat: String) -> Batch:
 	return bt
 
 
+const CHUNK := 80.0 # main geometry is merged per 80 m cell...
+const MAIN_RANGE := 175.0
+const FOG_SCALE := 0.72 # atmosphere.gd's fog_scale for this map # ...drawn up to this far, then swapped for its HLOD boxes
+var _near := true # the building being made is close to the hub: a little more relief
+
+
 static func _chunk_of(x: float, z: float) -> String:
-	if absf(x) > 84.0 or absf(z) > 84.0:
-		return "F"
-	if absf(x) <= 40.0 and absf(z) <= 40.0:
-		return "C"
-	if z < -40.0:
-		return "N"
-	if z > 40.0:
-		return "S"
-	return "W" if x < 0.0 else "E"
+	return "K%d_%d" % [floori(x / CHUNK), floori(z / CHUNK)]
 
 
 ## Box with optional rotation. skip: bitmask of faces to leave out
@@ -1240,6 +1279,7 @@ func _make_materials() -> void:
 	leaves.cull_mode = BaseMaterial3D.CULL_DISABLED
 	leaves.roughness = 0.8
 	M["leaves"] = leaves
+	_make_map_materials()
 
 
 # ================================================================ build
@@ -1253,27 +1293,121 @@ func build() -> void:
 	car_bodies.name = "ParkedCars"
 	add_child(car_bodies)
 	_build_ground()
-	for i in range(-BLOCKS, BLOCKS):
-		for j in range(-BLOCKS, BLOCKS):
+	# the Old Quarter grid round the cathedral plaza
+	for i in range(Layout.OQ_I[0], Layout.OQ_I[1]):
+		for j in range(Layout.OQ_J[0], Layout.OQ_J[1]):
+			street_cells[Vector2i(i, j)] = true
 			var cx := i * GRID + GRID * 0.5
 			var cz := j * GRID + GRID * 0.5
 			if absf(cx) < GRID and absf(cz) < GRID:
 				continue
 			if cz == -30.0 and absf(cx) == 10.0:
 				continue # the cathedral takes these two blocks
-			_build_block(cx, cz)
+			_build_block(cx, cz, "quarter")
+	# the Velvet Mile: grand blocks either side of the boulevard
+	for i in range(Layout.VM_I[0], Layout.VM_I[1]):
+		if i == Layout.VM_MILE_I:
+			continue
+		for j in range(Layout.VM_J[0], Layout.VM_J[1]):
+			var c := Vector2i(i, j)
+			if Layout.VM_SQUARE.has_point(c) or Layout.VM_OPERA.has_point(c):
+				continue # paved by velvet.gd
+			street_cells[c] = true
+			_build_block(i * GRID + GRID * 0.5, j * GRID + GRID * 0.5, "velvet")
+	_near = true
 	_build_plaza()
 	_build_cathedral()
 	_build_streets()
+	Velvet.build(self)
+	Docks.build(self)
+	Wilds.build_pines(self)
+	Wilds.build_bayou(self)
+	Cemetery.build(self)
 	_build_backdrop()
 	_place_signs()
 	_build_props()
 	_flush()
-	# boundary walls (invisible)
-	var edge := BLOCKS * GRID + 2.0
-	for s: float in [-1.0, 1.0]:
-		_static_box(Vector3(2, 30, edge * 2.0), Vector3(s * edge, 15, 0))
-		_static_box(Vector3(edge * 2.0, 30, 2), Vector3(0, 15, s * edge))
+	_build_walls()
+	_collect_grid_spots()
+
+
+## Invisible walls round the walkable area: the river (west, south), deep bayou water,
+## dense forest (north) and the Velvet Mile's back streets (east).
+func _build_walls() -> void:
+	var r := play_rect
+	var c := r.get_center()
+	_static_box(Vector3(2, 40, r.size.y + 4.0), Vector3(r.position.x - 1.0, 20, c.y))
+	_static_box(Vector3(2, 40, r.size.y + 4.0), Vector3(r.end.x + 1.0, 20, c.y))
+	_static_box(Vector3(r.size.x + 4.0, 40, 2), Vector3(c.x, 20, r.position.y - 1.0))
+	_static_box(Vector3(r.size.x + 4.0, 40, 2), Vector3(c.x, 20, r.end.y + 1.0))
+
+
+## Points of interest, caches and roaming spawn points in the street grids.
+func _collect_grid_spots() -> void:
+	var r := RandomNumberGenerator.new()
+	r.seed = SEED + 7
+	var seen := {}
+	for cell: Vector2i in street_cells.keys():
+		for corner in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+			var q := Vector2((cell.x + corner.x) * GRID, (cell.y + corner.y) * GRID)
+			var key := Vector2i(roundi(q.x), roundi(q.y))
+			if seen.has(key):
+				continue
+			seen[key] = true
+			if PLAZA_RECT.grow(4.0).has_point(q):
+				continue
+			if absf(q.x) <= GRID and q.y <= -GRID and q.y >= -2.0 * GRID:
+				continue # the cathedral front
+			road_points.append(Vector3(q.x, 0.0, q.y))
+			var dist := Layout.district_at(q.x, q.y)
+			poi_anchors.append({"pos": Vector3(q.x, 0.0, q.y), "district": dist, "tag": "crossing"})
+	# caches on the sidewalks of the street grids (two in the plaza)
+	cache_spots.append({"pos": Vector3(-14.0, 0.1, -3.0), "yaw": PI * 0.5, "coffin": true})
+	cache_spots.append({"pos": Vector3(3.5, 0.1, 14.2), "yaw": 0.0, "coffin": true})
+	var cells := block_cells.duplicate()
+	for k in range(cells.size() - 1, 0, -1):
+		var s := r.randi_range(0, k)
+		var tmp = cells[k]
+		cells[k] = cells[s]
+		cells[s] = tmp
+	for k in mini(cells.size(), 22):
+		var b: Vector2 = cells[k]
+		var side := r.randi_range(0, 3)
+		var n: Vector3 = [Vector3(0, 0, 1), Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(-1, 0, 0)][side]
+		var t := Vector3.UP.cross(n)
+		var p: Vector3 = Vector3(b.x, 0.1, b.y) + n * 4.9 + t * r.randf_range(-3.5, 3.5)
+		cache_spots.append({"pos": p, "yaw": atan2(t.x, t.z), "coffin": true})
+
+
+## A walkable road point near `center` (18-45 m away if possible), for roaming spawns.
+func road_point_near(center: Vector3, r: RandomNumberGenerator) -> Vector3:
+	var best := Vector3(0, 0.5, -60)
+	var best_score := INF
+	for attempt in 40:
+		var q: Vector3 = road_points[r.randi() % road_points.size()]
+		var p := q + Vector3(r.randf_range(-2.0, 2.0), 0.5, r.randf_range(-2.0, 2.0))
+		var dist := p.distance_to(center)
+		if dist > 18.0 and dist < 45.0:
+			return p
+		var score := (18.0 - dist) * 100.0 if dist <= 18.0 else dist - 45.0
+		if score < best_score:
+			best_score = score
+			best = p
+	return best
+
+
+## Point of interest anchor (open ground ~10 m round), cache spot and road point helpers
+## for the district builders.
+func add_anchor(p: Vector3, tag := "") -> void:
+	poi_anchors.append({"pos": Vector3(p.x, 0.0, p.z), "district": Layout.district_at(p.x, p.z), "tag": tag})
+
+
+func add_cache(p: Vector3, yaw: float, coffin: bool) -> void:
+	cache_spots.append({"pos": Vector3(p.x, 0.1, p.z), "yaw": yaw, "coffin": coffin})
+
+
+func add_road(p: Vector3) -> void:
+	road_points.append(Vector3(p.x, 0.0, p.z))
 
 
 func _static_box(size: Vector3, pos: Vector3, parent: Node3D = null) -> StaticBody3D:
@@ -1304,12 +1438,18 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 		var mesh := ArrayMesh.new()
 		var keys: Array = by_chunk[group]
 		keys.sort()
-		# detail chunks ("D<x>_<z>", 40 m cells): local origin at the cell centre and a visibility range
+		# detail chunks ("D<x>_<z>", 40 m cells) and main chunks ("K<x>_<z>", 80 m cells) get a
+		# local origin at the cell centre and a visibility range; their HLOD boxes ("H<x>_<z>")
+		# take over beyond it. "M" (landmarks) and "F" (backdrop) are always drawn.
 		var shift := offset
-		var detail: bool = group.begins_with("D")
-		if detail:
+		var kind: String = group.substr(0, 1)
+		var cell := 0.0
+		match kind:
+			"D": cell = DETAIL_CELL
+			"K", "H": cell = CHUNK
+		if cell > 0.0:
 			var xz: PackedStringArray = group.split("|")[0].substr(1).split("_")
-			shift = Vector3((int(xz[0]) + 0.5) * DETAIL_CELL, 0, (int(xz[1]) + 0.5) * DETAIL_CELL)
+			shift = Vector3((int(xz[0]) + 0.5) * cell, 0, (int(xz[1]) + 0.5) * cell)
 		for key in keys:
 			var bt: Batch = batches[key]
 			if bt.i.is_empty():
@@ -1328,11 +1468,20 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 		mi.mesh = mesh
 		if group.ends_with("nocast"):
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		if detail:
+		if cell > 0.0:
 			mi.position = shift
-			mi.visibility_range_end = DETAIL_RANGE
-			mi.visibility_range_end_margin = 8.0
-			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		match kind:
+			"D":
+				mi.visibility_range_end = DETAIL_RANGE
+				mi.visibility_range_end_margin = 8.0
+				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			"K":
+				mi.visibility_range_end = MAIN_RANGE
+				mi.visibility_range_end_margin = 10.0
+			"H":
+				mi.visibility_range_begin = MAIN_RANGE
+				mi.visibility_range_begin_margin = 10.0
+				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		(parent if parent else self).add_child(mi)
 
 
@@ -1356,20 +1505,24 @@ func _bd(mat: String, x: float, z: float) -> Batch:
 
 # ---------------------------------------------------------------- ground
 func _build_ground() -> void:
-	# Collision: one big slab. Visual: asphalt everywhere, with a hole for the Undercroft shaft.
+	# Collision: one big slab under the whole map. Visual: wet asphalt under the street grids
+	# (with a hole for the Undercroft shaft); the districts lay their own ground over the rest.
 	var ground := StaticBody3D.new()
 	ground.name = "Ground"
 	add_child(ground)
 	var gcol := CollisionShape3D.new()
 	var gshape := BoxShape3D.new()
-	gshape.size = Vector3(240, 1, 240)
+	gshape.size = Vector3(bounds.size.x, 1, bounds.size.y)
 	gcol.shape = gshape
-	gcol.position.y = -0.5
+	gcol.position = Vector3(bounds.get_center().x, -0.5, bounds.get_center().y)
 	ground.add_child(gcol)
 	var bt := Batch.new()
-	var E := 120.0
+	var x0 := -80.0
+	var z0 := -72.0
+	var x1 := 240.0
+	var z1 := Layout.RIVER_Z
 	var h := PIT_HOLE
-	for r in [[-E, -E, E, -h], [-E, h, E, E], [-E, -h, -h, h], [h, -h, E, h]]:
+	for r in [[x0, z0, x1, -h], [x0, h, x1, z1], [x0, -h, -h, h], [h, -h, x1, h]]:
 		var a := Vector3(r[0], 0, r[3])
 		var b := Vector3(r[0], 0, r[1])
 		var d := Vector3(r[2], 0, r[1])
@@ -1383,6 +1536,28 @@ func _build_ground() -> void:
 	mi.mesh = mesh
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+
+
+## A flat ground quad (y slightly above 0) into the current chunk's `mat` batch, UVs in metres.
+func ground_quad(mat: String, x0: float, z0: float, x1: float, z1: float, col := Color.WHITE, y := 0.02) -> void:
+	var bt := _b(mat)
+	bt.quad(Vector3(x0, y, z1), Vector3(x0, y, z0), Vector3(x1, y, z0), Vector3(x1, y, z1), Vector3.UP, col, Vector2(x0, z0) * 0.25, Vector2(x1, z1) * 0.25)
+
+
+## Same, split into 80 m chunks so each part culls with its neighbourhood.
+func ground_rect(mat: String, x0: float, z0: float, x1: float, z1: float, col := Color.WHITE, y := 0.02) -> void:
+	var save := ck
+	var x := x0
+	while x < x1 - 0.01:
+		var xe := minf(x1, (floorf(x / CHUNK) + 1.0) * CHUNK)
+		var z := z0
+		while z < z1 - 0.01:
+			var ze := minf(z1, (floorf(z / CHUNK) + 1.0) * CHUNK)
+			ck = _chunk_of((x + xe) * 0.5, (z + ze) * 0.5)
+			ground_quad(mat, x, z, xe, ze, col, y)
+			z = ze
+		x = xe
+	ck = save
 
 
 ## Raised (visual-only) paved slab with a kerb edge.
@@ -1403,19 +1578,13 @@ func _slab(x0: float, z0: float, x1: float, z1: float, top_mat: String, top_col:
 
 # ---------------------------------------------------------------- blocks
 func _district(cx: float, cz: float) -> String:
-	var d := maxf(absf(cx), absf(cz))
-	if d <= 30.0 or (absf(cx) <= 30.0 and absf(cz) <= 50.0):
-		return "quarter" # the Old Quarter: the plaza and the avenues running north and south of it
-	if cx >= 50.0:
-		return "velvet"
-	if cx <= -50.0:
-		return "docks"
-	return "midtown"
+	return Layout.district_at(cx, cz)
 
 
-func _build_block(cx: float, cz: float) -> void:
+func _build_block(cx: float, cz: float, dist: String) -> void:
 	ck = _chunk_of(cx, cz)
-	var dist := _district(cx, cz)
+	_near = maxf(absf(cx), absf(cz)) <= 40.0
+	block_cells.append(Vector2(cx, cz))
 	var walk_col := Color(1, 1, 1) if dist != "quarter" else Color(0.72, 0.66, 0.6)
 	_slab(cx - GRID * 0.5 + ROAD_HALF, cz - GRID * 0.5 + ROAD_HALF, cx + GRID * 0.5 - ROAD_HALF, cz + GRID * 0.5 - ROAD_HALF,
 		"sidewalk" if dist != "quarter" else "cobble_fan", walk_col, Color(0.62, 0.6, 0.57))
@@ -1447,9 +1616,9 @@ func _build_block(cx: float, cz: float) -> void:
 			parcels.append([-L, sz, sx, L]); parcels.append([sx, sz, L, L])
 	# a back alley through some two-parcel blocks (image 04): the split widens into a 2.8 m gap
 	var alley_sides := {} # parcel index -> facade side that faces the alley
-	var alley_p := {"quarter": 0.45, "midtown": 0.6, "docks": 0.6, "velvet": 0.3}
+	var alley_p := {"quarter": 0.45, "midtown": 0.6, "docks": 0.6, "velvet": 0.35}
 	# (never on the blocks lining the x = 0 avenue, which keeps its gallery fronts unbroken)
-	if (pattern == 1 or pattern == 2) and rng.randf() < alley_p[dist] and absf(cx) < 75.0 and absf(cz) < 75.0 and not (dist == "quarter" and absf(cx) == 10.0):
+	if (pattern == 1 or pattern == 2) and rng.randf() < alley_p[dist] and not (dist == "quarter" and absf(cx) == 10.0):
 		var AW := 2.8
 		var s := clampf((parcels[0][2] if pattern == 1 else parcels[0][3]), -0.8, 0.8)
 		if pattern == 1:
@@ -1464,6 +1633,8 @@ func _build_block(cx: float, cz: float) -> void:
 	body.name = "Block_%d_%d" % [cx, cz]
 	collider_root.add_child(body)
 	var far := clampf((maxf(absf(cx), absf(cz)) - 30.0) / 40.0, 0.0, 1.0)
+	if dist == "velvet":
+		far = clampf(1.0 - absf(cx - 150.0) / 60.0, 0.0, 1.0) * 0.6 # taller towards the Mile
 	var binfo := {"centre": Vector2(cx, cz), "district": dist, "lots": [], "heights": []}
 	blocks.append(binfo)
 	for pi in parcels.size():
@@ -1482,6 +1653,7 @@ func _build_block(cx: float, cz: float) -> void:
 		spec["ext"] = [is_equal_approx(p[3], L), is_equal_approx(p[1], -L), is_equal_approx(p[2], L), is_equal_approx(p[0], -L)]
 		var H := _building(spec)
 		var fp := Rect2(cx + p[0], cz + p[1], p[2] - p[0], p[3] - p[1])
+		hlod_box(fp, H, spec.wcol)
 		binfo.lots.append(fp)
 		binfo.heights.append(H)
 		lots.append(fp)
@@ -1491,6 +1663,27 @@ func _build_block(cx: float, cz: float) -> void:
 		col.shape = shape
 		col.position = Vector3(cx + (p[0] + p[2]) * 0.5, H * 0.5, cz + (p[1] + p[3]) * 0.5)
 		body.add_child(col)
+
+
+## HLOD stand-in for a building: a far-textured box (no roof clutter) drawn beyond MAIN_RANGE.
+func hlod_box(fp: Rect2, h: float, tint: Color) -> void:
+	var save := ck
+	var c := fp.get_center()
+	ck = "H" + _chunk_of(c.x, c.y).substr(1)
+	var bt := _b("far")
+	var x0 := fp.position.x
+	var z0 := fp.position.y
+	var x1 := fp.end.x
+	var z1 := fp.end.y
+	var uo := Vector2(rng.randi_range(0, 7) / 8.0, rng.randi_range(0, 7) / 8.0)
+	var s := 1.0 / 25.6
+	var t := tint.lerp(Color(1, 1, 1), 0.5)
+	bt.quad(Vector3(x0, 0, z1), Vector3(x0, h, z1), Vector3(x1, h, z1), Vector3(x1, 0, z1), Vector3(0, 0, 1), t, uo, uo + Vector2((x1 - x0) * s, h * s))
+	bt.quad(Vector3(x1, 0, z0), Vector3(x1, h, z0), Vector3(x0, h, z0), Vector3(x0, 0, z0), Vector3(0, 0, -1), t, uo, uo + Vector2((x1 - x0) * s, h * s))
+	bt.quad(Vector3(x1, 0, z1), Vector3(x1, h, z1), Vector3(x1, h, z0), Vector3(x1, 0, z0), Vector3(1, 0, 0), t, uo, uo + Vector2((z1 - z0) * s, h * s))
+	bt.quad(Vector3(x0, 0, z0), Vector3(x0, h, z0), Vector3(x0, h, z1), Vector3(x0, 0, z1), Vector3(-1, 0, 0), t, uo, uo + Vector2((z1 - z0) * s, h * s))
+	_b("concrete").quad(Vector3(x0, h, z1), Vector3(x0, h, z0), Vector3(x1, h, z0), Vector3(x1, h, z1), Vector3.UP, Color(0.2, 0.2, 0.2))
+	ck = save
 
 
 const STUCCO := [Color(0.85, 0.6, 0.55), Color(0.88, 0.72, 0.48), Color(0.6, 0.74, 0.64), Color(0.7, 0.64, 0.78),
@@ -1665,7 +1858,7 @@ func _building(spec: Dictionary) -> float:
 		fbox(stone, f, -0.05, gh - 0.12, f.w + 0.05, gh + 0.12, 0.0, 0.1, tcol)
 		# upper floors: one wall quad per storey, flush glass with a painted frame and a
 		# flat sill/lintel strip in front (no reveals: the window atlas carries the depth)
-		var near: bool = ck == "C"
+		var near: bool = _near
 		var upper_h := floors * fh
 		fq(wall, f, 0, gh, f.w, gh + upper_h, 0.0, wcol, Vector2.ZERO, Vector2(f.w, upper_h))
 		for fl in floors:
@@ -1674,7 +1867,7 @@ func _building(spec: Dictionary) -> float:
 			var yb := ya + wh
 			for cu in centers:
 				var wuv: Array = _window_uv(style)
-				fq(glass_f if wuv[1] and ck == "C" else glass, f, cu - ww * 0.5, ya, cu + ww * 0.5, yb, 0.012, Color.WHITE, wuv[0][0], wuv[0][1])
+				fq(glass_f if wuv[1] and _near else glass, f, cu - ww * 0.5, ya, cu + ww * 0.5, yb, 0.012, Color.WHITE, wuv[0][0], wuv[0][1])
 				if near:
 					fbox(stone, f, cu - ww * 0.5 - 0.1, ya - 0.08, cu + ww * 0.5 + 0.1, ya, 0.0, 0.12, tcol)
 				else:
@@ -1819,7 +2012,7 @@ func _quarter_facade(spec: Dictionary, f: Facade, H: float, par: float) -> void:
 		for k in n_cols:
 			var cu := margin + bay * (k + 0.5)
 			var wuv: Array = _window_uv("quarter")
-			fq(glass_f if wuv[1] and ck == "C" else glass, f, cu - 0.52, ya, cu + 0.52, yb, 0.012, Color.WHITE, wuv[0][0], wuv[0][1])
+			fq(glass_f if wuv[1] and _near else glass, f, cu - 0.52, ya, cu + 0.52, yb, 0.012, Color.WHITE, wuv[0][0], wuv[0][1])
 			var open := rng.randf() < 0.3
 			var sw := 0.5 if not open else 0.42
 			fq(trim, f, cu - 0.54 - sw, ya, cu - 0.54, yb, 0.03, sc)
@@ -2248,7 +2441,7 @@ func _blade_sign(f: Facade, u: float, y0: float, word: String, nk: int) -> void:
 
 # ---------------------------------------------------------------- plaza and cathedral
 func _build_plaza() -> void:
-	ck = "C"
+	ck = "K0_0"
 	var e := GRID - ROAD_HALF
 	var h := PIT_HOLE
 	var cob := _b("cobble_fan")
@@ -2389,7 +2582,7 @@ func _foliage(bt: Batch, c: Vector3, r: float) -> void:
 ## St. Jerome Cathedral: a Gothic west front facing the plaza. Its two towers fill
 ## the blocks either side of the x = 0 street, which passes under the great arch.
 func _build_cathedral() -> void:
-	ck = "C"
+	ck = "M"
 	var st := _b("stone")
 	var sc := Color(0.8, 0.75, 0.66)
 	var dark := Color(0.5, 0.47, 0.42)
@@ -2598,16 +2791,26 @@ func _lancet(f: Facade, cu: float, y: float, w: float, h: float, head: float) ->
 
 # ---------------------------------------------------------------- streets
 func _build_streets() -> void:
-	var lim := BLOCKS * GRID
 	var yellow := Color(0.85, 0.65, 0.15)
 	var white := Color(0.85, 0.85, 0.82)
 	var plaza := GRID - ROAD_HALF
-	for a in range(-BLOCKS, BLOCKS + 1):
+	# every edge of a street cell is a 20 m street segment: [line coordinate, segment start, axis]
+	var segs := {}
+	for cell: Vector2i in street_cells.keys():
+		segs[Vector3i(cell.x, cell.y, 0)] = true
+		segs[Vector3i(cell.x + 1, cell.y, 0)] = true
+		segs[Vector3i(cell.y, cell.x, 1)] = true
+		segs[Vector3i(cell.y + 1, cell.x, 1)] = true
+	var keys := segs.keys()
+	keys.sort()
+	for sk: Vector3i in keys:
+		var a := sk.x
+		var b := sk.y
+		var axis := sk.z
 		var s := a * GRID
-		for b in range(-BLOCKS, BLOCKS):
+		if true:
 			var g0 := b * GRID
-			# a segment of street running along z at x = s, and its twin along x at z = s
-			for axis in 2:
+			if true:
 				var mid := g0 + GRID * 0.5
 				var px := s if axis == 0 else mid
 				var pz := mid if axis == 0 else s
@@ -2639,7 +2842,7 @@ func _build_streets() -> void:
 				if rng.randf() < 0.55:
 					var mp := Vector3(px, 0.0, pz) + along * rng.randf_range(-2.0, 2.0) + across * rng.randf_range(-1.5, 1.5)
 					cyl(_b("metal"), mp, 0.42, 0.42, 0.018, 12, Color(0.13, 0.12, 0.11))
-					if rng.randf() < 0.18 and absf(mp.x) < 70 and absf(mp.z) < 70:
+					if rng.randf() < 0.12:
 						_steam(mp)
 				# puddles near the kerbs
 				for q in rng.randi_range(0, 3):
@@ -2648,12 +2851,12 @@ func _build_streets() -> void:
 					_puddle(pp, rng.randf_range(0.8, 2.2))
 				# parked cars, one per kerb at most, clear of the corners
 				for side: float in [-1.0, 1.0]:
-					if rng.randf() < 0.42 and absf(s) < lim:
+					if rng.randf() < 0.42:
 						var cp := Vector3(px, 0.0, pz) + across * side * 2.85 + along * rng.randf_range(-1.2, 1.2)
 						var yaw := atan2(along.x, along.z) + (PI if side < 0 else 0.0)
 						_car(cp, yaw)
 				# street lamps on one kerb
-				if absf(s) <= lim:
+				if true:
 					var lside := 1.0 if (a + b) % 2 == 0 else -1.0
 					var lp := Vector3(px, WALK_TOP, pz) + across * lside * (ROAD_HALF + 0.45)
 					_add_prop("lamp", Transform3D(Basis(Vector3.UP, atan2(-across.x * lside, -across.z * lside)), lp), Color.WHITE)
@@ -2663,7 +2866,7 @@ func _build_streets() -> void:
 					# the lantern washes the facade behind it
 					_wall_glow(Vector3(px, 0.0, pz) + across * lside * (FACADE - 0.04), -across * lside, 7.0, 7.5)
 				# telephone poles and sagging wires on the outer, older streets
-				if ((absf(s) == 60.0 or absf(s) == 80.0) and absf(mid) < lim) or (a == 0 and axis == 0 and mid > 20.0 and mid < 70.0):
+				if (absf(s) == 60.0 and absf(mid) < 60.0 and px < 100.0) or (a == 0 and axis == 0 and mid > 20.0 and mid < 70.0):
 					_pole_span(Vector3(px, 0.0, pz) - along * GRID * 0.5 - across * (ROAD_HALF + 0.4), along)
 
 
@@ -2777,32 +2980,38 @@ func _build_backdrop() -> void:
 	ck = "F"
 	var bt := _b("far")
 	var roof := _b("concrete")
-	for i in range(-BLOCKS - 2, BLOCKS + 2):
-		for j in range(-BLOCKS - 2, BLOCKS + 2):
-			if i >= -BLOCKS and i < BLOCKS and j >= -BLOCKS and j < BLOCKS:
-				continue
-			var cx := i * GRID + GRID * 0.5
-			var cz := j * GRID + GRID * 0.5
-			var ring2 := i < -BLOCKS - 1 or i > BLOCKS or j < -BLOCKS - 1 or j > BLOCKS
-			if not ring2:
-				_slab(cx - GRID * 0.5 + ROAD_HALF, cz - GRID * 0.5 + ROAD_HALF, cx + GRID * 0.5 - ROAD_HALF, cz + GRID * 0.5 - ROAD_HALF,
-					"sidewalk", Color(0.9, 0.9, 0.9), Color(0.55, 0.54, 0.52))
-			var L := LOT + (2.5 if ring2 else 0.0)
-			var h := rng.randf_range(14.0, 30.0) + (rng.randf_range(10.0, 35.0) if ring2 else 0.0)
-			var x0 := cx - L
-			var x1 := cx + L
-			var z0 := cz - L
-			var z1 := cz + L
-			var uo := Vector2(rng.randi_range(0, 7) / 8.0, rng.randi_range(0, 7) / 8.0)
-			var s := 1.0 / 25.6
-			var tint := Color(1, 1, 1).lerp(Color(0.8, 0.75, 0.7), rng.randf())
-			bt.quad(Vector3(x0, 0, z1), Vector3(x0, h, z1), Vector3(x1, h, z1), Vector3(x1, 0, z1), Vector3(0, 0, 1), tint, uo, uo + Vector2((x1 - x0) * s, h * s))
-			bt.quad(Vector3(x1, 0, z0), Vector3(x1, h, z0), Vector3(x0, h, z0), Vector3(x0, 0, z0), Vector3(0, 0, -1), tint, uo, uo + Vector2((x1 - x0) * s, h * s))
-			bt.quad(Vector3(x1, 0, z1), Vector3(x1, h, z1), Vector3(x1, h, z0), Vector3(x1, 0, z0), Vector3(1, 0, 0), tint, uo, uo + Vector2((z1 - z0) * s, h * s))
-			bt.quad(Vector3(x0, 0, z0), Vector3(x0, h, z0), Vector3(x0, h, z1), Vector3(x0, 0, z1), Vector3(-1, 0, 0), tint, uo, uo + Vector2((z1 - z0) * s, h * s))
-			roof.quad(Vector3(x0, h, z1), Vector3(x0, h, z0), Vector3(x1, h, z0), Vector3(x1, h, z1), Vector3.UP, Color(0.2, 0.2, 0.2))
-			if not ring2 and rng.randf() < 0.3:
-				_water_tower(Vector3(cx, h, cz))
+	# the Velvet Mile's back street: a row of solid frontages past the east wall
+	for j in range(Layout.VM_J[0], Layout.VM_J[1]):
+		var cx := 230.0
+		var cz := j * GRID + GRID * 0.5
+		_slab(cx - GRID * 0.5 + ROAD_HALF, cz - GRID * 0.5 + ROAD_HALF, cx + GRID * 0.5, cz + GRID * 0.5 - ROAD_HALF,
+			"sidewalk", Color(0.9, 0.9, 0.9), Color(0.55, 0.54, 0.52))
+		_far_box(bt, roof, Rect2(226.0, cz - LOT, 20.0, 2.0 * LOT), rng.randf_range(16.0, 34.0))
+	# the far bank across the river (west and south) and the city beyond the east wall
+	for k in 26:
+		var z := -230.0 + k * 19.0
+		_far_box(bt, roof, Rect2(-300.0 - rng.randf_range(0.0, 30.0), z, rng.randf_range(14.0, 26.0), rng.randf_range(12.0, 18.0)), rng.randf_range(10.0, 40.0))
+	for k in 24:
+		var x := -230.0 + k * 20.0
+		_far_box(bt, roof, Rect2(x, 280.0 + rng.randf_range(0.0, 30.0), rng.randf_range(12.0, 18.0), rng.randf_range(14.0, 24.0)), rng.randf_range(10.0, 34.0))
+	for k in 12:
+		var z := -40.0 + k * 22.0
+		_far_box(bt, roof, Rect2(250.0 + rng.randf_range(0.0, 20.0), z, rng.randf_range(14.0, 22.0), rng.randf_range(12.0, 18.0)), rng.randf_range(24.0, 60.0))
+
+
+func _far_box(bt: Batch, roof: Batch, r: Rect2, h: float) -> void:
+	var x0 := r.position.x
+	var x1 := r.end.x
+	var z0 := r.position.y
+	var z1 := r.end.y
+	var uo := Vector2(rng.randi_range(0, 7) / 8.0, rng.randi_range(0, 7) / 8.0)
+	var s := 1.0 / 25.6
+	var tint := Color(1, 1, 1).lerp(Color(0.8, 0.75, 0.7), rng.randf())
+	bt.quad(Vector3(x0, 0, z1), Vector3(x0, h, z1), Vector3(x1, h, z1), Vector3(x1, 0, z1), Vector3(0, 0, 1), tint, uo, uo + Vector2((x1 - x0) * s, h * s))
+	bt.quad(Vector3(x1, 0, z0), Vector3(x1, h, z0), Vector3(x0, h, z0), Vector3(x0, 0, z0), Vector3(0, 0, -1), tint, uo, uo + Vector2((x1 - x0) * s, h * s))
+	bt.quad(Vector3(x1, 0, z1), Vector3(x1, h, z1), Vector3(x1, h, z0), Vector3(x1, 0, z0), Vector3(1, 0, 0), tint, uo, uo + Vector2((z1 - z0) * s, h * s))
+	bt.quad(Vector3(x0, 0, z0), Vector3(x0, h, z0), Vector3(x0, h, z1), Vector3(x0, 0, z1), Vector3(-1, 0, 0), tint, uo, uo + Vector2((z1 - z0) * s, h * s))
+	roof.quad(Vector3(x0, h, z1), Vector3(x0, h, z0), Vector3(x1, h, z0), Vector3(x1, h, z1), Vector3.UP, Color(0.2, 0.2, 0.2))
 
 
 # ---------------------------------------------------------------- props (MultiMesh)
@@ -2832,14 +3041,10 @@ func _car(p: Vector3, yaw: float) -> void:
 
 ## Street furniture along the sidewalks: hydrants, newspaper boxes, dumpsters, trash.
 func _sidewalk_props() -> void:
-	for i in range(-BLOCKS, BLOCKS):
-		for j in range(-BLOCKS, BLOCKS):
-			var cx := i * GRID + GRID * 0.5
-			var cz := j * GRID + GRID * 0.5
-			if absf(cx) < GRID and absf(cz) < GRID:
-				continue
-			if cz == -30.0 and absf(cx) == 10.0:
-				continue
+	for bc: Vector2 in block_cells:
+		var cx := bc.x
+		var cz := bc.y
+		if true:
 			for side in 4:
 				var n: Vector3 = [Vector3(0, 0, 1), Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(-1, 0, 0)][side]
 				var r := Vector3.UP.cross(n)
@@ -2916,23 +3121,34 @@ func _build_props() -> void:
 				kept.append(xfs[k])
 			_glb_multimeshes(kind, glb, kept)
 			continue
-		for entry in meshes:
-			var mm := MultiMesh.new()
-			mm.transform_format = MultiMesh.TRANSFORM_3D
-			mm.use_colors = entry[2]
-			mm.mesh = entry[0]
-			mm.instance_count = xfs.size()
-			for k in xfs.size():
-				mm.set_instance_transform(k, xfs[k])
-				if entry[2]:
-					mm.set_instance_color(k, cols[k])
-			var mmi := MultiMeshInstance3D.new()
-			mmi.name = "Props_" + kind
-			mmi.multimesh = mm
-			mmi.material_override = entry[1]
-			var big: bool = kind == "sedan" or kind == "van" or kind == "dumpster"
-			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if big and entry[2] else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			add_child(mmi)
+		# bucketed into PROP_CELL cells so off-screen ones are culled, with a visibility range
+		var cells := {}
+		for k in xfs.size():
+			var xf: Transform3D = xfs[k]
+			var key := Vector2i(floori(xf.origin.x / PROP_CELL), floori(xf.origin.z / PROP_CELL))
+			if not cells.has(key):
+				cells[key] = []
+			cells[key].append(k)
+		var big: bool = kind == "sedan" or kind == "van" or kind == "dumpster"
+		for key in cells.keys():
+			var idx: Array = cells[key]
+			for entry in meshes:
+				var mm := MultiMesh.new()
+				mm.transform_format = MultiMesh.TRANSFORM_3D
+				mm.use_colors = entry[2]
+				mm.mesh = entry[0]
+				mm.instance_count = idx.size()
+				for k in idx.size():
+					mm.set_instance_transform(k, xfs[idx[k]])
+					if entry[2]:
+						mm.set_instance_color(k, cols[idx[k]])
+				var mmi := MultiMeshInstance3D.new()
+				mmi.name = "Props_%s_%d_%d" % [kind, key.x, key.y]
+				mmi.multimesh = mm
+				mmi.material_override = entry[1]
+				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if big and entry[2] else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				mmi.visibility_range_end = 150.0 if kind == "lamp" else 110.0
+				add_child(mmi)
 	# warm halos round every lantern: camera-facing quads in one MultiMesh
 	if not halo_xfs.is_empty():
 		var hm := MultiMesh.new()
@@ -3136,6 +3352,327 @@ func _trash_mesh() -> ArrayMesh:
 			bt.quad_sm(a, b, d, e, (a - ctr).normalized(), (b - ctr).normalized(), (d - ctr).normalized(), (e - ctr).normalized(), c)
 	cyl(bt, Vector3(0, 0.54, 0), 0.05, 0.02, 0.12, 5, c)
 	return _mesh_of(bt)
+
+
+# ================================================================ map districts: materials and helpers
+const WetMats = preload("res://scripts/wet_materials.gd")
+
+
+func _make_map_materials() -> void:
+	M["mud"] = WetMats._make(Color(0.085, 0.062, 0.042), 0.62, 1.0) # rutted wet dirt roads
+	M["earth"] = WetMats._make(Color(0.045, 0.045, 0.034), 0.22, 0.8) # forest floor, cemetery gravel
+	M["dock"] = WetMats._make(Color(0.15, 0.145, 0.14), 0.42, 0.7) # quay concrete
+	var water: ShaderMaterial = WetMats._make(Color(0.004, 0.006, 0.008), 1.0, 0.35)
+	for k in ["dry_roughness", "damp_roughness", "puddle_roughness"]:
+		water.set_shader_parameter(k, 0.03)
+	M["water"] = water
+	var swamp: ShaderMaterial = WetMats._make(Color(0.008, 0.014, 0.01), 1.0, 0.3)
+	for k in ["dry_roughness", "damp_roughness", "puddle_roughness"]:
+		swamp.set_shader_parameter(k, 0.06)
+	M["swamp"] = swamp
+	M["corrugated"] = _surface_mat(_corrugated_textures(), 2.0, 0.9)
+	M["wood"] = _surface_mat(_plank_textures(), 2.0)
+	M["pine"] = _surface_mat(_needle_textures(), 2.0)
+	for k in ["corrugated", "wood", "pine"]:
+		CASTS[k] = true
+	var card := StandardMaterial3D.new()
+	card.albedo_texture = _pine_card_texture()
+	card.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	card.alpha_scissor_threshold = 0.5
+	card.cull_mode = BaseMaterial3D.CULL_DISABLED
+	card.roughness = 0.9
+	card.vertex_color_use_as_albedo = true
+	M["pine_card"] = card
+	var moss := StandardMaterial3D.new()
+	moss.albedo_texture = _moss_texture()
+	moss.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	moss.alpha_scissor_threshold = 0.45
+	moss.cull_mode = BaseMaterial3D.CULL_DISABLED
+	moss.roughness = 0.85
+	moss.vertex_color_use_as_albedo = true
+	M["moss"] = moss
+	var beacon := StandardMaterial3D.new()
+	beacon.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	beacon.albedo_color = Color(1.0, 0.08, 0.05)
+	beacon.vertex_color_use_as_albedo = true
+	M["beacon"] = beacon # always-lit signal lamps (crane tops, the water tower), read through fog
+	var sodium := StandardMaterial3D.new()
+	sodium.albedo_color = Color(1.0, 0.6, 0.25)
+	sodium.emission_enabled = true
+	sodium.emission = Color(1.0, 0.5, 0.15)
+	sodium.emission_energy_multiplier = 4.0
+	M["sodium"] = sodium
+
+
+## Corrugated sheet steel: vertical ridges with rust bleeding down. 2 m tile.
+func _corrugated_textures() -> Array:
+	var S := 256
+	var fine := _noise_img(S, 0.05, 41, 4)
+	var streak := _noise_img(S, 0.02, 42, 3)
+	var alb := PackedByteArray(); alb.resize(S * S * 3)
+	var rough := PackedByteArray(); rough.resize(S * S)
+	var hgt := PackedFloat32Array(); hgt.resize(S * S)
+	for y in S:
+		for x in S:
+			var p := y * S + x
+			var ridge := sin(float(x) / S * TAU * 16.0)
+			var f := fine[p] / 255.0
+			var st := streak[(y / 8) * S + x] / 255.0
+			var rust := clampf((st - 0.45) * 2.5 + (f - 0.5) * 0.6, 0.0, 1.0)
+			var k := 0.62 + ridge * 0.1 + (f - 0.5) * 0.2
+			var base := Vector3(k, k, k).lerp(Vector3(0.42, 0.22, 0.12), rust * 0.85)
+			_put(alb, p * 3, base.x, base.y, base.z)
+			rough[p] = int(clampf(0.55 + rust * 0.35 + f * 0.1, 0.0, 1.0) * 255.0)
+			hgt[p] = ridge * 0.5 + 0.5
+	return [_tex(S, S, Image.FORMAT_RGB8, alb), _tex(S, S, Image.FORMAT_L8, rough), _normal_tex(S, S, hgt, 3.0)]
+
+
+## Weathered planks: 0.25 m boards, 2 m tile.
+func _plank_textures() -> Array:
+	var S := 256
+	var fine := _noise_img(S, 0.08, 51, 3)
+	var grain := _noise_img(S, 0.03, 52, 2)
+	var alb := PackedByteArray(); alb.resize(S * S * 3)
+	var rough := PackedByteArray(); rough.resize(S * S)
+	var hgt := PackedFloat32Array(); hgt.resize(S * S)
+	for y in S:
+		var board := y / 32
+		var iny := y % 32
+		for x in S:
+			var p := y * S + x
+			var f := fine[p] / 255.0
+			var g := grain[(y % 32) * S + ((x * 4 + board * 37) % S)] / 255.0
+			var seam := iny < 2 or (x + board * 61) % 192 < 2
+			var k := (0.55 + _hash(board, (x + board * 61) / 192) * 0.35) * (0.8 + g * 0.35)
+			if seam:
+				k = 0.12
+			_put(alb, p * 3, 0.42 * k, 0.33 * k, 0.25 * k)
+			rough[p] = int(clampf(0.7 + f * 0.3, 0.0, 1.0) * 255.0)
+			hgt[p] = 0.0 if seam else 0.6 + f * 0.4
+	return [_tex(S, S, Image.FORMAT_RGB8, alb), _tex(S, S, Image.FORMAT_L8, rough), _normal_tex(S, S, hgt, 2.0)]
+
+
+## Pine needles for the foliage cones: dark, tufted.
+func _needle_textures() -> Array:
+	var S := 128
+	var fine := _noise_img(S, 0.18, 61, 3, FastNoiseLite.TYPE_CELLULAR)
+	var big := _noise_img(S, 0.04, 62, 2)
+	var alb := PackedByteArray(); alb.resize(S * S * 3)
+	var rough := PackedByteArray(); rough.resize(S * S)
+	for p in S * S:
+		var f := fine[p] / 255.0
+		var g := big[p] / 255.0
+		var k := 0.35 + f * 0.6 + g * 0.2
+		_put(alb, p * 3, 0.07 * k, 0.12 * k, 0.07 * k)
+		rough[p] = 230
+	return [_tex(S, S, Image.FORMAT_RGB8, alb), _tex(S, S, Image.FORMAT_L8, rough)]
+
+
+## Far pine: a tiered silhouette for the crossed billboard cards. 64 x 128, RGBA.
+func _pine_card_texture() -> ImageTexture:
+	var W := 64
+	var H := 128
+	var fine := _noise_img(128, 0.15, 71, 3)
+	var data := PackedByteArray(); data.resize(W * H * 4)
+	for y in H:
+		var t := float(y) / H # 0 top .. 1 bottom
+		var half := 0.0
+		if t < 0.8:
+			var tier := fmod(t * 5.0, 1.0)
+			half = (0.08 + t * 0.48) * (0.55 + tier * 0.45)
+		for x in W:
+			var o := (y * W + x) * 4
+			var u := absf((x + 0.5) / W - 0.5) * 2.0
+			var n := fine[(y % 128) * 128 + x] / 255.0
+			var a := 1.0 if u < half * (0.75 + n * 0.5) else 0.0
+			var trunk := t > 0.55 and u < 0.06
+			var k := 0.55 + n * 0.5
+			if trunk:
+				a = 1.0
+				_put(data, o, 0.16, 0.11, 0.08)
+			else:
+				_put(data, o, 0.07 * k, 0.12 * k, 0.07 * k)
+			data[o + 3] = int(a * 255.0)
+	return _tex(W, H, Image.FORMAT_RGBA8, data)
+
+
+## Spanish moss: ragged hanging strands. 64 x 128, RGBA (white; tinted by vertex colour).
+func _moss_texture() -> ImageTexture:
+	var W := 64
+	var H := 128
+	var fine := _noise_img(128, 0.2, 81, 2)
+	var data := PackedByteArray(); data.resize(W * H * 4)
+	for x in W:
+		var strand_len := 0.35 + _hash(x / 3, 5) * 0.65
+		var on := _hash(x / 2, 9) > 0.35
+		for y in H:
+			var o := (y * W + x) * 4
+			var t := float(y) / H
+			var n := fine[(y % 128) * 128 + (x * 2) % 128] / 255.0
+			var a := 1.0 if on and t < strand_len * (0.8 + n * 0.4) else 0.0
+			if t < 0.08:
+				a = 1.0 if n > 0.3 else a
+			var k := 0.5 + n * 0.5
+			_put(data, o, 0.55 * k, 0.6 * k, 0.48 * k)
+			data[o + 3] = int(a * 255.0)
+	return _tex(W, H, Image.FORMAT_RGBA8, data)
+
+
+## MultiMesh instances of `mesh` (its own surface materials), bucketed per `cell` metres so
+## off-screen ones cull, each bucket drawn between range_begin and range_end (0 = always).
+func scatter_mm(name: String, mesh: Mesh, xfs: Array, cell: float, range_begin := 0.0, range_end := 0.0, shadow := false, cols: Array = [], mat: Material = null) -> void:
+	var cells := {}
+	for k in xfs.size():
+		var o: Vector3 = (xfs[k] as Transform3D).origin
+		var key := Vector2i(floori(o.x / cell), floori(o.z / cell))
+		if not cells.has(key):
+			cells[key] = []
+		cells[key].append(k)
+	for key in cells.keys():
+		var idx: Array = cells[key]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = not cols.is_empty()
+		mm.mesh = mesh
+		mm.instance_count = idx.size()
+		for k in idx.size():
+			mm.set_instance_transform(k, xfs[idx[k]])
+			if not cols.is_empty():
+				mm.set_instance_color(k, cols[idx[k]])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.name = "%s_%d_%d" % [name, key.x, key.y]
+		mmi.multimesh = mm
+		if mat != null:
+			mmi.material_override = mat
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if range_begin > 0.0:
+			mmi.visibility_range_begin = range_begin
+			mmi.visibility_range_begin_margin = 8.0
+		if range_end > 0.0:
+			mmi.visibility_range_end = range_end
+			mmi.visibility_range_end_margin = 8.0
+		add_child(mmi)
+
+
+var _trees_body: StaticBody3D
+
+
+## A cylinder collider (tree trunks, posts, tanks) on one shared static body.
+func post_collider(p: Vector3, r: float, h: float) -> void:
+	if _trees_body == null:
+		_trees_body = StaticBody3D.new()
+		_trees_body.name = "Trunks"
+		collider_root.add_child(_trees_body)
+	var cs := CollisionShape3D.new()
+	var sh := CylinderShape3D.new()
+	sh.radius = r
+	sh.height = h
+	cs.shape = sh
+	cs.position = p + Vector3(0, h * 0.5, 0)
+	_trees_body.add_child(cs)
+
+
+## An axis-aligned or yawed box collider on the shared static body.
+func box_collider(c: Vector3, size: Vector3, yaw := 0.0) -> void:
+	if _trees_body == null:
+		post_collider(Vector3(0, -50, 0), 0.1, 0.1)
+	var cs := CollisionShape3D.new()
+	var sh := BoxShape3D.new()
+	sh.size = size
+	cs.shape = sh
+	cs.transform = Transform3D(Basis(Vector3.UP, yaw), c)
+	_trees_body.add_child(cs)
+
+
+## A gas-lantern street lamp (procedural lamp prop, halo and light pool) at ground point p.
+func path_lamp(p: Vector3, face := Vector3(0, 0, 1)) -> void:
+	_add_prop("lamp", Transform3D(Basis(Vector3.UP, atan2(face.x, face.z)), p), Color.WHITE)
+	lamp_positions.append(p + Vector3(0, LANTERN_Y, 0))
+	halo_xfs.append(Transform3D(Basis(), p + Vector3(0, LANTERN_Y, 0)))
+	var save := ck
+	ck = _chunk_of(p.x, p.z)
+	_light_pool(p + face * 0.6, 4.4)
+	ck = save
+
+
+## A flat strip of ground along a polyline (dirt roads, paths), chunked per segment.
+func ground_path(mat: String, pts: Array, w: float, col := Color.WHITE, y := 0.03, spacing := 18.0) -> void:
+	var save := ck
+	for k in pts.size() - 1:
+		var a: Vector3 = pts[k]
+		var b: Vector3 = pts[k + 1]
+		var dir := (b - a)
+		dir.y = 0.0
+		var n := dir.length()
+		var side := Vector3.UP.cross(dir / n) * w * 0.5
+		var steps := maxi(1, int(ceilf(n / 20.0)))
+		for st in steps:
+			var p0 := a.lerp(b, float(st) / steps)
+			var p1 := a.lerp(b, float(st + 1) / steps)
+			var m := (p0 + p1) * 0.5
+			ck = _chunk_of(m.x, m.z)
+			var e0 := p0 - dir / n * (w * 0.5 if st == 0 else 0.0)
+			var e1 := p1 + dir / n * (w * 0.5 if st == steps - 1 else 0.0)
+			var yy := Vector3(0, y, 0)
+			_b(mat).quad(e0 - side + yy, e1 - side + yy, e1 + side + yy, e0 + side + yy, Vector3.UP, col)
+		var d := 0.0
+		while d < n:
+			add_road(a + dir / n * d)
+			d += spacing
+	ck = save
+
+
+## Distance on the ground plane from p to a polyline.
+static func dist_to_path(p: Vector3, pts: Array) -> float:
+	var best := INF
+	var q := Vector2(p.x, p.z)
+	for k in pts.size() - 1:
+		var a := Vector2(pts[k].x, pts[k].z)
+		var b := Vector2(pts[k + 1].x, pts[k + 1].z)
+		var ab := b - a
+		var t := clampf((q - a).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
+		best = minf(best, q.distance_to(a + ab * t))
+	return best
+
+
+## A generated GLB placed in the world (not instanced): returns its world-axis size.
+func place_glb(name: String, height: float, xf: Transform3D, shadow := true, range_end := 0.0) -> Vector3:
+	var holder := Node3D.new()
+	holder.name = name
+	add_child(holder)
+	var size := _glb_into(holder, "map/" + name, height, xf, shadow)
+	if range_end > 0.0:
+		for mi in holder.get_children():
+			(mi as GeometryInstance3D).visibility_range_end = range_end
+	return size
+
+
+## A generated GLB as MultiMesh instances (one per mesh part), bucketed for culling.
+## `height` scales the model; each xf is applied on top of the normalised model.
+func glb_multimesh(name: String, height: float, xfs: Array, cell: float, range_end: float, shadow := false) -> Vector3:
+	var path := "res://assets/props/map/%s.glb" % name
+	if not ResourceLoader.exists(path) or xfs.is_empty():
+		return Vector3.ZERO
+	var inst: Node = (load(path) as PackedScene).instantiate()
+	var found: Array = []
+	PropsScript._collect_meshes(inst, Transform3D.IDENTITY, found)
+	inst.free()
+	if found.is_empty():
+		return Vector3.ZERO
+	var bb := AABB()
+	for k in found.size():
+		var b: AABB = found[k][1] * (found[k][0] as Mesh).get_aabb()
+		bb = b if k == 0 else bb.merge(b)
+	var s := height / maxf(bb.size.y, 0.0001)
+	var c := bb.get_center()
+	var norm := Transform3D(Basis().scaled(Vector3(s, s, s)), -Vector3(c.x, bb.position.y, c.z) * s)
+	for f in found:
+		var part: Transform3D = norm * f[1]
+		var list: Array = []
+		for xf: Transform3D in xfs:
+			list.append(xf * part)
+		scatter_mm("Glb_" + name, f[0], list, cell, 0.0, range_end, shadow)
+	return bb.size * s
 
 
 # ================================================================ lair
