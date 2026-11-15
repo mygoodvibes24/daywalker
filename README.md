@@ -46,10 +46,15 @@ Plug in or pair an Xbox, PlayStation or Switch Pro controller and **press any bu
 |---|---|---|
 | Move | Left stick / D-pad | WASD |
 | Camera | Right stick | Mouse |
-| Sprint | LT (hold) or L3 | Shift |
+| Sprint | LT (hold) | Shift |
 | Jump (double jump) | A / Cross | Space |
 | Blood Dash (3 charges, phase through enemies) | B / Circle or RB | Right mouse / Q |
 | Blade combo (3-hit) | X / Square or RT | Left mouse / J |
+| Charged slash (hold attack ~0.4 s; big hit that staggers) | Hold X / Square or RT | Hold left mouse / J |
+| Thrust (attack during or just after a Blood Dash) | B then X | Right mouse then left mouse |
+| Running slash (attack while sprinting) | LT + X | Shift + left mouse |
+| Execute a staggered enemy (attack it; Bite still drains) | X / Square next to it | Left mouse next to it |
+| Parry (during an enemy's eye-flare wind-up: negates the strike, staggers him) | L3 | C / middle mouse |
 | Bite a staggered enemy (red orb above head) | Y / Triangle | E |
 | Interact: take loot, open a coffin / crate, keep vigil at the Undercroft (the bite wins when a staggered enemy is in reach) | Y / Triangle | E |
 | Drink bagged blood at the Undercroft | LB | F |

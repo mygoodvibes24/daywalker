@@ -4,40 +4,53 @@ extends SceneTree
 ##
 ## Inputs (all in assets/characters/sol/, generated with Higgsfield; see CREDITS.md):
 ##   sol_mod_rig_idle.glb      the coatless body, auto-rigged (24-bone skeleton in centimetres) + idle clip
-##   sol_mod_anim_<clip>.glb   one clip each on the same skeleton (run, sprint, slash, hit, death, jump)
+##   sol_mod_anim_<clip>.glb   one clip each on the same skeleton. Every such file in the folder is picked up;
+##                             CUTS says how a clip is cut into moves (otherwise it is used whole, by its name)
 ##   sol_mod_body_src.glb      the unrigged body: its full-resolution PBR maps texture the rigged mesh
 ##   sol_mod_coat_src.glb      the open leather trenchcoat on its own
 ##   sol_mod_head_src.glb      a detailed head-and-neck bust
-##   sol_mod_hand_src.glb      a right fist in a sword grip (mirrored for the left hand)
+##   sol_mod_hand_src.glb      a right fist in a sword grip (mirrored, and opened a little, for the left hand)
 ##   sol_mod_boot_src.glb      (optional) one combat boot, mirrored for the other foot
 ##   sol_mod_sword_<name>.glb  four swords
 ## The Tripo parts face +X, are 1 unit tall and are fitted here; nothing is hand-placed in an editor.
 ##
 ## Output scene:
 ##   SolModular (Node3D)
-##     Skeleton3D             body skeleton in metres (feet at y=0, facing +Z) + 8x4 coat spring bones
+##     Skeleton3D             body skeleton in metres (feet at y=0, facing +Z) + 12x5 coat spring bones
 ##       Body                 skinned body; head, hands (and boots, if replaced) cut away
 ##       Coat                 skinned coat: upper half on spine/shoulder/arm bones, skirt on the spring bones
 ##       Head (BoneAttachment3D) -> HeadMesh, Glasses
-##       HandR / HandL        fists; HandR holds Blade -> the sword scene
+##       HandR / HandL        fists; HandR holds Blade, the grip socket: origin on the axis of the fist's
+##                            finger tunnel, +Z out of the thumb side -> the sword scene
 ##       FootL / FootR        (only if USE_BOOT_MODEL)
-##     AnimationPlayer        clips: idle, run, sprint (looped), slash, slash_back, hit, death, jump
+##     AnimationPlayer        clips: idle, run, sprint, stance (looped), slash, slash_back, hit, death, jump,
+##                            and the move cuts (combo1..3, heavy1..3, thrust, charged, judgment, parry,
+##                            quick_slash). Every one-shot clip carries metadata "hit" (s: the hand's fastest
+##                            moment) and "travel" (m: how far the hips went forward; the game lunges that far).
 ##     CoatSim                scripts/coat_sim.gd
-## and the four sword scenes sol_sword_<name>.scn (origin = the grip, blade along +Z, flat facing +-X).
+## and the four sword scenes sol_sword_<name>.scn: blade along +Z, flat facing +-X, plus a GripPoint
+## Marker3D where the fist's tunnel centre belongs (weapon_visual.gd puts it on the Blade socket).
 
 const D := "res://assets/characters/sol/"
 const OUT := D + "sol_modular.scn"
 const RIG := D + "sol_mod_rig_idle.glb"
-const CLIPS := {
-	"idle": D + "sol_mod_rig_idle.glb",
-	"run": D + "sol_mod_anim_run.glb",
-	"sprint": D + "sol_mod_anim_sprint.glb",
-	"slash": D + "sol_mod_anim_slash.glb",
-	"hit": D + "sol_mod_anim_hit.glb",
-	"death": D + "sol_mod_anim_death.glb",
-	"jump": D + "sol_mod_anim_jump.glb",
+## Clip cuts: source clip -> [[move name, start s, end s, reversed], ...]. A start of -1 finds the window
+## automatically (the right hand's fastest stretch). Clips not listed are used whole under their own name.
+const CUTS := {
+	"slash": [["slash", -1.0, -1.0, false], ["slash_back", -1.0, -1.0, true]],
+	"hit": [["hit", 0.0, 0.8, false]],
+	"jump": [["jump", 0.42, 0.92, false]],
+	# Triple_Combo_Attack: the light combo (hits at 0.80, 1.53 and 2.27 s in the source)
+	"triple_combo": [["combo1", 0.25, 1.15, false], ["combo2", 1.15, 1.9, false], ["combo3", 1.9, 3.3, false]],
+	# Weapon_Combo_2: the heavy-blade combo (hits at 1.17, 2.00 and 3.03 s)
+	"weapon_combo2": [["heavy1", 0.5, 1.6, false], ["heavy2", 1.6, 2.5, false], ["heavy3", 2.5, 3.75, false]],
+	"thrust": [["thrust", 0.3, 1.55, false]], # Thrust_Slash: the lunge lands at 0.77 s
+	"charged": [["charged", 0.0, 2.0, false]], # Charged_Slash: wind-up to 1.0 s, strike at 1.20 s
+	"judgment": [["judgment", 0.3, 2.1, false]], # Sword_Judgment: the killing cut at 1.03 s
+	"parry": [["parry", 0.0, 1.2, false]], # Sword_Parry: a held guard
+	"quick_slash": [["quick_slash", 0.1, 1.25, false]], # Right_Hand_Sword_Slash: strike at 0.57 s
 }
-const LOOPED := ["idle", "run", "sprint"]
+const LOOPED := ["idle", "run", "sprint", "stance"]
 const SWORDS := {
 	# name: [source, overall length (m)]
 	"silver": [D + "sol_mod_sword_silver.glb", 1.05],
@@ -58,15 +71,28 @@ const HEAD_CUT := -0.47 # bust units: everything below is cut (shirt, shoulders)
 const HAND_SCALE := 0.15
 const HAND_WRIST := Vector3(0.0, -0.3, 0.0) # point of the fist mesh (units) placed on the wrist joint
 const FIST_TWIST := -50.0 # degrees about the forearm: turns the knuckles (and blade) more forward
-const GRIP_IN_FIST := Vector3(0.02, 0.17, 0.0) # sword grip centre in fist-mesh units
+## Grip: the fist's finger tunnel in fist-mesh units, fitted from cross-sections of the hand mesh (the
+## fist is closed, so there is no open hole to find: the curled fingers wrap around this line). The
+## index / thumb side is -Z, the little finger +Z.
+const TUNNEL_CENTRE := Vector3(0.075, 0.26, -0.03)
+## Tunnel tilt at the index side (deg): + toward the knuckles, - back toward the wrist. -8 makes the
+## blade sit ~98 deg from the forearm (a hammer grip with a relaxed wrist).
+const TUNNEL_TILT := -8.0
+const GUARD_GAP := 0.004 # between the top of the fist (thumb / index knuckle) and the guard (m)
+## Left hand: the same fist with the fingers opened around the knuckle line (deg), so it reads relaxed.
+const LEFT_UNCURL := 28.0
 const COAT_SCALE := Vector3(1.2, 1.12, 1.32)
 const COAT_TOP := 1.655 # collar height
 const COAT_SKIRT_STRETCH := 1.12 # lengthens the skirt below the waist toward mid-shin
 const COAT_WAIST := 1.0
-const COAT_MARGIN := 0.014 # minimum gap kept between coat and body at rest
-const CHAIN_ANGLES := [-160.0, -115.0, -70.0, -25.0, 25.0, 70.0, 115.0, 160.0]
+const COAT_MARGIN := 0.018 # minimum gap kept between coat and body at rest
+## Body vertices under the coat are pulled in by this much so big poses don't poke through it.
+const BODY_TUCK := 0.006
+## Skirt spring chains: degrees around the hips (0 = front); the coat is open between -22 and 22.
+const CHAIN_ANGLES := [-165.0, -135.0, -105.0, -78.0, -50.0, -22.0, 22.0, 50.0, 78.0, 105.0, 135.0, 165.0]
+const CHAIN_FRONT := 5 # chains FRONT and FRONT+1 flank the opening: the weights never bridge them
 const CHAIN_TOP := 0.98
-const CHAIN_LINKS := 4
+const CHAIN_LINKS := 5
 
 var skel: Skeleton3D
 var bone_rest_g: Array[Transform3D] = []
@@ -121,13 +147,6 @@ func _initialize() -> void:
 		worst = maxf(worst, (chk.origin).length() + (chk.basis.x - Vector3.RIGHT).length())
 	print("body binds ", src_skin.get_bind_count(), " rest*bind deviation ", worst)
 	body_arr = _cut_body(body_arr, bind_bone)
-	var body_mat := _material(D + "sol_mod_body_src.glb")
-	var body := MeshInstance3D.new()
-	body.name = "Body"
-	body.mesh = _mesh(body_arr, body_mat, true)
-	body.skin = body_skin
-	skel.add_child(body)
-	body.owner = root
 	_index_body(body_arr, bind_bone)
 
 	# ---------------------------------------------------------------- coat
@@ -136,17 +155,35 @@ func _initialize() -> void:
 	var coat_res := _build_coat()
 	coat.mesh = coat_res[0]
 	coat.skin = coat_res[1]
+
+	# the body goes in after the coat: the torso under it is tucked in a little
+	body_arr = _tuck_body(body_arr, coat_res[2])
+	var body_mat := _material(D + "sol_mod_body_src.glb")
+	var body := MeshInstance3D.new()
+	body.name = "Body"
+	body.mesh = _mesh(body_arr, body_mat, true)
+	body.skin = body_skin
+	skel.add_child(body)
+	body.owner = root
 	skel.add_child(coat)
 	coat.owner = root
 
 	# ---------------------------------------------------------------- head + glasses
 	var head_att := _attach(root, "Head", "Head")
 	var head_arr := _load_arrays(D + "sol_mod_head_src.glb", Transform3D(Basis(Vector3.UP, -PI / 2.0).scaled(Vector3.ONE * HEAD_SCALE), HEAD_OFF))
-	head_arr = _cut_bust(head_arr, D + "sol_mod_head_src.glb")
+	head_arr = _extend_neck(_cut_bust(head_arr, D + "sol_mod_head_src.glb"))
 	var head_mat := _material(D + "sol_mod_head_src.glb")
 	head_mat.metallic_specular = 0.32 # the generated skin reads plastic at full specular
-	_add_part(head_att, root, "HeadMesh", head_arr, head_mat, true)
-	_add_glasses(head_att, root)
+	# the head is skinned, not rigid: its neck takes the body's own neck / spine weights where it meets
+	# the collar, blending into the head bone above, so neck and body bend together in every clip
+	var head_mi := MeshInstance3D.new()
+	head_mi.name = "HeadMesh"
+	var head_skin := _skin_head(head_arr)
+	head_mi.mesh = _mesh(head_arr, head_mat, true)
+	head_mi.skin = head_skin
+	skel.add_child(head_mi)
+	head_mi.owner = root
+	_add_glasses(head_att, root, head_arr[Mesh.ARRAY_VERTEX])
 
 	# ---------------------------------------------------------------- hands + sword
 	var fist_r := _fist_xf("Right")
@@ -155,21 +192,33 @@ func _initialize() -> void:
 	var hr := _attach(root, "HandR", "RightHand")
 	_add_part(hr, root, "HandMesh", _load_arrays(D + "sol_mod_hand_src.glb", fist_r), hand_mat, false)
 	var hl := _attach(root, "HandL", "LeftHand")
-	_add_part(hl, root, "HandMesh", _load_arrays(D + "sol_mod_hand_src.glb", _fist_xf("Left")), hand_mat, false)
-	# sword grip frame: blade (+Z) out of the thumb side (-Z of the fist mesh), edge along the fingers
-	var grip_mesh := Transform3D(Basis(Vector3.UP, PI), GRIP_IN_FIST)
+	var left_arr := _uncurl(_load_arrays(D + "sol_mod_hand_src.glb", Transform3D.IDENTITY), LEFT_UNCURL)
+	_add_part(hl, root, "HandMesh", _xform(left_arr, _fist_xf("Left")), hand_mat, false)
+	# the grip socket: on the fist's finger tunnel, blade (+Z) out of the thumb side (-Z of the fist
+	# mesh), edge (+Y) toward the knuckles, flat (+X) facing the palm
+	var tunnel := _tunnel_frame()
 	var blade := Node3D.new()
 	blade.name = "Blade"
 	hr.add_child(blade)
 	blade.owner = root
-	blade.transform = bone_rest_g[skel.find_bone("RightHand")].affine_inverse() * fist_r * grip_mesh
+	blade.transform = bone_rest_g[skel.find_bone("RightHand")].affine_inverse() * fist_r * tunnel
 	blade.transform.basis = blade.transform.basis.orthonormalized()
+	var ext := _fist_extent(tunnel)
+	print("fist tunnel: centre %s, fist spans %.3f m toward the thumb, %.3f m toward the little finger" % [TUNNEL_CENTRE, ext.x, ext.y])
 	for sname in SWORDS:
-		_build_sword(sname, SWORDS[sname][0], SWORDS[sname][1])
+		_build_sword(sname, SWORDS[sname][0], SWORDS[sname][1], ext)
 	var sword: Node3D = (load(D + "sol_sword_silver.scn") as PackedScene).instantiate()
 	sword.name = "Sword"
 	blade.add_child(sword)
 	sword.owner = root
+	sword.transform = (sword.get_node("GripPoint") as Node3D).transform.affine_inverse()
+	# keeps the carried blade from pointing up in the run (scripts/sword_wrist.gd)
+	var wrist := SkeletonModifier3D.new()
+	wrist.set_script(load("res://scripts/sword_wrist.gd"))
+	wrist.name = "SwordWrist"
+	skel.add_child(wrist)
+	wrist.owner = root
+	wrist.set("blade_dir", blade.transform.basis.z.normalized())
 
 	# ---------------------------------------------------------------- boots
 	if USE_BOOT_MODEL:
@@ -625,18 +674,36 @@ func _build_coat() -> Array:
 				sleeve_t[i] = clampf(tt, 0.0, 1.0) * side
 	arr[Mesh.ARRAY_VERTEX] = v
 	arr[Mesh.ARRAY_NORMAL] = cn
-	# 3. keep it outside the body at rest
-	var nrm: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
-	var pushed := 0
+	# 3. keep it outside the body at rest. The coat is a closed shell (outer leather and inner lining a
+	# few mm apart): each vertex's push is the largest push needed within 2.5 cm, so both layers move
+	# together and the lining never ends up outside the leather (that showed as dark torn patches).
+	var need := PackedFloat32Array()
+	need.resize(v.size())
+	var push_n := PackedVector3Array()
+	push_n.resize(v.size())
 	for i in v.size():
 		var bi := _nearest_body(v[i])
 		if bi < 0:
 			continue
 		var bn := body_nrm[bi]
 		var dd := (v[i] - body_pts[bi]).dot(bn)
+		push_n[i] = bn
 		if dd < COAT_MARGIN and (v[i] - body_pts[bi]).length() < 0.06:
-			v[i] += bn * (COAT_MARGIN - dd)
+			need[i] = COAT_MARGIN - dd
+	var near := _neighbours(v, 0.025)
+	var pushed := 0
+	var nv := v.duplicate()
+	for i in v.size():
+		var m := need[i]
+		var dir := push_n[i]
+		for j in near[i]:
+			if need[j] > m:
+				m = need[j]
+				dir = push_n[j]
+		if m > 0.0:
+			nv[i] = v[i] + dir * m
 			pushed += 1
+	v = nv
 	arr[Mesh.ARRAY_VERTEX] = v
 	print("coat: pushed %d of %d vertices outside the body" % [pushed, v.size()])
 	# 4. spring chains on the skirt surface
@@ -650,7 +717,9 @@ func _build_coat() -> Array:
 	var wds: Array[Dictionary] = []
 	for i in v.size():
 		wds.append(_coat_weights(v[i], sleeve_t[i]))
-	wds = _smooth_weights(wds, arr[Mesh.ARRAY_INDEX], 2)
+	wds = _smooth_weights(wds, arr[Mesh.ARRAY_INDEX], 3)
+	# leather and lining share their weights (averaged over 1.5 cm), so the two layers deform as one
+	wds = _spatial_weights(wds, v, 0.015)
 	for i in v.size():
 		var wd := wds[i]
 		var keys: Array = wd.keys()
@@ -670,7 +739,88 @@ func _build_coat() -> Array:
 	var skin := Skin.new()
 	for b in skel.get_bone_count():
 		skin.add_named_bind(skel.get_bone_name(b), bone_rest_g[b].affine_inverse())
-	return [_mesh(arr, _material(D + "sol_mod_coat_src.glb"), true), skin]
+	var mat := _material(D + "sol_mod_coat_src.glb")
+	return [_mesh(arr, mat, true), skin, v]
+
+
+## Pull body vertices that sit under the coat (torso and upper arms, within 5 cm of a coat vertex)
+## in along their normal by BODY_TUCK, so the body doesn't poke through the coat in big poses.
+func _tuck_body(arr: Array, coat_v: PackedVector3Array) -> Array:
+	var cgrid := {}
+	for i in coat_v.size():
+		var key := Vector3i((coat_v[i] / CELL).floor())
+		if not cgrid.has(key):
+			cgrid[key] = PackedInt32Array()
+		cgrid[key].append(i)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX].duplicate()
+	var nrm: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+	var n := 0
+	for i in v.size():
+		var p := v[i]
+		if p.y < 0.85 or p.y > COAT_TOP - 0.06:
+			continue
+		var c := Vector3i((p / CELL).floor())
+		var hit := false
+		for x in range(-1, 2):
+			for y in range(-1, 2):
+				for z in range(-1, 2):
+					var key := c + Vector3i(x, y, z)
+					if hit or not cgrid.has(key):
+						continue
+					for j in cgrid[key]:
+						var d := coat_v[j] - p
+						if d.length() < 0.05 and d.dot(nrm[i]) > 0.0:
+							hit = true
+							break
+		if hit:
+			v[i] = p - nrm[i] * BODY_TUCK
+			n += 1
+	arr = arr.duplicate()
+	arr[Mesh.ARRAY_VERTEX] = v
+	print("body: tucked %d vertices under the coat" % n)
+	return arr
+
+
+## For each vertex, the other vertices within `r` (a spatial hash; the coat's two layers are not
+## connected by edges, so mesh neighbours alone can't tie them together).
+func _neighbours(v: PackedVector3Array, r: float) -> Array[PackedInt32Array]:
+	var h := {}
+	for i in v.size():
+		var key := Vector3i((v[i] / r).floor())
+		if not h.has(key):
+			h[key] = PackedInt32Array()
+		h[key].append(i)
+	var out: Array[PackedInt32Array] = []
+	out.resize(v.size())
+	for i in v.size():
+		var c := Vector3i((v[i] / r).floor())
+		var lst := PackedInt32Array()
+		for x in range(-1, 2):
+			for y in range(-1, 2):
+				for z in range(-1, 2):
+					var key := c + Vector3i(x, y, z)
+					if h.has(key):
+						for j in h[key]:
+							if j != i and v[i].distance_squared_to(v[j]) < r * r:
+								lst.append(j)
+		out[i] = lst
+	return out
+
+
+## Average each vertex's weights with every vertex within `r`.
+func _spatial_weights(wds: Array[Dictionary], v: PackedVector3Array, r: float) -> Array[Dictionary]:
+	var near := _neighbours(v, r)
+	var out: Array[Dictionary] = []
+	for i in wds.size():
+		var d := wds[i].duplicate()
+		for j in near[i]:
+			for b in wds[j]:
+				d[b] = d.get(b, 0.0) + wds[j][b]
+		var tot := 1.0 + near[i].size()
+		for b in d:
+			d[b] /= tot
+		out.append(d)
+	return out
 
 
 ## Average each vertex's weights with its mesh neighbours (removes stair-steps between
@@ -762,9 +912,10 @@ func _coat_weights(p: Vector3, sleeve: float) -> Dictionary:
 				u = rel / span
 				break
 		# the open front: don't bridge the two front panels
-		if c0 == 3 and c1 == 4:
+		if c0 == CHAIN_FRONT and c1 == CHAIN_FRONT + 1:
 			u = 0.0 if u < 0.5 else 1.0
-		u = smoothstep(0.0, 1.0, u)
+		# linear between neighbouring chains (a smoothstep here made flat panels with creases between
+		# them; linear blending lets the cloth fold between chains)
 		var seg := (CHAIN_TOP - float(_chain_joints[0][CHAIN_LINKS].y)) / CHAIN_LINKS
 		var f := clampf((CHAIN_TOP - p.y) / seg - 0.5, 0.0, CHAIN_LINKS - 1.0)
 		var k0 := int(floor(f))
@@ -837,66 +988,157 @@ func _cut_bust(arr: Array, path: String) -> Array:
 	return _filter(arr, func(a, b, c): return drop[a] == 0 and drop[b] == 0 and drop[c] == 0)
 
 
-## Small round sunglasses: two thin rims, dark glossy lenses, a bridge and temple arms.
-func _add_glasses(att: BoneAttachment3D, root: Node) -> void:
+## Skin weights for the head bust (in place, on `arr`): above the jaw line all Head; down the neck a
+## blend into the weights of the body vertices underneath (neck, Spine02, shoulders), so where the bust
+## overlaps the body's neck both deform identically and no gap can open. Returns the skin (binds for
+## every bone at its rest pose).
+func _skin_head(arr: Array) -> Skin:
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var head := skel.find_bone("Head")
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	bones.resize(v.size() * 4)
+	weights.resize(v.size() * 4)
+	for i in v.size():
+		var t := smoothstep(NECK_CUT - 0.02, NECK_CUT + 0.075, v[i].y)
+		var wd := {head: t}
+		if t < 1.0:
+			var under := _upper_weights(v[i])
+			for b in under:
+				wd[b] = wd.get(b, 0.0) + under[b] * (1.0 - t)
+		var keys: Array = wd.keys()
+		keys.sort_custom(func(x, y): return wd[x] > wd[y])
+		var tot := 0.0
+		for k in mini(4, keys.size()):
+			tot += wd[keys[k]]
+		for k in 4:
+			bones[i * 4 + k] = keys[k] if k < keys.size() else 0
+			weights[i * 4 + k] = wd[keys[k]] / tot if k < keys.size() else 0.0
+	arr[Mesh.ARRAY_BONES] = bones
+	arr[Mesh.ARRAY_WEIGHTS] = weights
+	var skin := Skin.new()
+	for b in skel.get_bone_count():
+		skin.add_named_bind(skel.get_bone_name(b), bone_rest_g[b].affine_inverse())
+	return skin
+
+
+## Close the neck seam: the bust's lower edge is ragged (the white T-shirt is cut away by colour), and
+## between it and the body's neck cut a thin gap let the background show through as a white line. The
+## open boundary along the bottom of the neck is pushed 4.5 cm down and in, so it tucks inside the
+## body's collar.
+func _extend_neck(arr: Array) -> Array:
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX].duplicate()
+	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+	# boundary edges (used by one triangle), matched by position so UV seams don't count
+	var key := func(p: Vector3) -> Vector3i: return Vector3i((p * 2000.0).round())
+	var edges := {}
+	for i in range(0, idx.size(), 3):
+		for e in 3:
+			var ka: Vector3i = key.call(v[idx[i + e]])
+			var kb: Vector3i = key.call(v[idx[i + (e + 1) % 3]])
+			var ek := [ka, kb] if str(ka) < str(kb) else [kb, ka]
+			edges[ek] = edges.get(ek, 0) + 1
+	var rim := {}
+	for ek in edges:
+		if edges[ek] == 1:
+			rim[ek[0]] = true
+			rim[ek[1]] = true
+	var axis := Vector2(HEAD_OFF.x, HEAD_OFF.z - 0.01)
+	var n := 0
+	for i in v.size():
+		var p := v[i]
+		if p.y < NECK_CUT + 0.07 and rim.has(key.call(p)):
+			var h := Vector2(p.x, p.z) - axis
+			h *= 0.86
+			v[i] = Vector3(axis.x + h.x, p.y - 0.045, axis.y + h.y)
+			n += 1
+	print("head: tucked %d neck-edge vertices into the collar" % n)
+	arr = arr.duplicate()
+	arr[Mesh.ARRAY_VERTEX] = v
+	return arr
+
+
+## Small round sunglasses fitted to the face: two rims, dark domed lenses with a glossy rim light, a
+## bridge on the nose and temple arms back to the ears. The lens plane sits just in front of the eyes
+## and the bridge on the nose, measured from the head mesh.
+func _add_glasses(att: BoneAttachment3D, root: Node, hv: PackedVector3Array) -> void:
 	var g := Node3D.new()
 	g.name = "Glasses"
 	att.add_child(g)
 	g.owner = root
-	var eye := Vector3(0.0, 1.741, 0.104) # between the eyes, just in front of the brow line
-	g.transform = att.transform.affine_inverse() * Transform3D(Basis(), eye)
+	var ey := 1.741
+	var r := 0.0185
+	var dx := 0.032
+	# face centre line: the nose bridge (frontmost point near eye level)
+	var nose := Vector3(0, ey, -INF)
+	for p in hv:
+		if absf(p.y - (ey + 0.004)) < 0.008 and absf(p.x - HEAD_OFF.x) < 0.03 and p.z > nose.z:
+			nose = p
+	var cx := nose.x
+	var eye_front := -INF
+	var temple := 0.0
+	for p in hv:
+		if absf(p.y - ey) < 0.012:
+			if absf(absf(p.x - cx) - dx) < 0.012:
+				eye_front = maxf(eye_front, p.z)
+			if p.z < nose.z - 0.05 and p.z > nose.z - 0.11:
+				temple = maxf(temple, absf(p.x - cx))
+	var lz := maxf(eye_front + 0.008, nose.z - 0.004)
+	print("glasses: nose bridge %s, eye surface z %.3f, lens plane z %.3f, temples at +-%.3f" % [nose, eye_front, lz, temple])
+	g.transform = att.transform.affine_inverse() * Transform3D(Basis(), Vector3(cx, ey, lz))
 	var frame := StandardMaterial3D.new()
-	frame.albedo_color = Color(0.09, 0.085, 0.08)
+	frame.albedo_color = Color(0.17, 0.16, 0.15)
 	frame.metallic = 1.0
-	frame.roughness = 0.3
+	frame.roughness = 0.22
 	var lens := StandardMaterial3D.new()
-	lens.albedo_color = Color(0.03, 0.025, 0.03)
-	lens.metallic = 0.8
-	lens.roughness = 0.08
-	var r := 0.0175
-	var dx := 0.0315
+	lens.albedo_color = Color(0.012, 0.012, 0.016)
+	lens.metallic = 0.15
+	lens.roughness = 0.05
+	lens.metallic_specular = 0.9
+	lens.rim_enabled = true # a thin specular edge so the dark lenses read against dark skin
+	lens.rim = 0.35
+	lens.rim_tint = 0.6
 	for s in [-1.0, 1.0]:
+		var wrap := Basis(Vector3.UP, 0.12 * s) # lenses follow the face curve a little
 		var rim := MeshInstance3D.new()
 		var tm := TorusMesh.new()
 		tm.inner_radius = r
-		tm.outer_radius = r + 0.0028
-		tm.rings = 24
+		tm.outer_radius = r + 0.0034
+		tm.rings = 28
 		tm.ring_segments = 6
 		rim.mesh = tm
 		rim.material_override = frame
-		rim.rotation = Vector3(PI / 2.0, 0, 0)
-		rim.position = Vector3(dx * s, 0, 0)
+		rim.transform = Transform3D(wrap * Basis(Vector3.RIGHT, PI / 2.0), Vector3(dx * s, 0, 0))
 		g.add_child(rim)
 		rim.owner = root
 		var ln := MeshInstance3D.new()
-		var cm := CylinderMesh.new()
-		cm.top_radius = r + 0.0005
-		cm.bottom_radius = r + 0.0005
-		cm.height = 0.002
-		cm.radial_segments = 24
-		cm.rings = 1
-		ln.mesh = cm
+		var sm := SphereMesh.new() # a flattened sphere: a slightly domed lens that catches highlights
+		sm.radius = r + 0.0008
+		sm.height = 0.007
+		sm.radial_segments = 24
+		sm.rings = 8
+		ln.mesh = sm
 		ln.material_override = lens
-		ln.rotation = Vector3(PI / 2.0, 0, 0)
-		ln.position = Vector3(dx * s, 0, 0.0)
+		ln.transform = Transform3D(wrap * Basis(Vector3.RIGHT, PI / 2.0), Vector3(dx * s, 0, 0.0))
 		g.add_child(ln)
 		ln.owner = root
-		# temple arm back to the ear
+		# temple arm from the rim's outer edge back to the ear
+		var a := Vector3((dx + r + 0.002) * s, 0.003, -0.004)
+		var b := Vector3((maxf(temple, dx + r) + 0.004) * s, 0.006, -0.105)
 		var arm := MeshInstance3D.new()
 		var bm := BoxMesh.new()
-		bm.size = Vector3(0.0022, 0.0028, 0.1)
+		bm.size = Vector3(0.0032, 0.0045, a.distance_to(b))
 		arm.mesh = bm
 		arm.material_override = frame
-		arm.position = Vector3((dx + r + 0.003) * s, 0.002, -0.05)
-		arm.rotation = Vector3(0, -0.07 * s, 0)
+		arm.transform = Transform3D(Basis.looking_at(b - a, Vector3.UP), (a + b) * 0.5)
 		g.add_child(arm)
 		arm.owner = root
 	var bridge := MeshInstance3D.new()
 	var bb := BoxMesh.new()
-	bb.size = Vector3(dx * 2.0 - r * 2.0 + 0.004, 0.0024, 0.0024)
+	bb.size = Vector3(dx * 2.0 - r * 2.0 + 0.004, 0.003, 0.003)
 	bridge.mesh = bb
 	bridge.material_override = frame
-	bridge.position = Vector3(0, 0.006, 0.002)
+	bridge.position = Vector3(0, 0.007, 0.001)
 	g.add_child(bridge)
 	bridge.owner = root
 
@@ -923,13 +1165,61 @@ func _fist_xf(side: String) -> Transform3D:
 	return Transform3D(b, wrist - b * HAND_WRIST)
 
 
+## The grip socket in fist-mesh units: origin on the tunnel axis, +Z along it out of the thumb side,
+## +Y (the blade's edge) toward the knuckles, +X (the blade's flat) facing the palm.
+func _tunnel_frame() -> Transform3D:
+	var a := deg_to_rad(TUNNEL_TILT)
+	var z := Vector3(0.0, sin(a), -cos(a))
+	var y := (Vector3.UP - z * z.dot(Vector3.UP)).normalized()
+	return Transform3D(Basis(y.cross(z), y, z), TUNNEL_CENTRE)
+
+
+## How far the fist reaches along the tunnel from its centre (m): x toward the thumb side (where the
+## guard goes), y toward the little finger (where the pommel comes out).
+func _fist_extent(tunnel: Transform3D) -> Vector2:
+	var v: PackedVector3Array = _load_arrays(D + "sol_mod_hand_src.glb", Transform3D.IDENTITY)[Mesh.ARRAY_VERTEX]
+	var ax := tunnel.basis.z
+	var smax := 0.0
+	var smin := 0.0
+	for p in v:
+		var r := p - tunnel.origin
+		var s := r.dot(ax)
+		if (r - ax * s).length() < 0.2:
+			smax = maxf(smax, s)
+			smin = minf(smin, s)
+	return Vector2(smax, -smin) * HAND_SCALE
+
+
+## Open the fist's fingers by `deg` around the knuckle line (fist-mesh units): the curl is rotated
+## back with a weight that grows from the knuckles toward the finger tips, so palm and back of the
+## hand stay put and the surface stretches smoothly in between.
+func _uncurl(arr: Array, deg: float) -> Array:
+	arr = arr.duplicate()
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX].duplicate()
+	var nr: PackedVector3Array = arr[Mesh.ARRAY_NORMAL].duplicate()
+	var k := Vector2(-0.02, 0.38) # knuckle line (along Z), in the XY plane
+	for i in v.size():
+		var p := v[i]
+		var q := Vector2(p.x, p.y) - k
+		var w := smoothstep(0.05, 0.2, q.length()) * smoothstep(-0.03, 0.06, q.x) * smoothstep(0.1, 0.2, p.y)
+		if w <= 0.0:
+			continue
+		var rot := Basis(Vector3.BACK, deg_to_rad(deg) * w)
+		var c := Vector3(k.x, k.y, p.z)
+		v[i] = c + rot * (p - c)
+		nr[i] = rot * nr[i]
+	arr[Mesh.ARRAY_VERTEX] = v
+	arr[Mesh.ARRAY_NORMAL] = nr
+	return arr
+
+
 # =========================================================================== swords
 
 ## Bake a sword into grip space: origin at the middle of the grip, blade along +Z, blade width
 ## along Y (flat faces +-X), overall length `length`. Axis and ends are found automatically:
 ## the longest principal axis is the blade, the widest cross-section is the guard, and the end
 ## nearer the guard is the pommel.
-func _build_sword(sname: String, path: String, length: float) -> void:
+func _build_sword(sname: String, path: String, length: float, fist: Vector2) -> void:
 	var arr := _load_arrays(path, Transform3D.IDENTITY)
 	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
 	var c := Vector3.ZERO
@@ -989,11 +1279,81 @@ func _build_sword(sname: String, path: String, length: float) -> void:
 	mi.owner = root
 	var tip := absf((smax if pommel_s == smin else smin) - grip_s) * scale
 	root.set_meta("blade_len", tip)
+	# where the fist goes: on the grip's own axis, just below the guard
+	var gp := Marker3D.new()
+	gp.name = "GripPoint"
+	gp.transform = _grip_point(arr[Mesh.ARRAY_VERTEX], fist, sname)
+	root.add_child(gp)
+	gp.owner = root
 	var ps := PackedScene.new()
 	ps.pack(root)
 	var err := ResourceSaver.save(ps, D + "sol_sword_%s.scn" % sname, ResourceSaver.FLAG_COMPRESS)
 	print("sword %s: guard bin %d/%d, grip->tip %.2f m, scale %.3f (%s)" % [sname, gb, bins, tip, scale, error_string(err)])
 	root.free()
+
+
+## The sword's grip frame (sword space: blade along +Z, flat facing +-X). The radius profile along the
+## blade axis gives the guard (the widest section) and the grip below it (the narrow stretch down to the
+## pommel's swell); the grip's own vertices give its axis and centre line. The frame's origin is where
+## the fist's tunnel centre belongs: `fist.x` (the fist's reach toward the thumb) plus GUARD_GAP below
+## the guard, so the guard sits just above the thumb and index knuckle and the pommel shows under the
+## little finger. Its +Z runs along the grip toward the blade, +Y along the edge.
+func _grip_point(v: PackedVector3Array, fist: Vector2, sname: String) -> Transform3D:
+	var zmin := INF
+	var zmax := -INF
+	for p in v:
+		zmin = minf(zmin, p.z)
+		zmax = maxf(zmax, p.z)
+	var bins := 160
+	var bw := (zmax - zmin) / bins
+	var rad := PackedFloat32Array()
+	rad.resize(bins)
+	for p in v:
+		var bi := clampi(int((p.z - zmin) / bw), 0, bins - 1)
+		rad[bi] = maxf(rad[bi], Vector2(p.x, p.y).length())
+	# the guard: widest bin in the lower 45% (the pommel end is -Z after the bake)
+	var gb := 0
+	for i in int(bins * 0.45):
+		if rad[i] > rad[gb]:
+			gb = i
+	# the guard's lower face: walk down while the section stays wider than ~45% of the guard
+	var lo := gb
+	while lo > 0 and rad[lo - 1] > rad[gb] * 0.45:
+		lo -= 1
+	# the grip: the narrow run below that; its radius is the median of the next stretch
+	var run := PackedFloat32Array()
+	for i in range(maxi(lo - int(bins * 0.08), 0), lo):
+		run.append(rad[i])
+	run.sort()
+	var grip_r := run[run.size() / 2] if run.size() > 0 else rad[maxi(lo - 4, 0)]
+	var bot := lo - 1
+	while bot > 0 and rad[bot - 1] < grip_r * 1.45:
+		bot -= 1
+	var z_top := zmin + lo * bw # the guard's lower face
+	var z_bot := zmin + bot * bw # the pommel's swell starts here
+	# the grip's own axis from its vertices (curved swords have it off the blade axis)
+	var pts := PackedVector3Array()
+	var c := Vector3.ZERO
+	for p in v:
+		if p.z > z_bot + bw and p.z < z_top - bw:
+			pts.append(p)
+			c += p
+	c /= maxf(pts.size(), 1)
+	var ax := _principal(pts, c, Vector3.ZERO) if pts.size() > 8 else Vector3.BACK
+	if ax.z < 0.0:
+		ax = -ax
+	if ax.angle_to(Vector3.BACK) > deg_to_rad(25.0):
+		ax = Vector3.BACK # not a clean grip: trust the blade axis
+	var top := c + ax * ((z_top - c.z) / ax.z)
+	var length := (z_top - z_bot) / ax.z
+	var need := fist.x + fist.y + GUARD_GAP
+	var o := top - ax * (fist.x + GUARD_GAP)
+	if length < need:
+		o = top - ax * (length * 0.5) # short grip: centre the fist on it
+	var y := (Vector3.UP - ax * ax.dot(Vector3.UP)).normalized()
+	print("sword %s grip: %.3f m long (fist needs %.3f), radius %.3f m, axis tilt %.1f deg, pommel shows %.3f m" % [
+		sname, length, need, grip_r, rad_to_deg(ax.angle_to(Vector3.BACK)), length - need])
+	return Transform3D(Basis(y.cross(ax), y, ax), o)
 
 
 ## Dominant direction of a point cloud (power iteration on the covariance), optionally with
@@ -1040,10 +1400,23 @@ func _add_boots(root: Node) -> void:
 
 # =========================================================================== clips
 
+## Every clip source: the idle rig plus each sol_mod_anim_<name>.glb in the folder (so a new clip only
+## needs its file, and a CUTS row if it should be cut into moves).
+func _clip_sources() -> Dictionary:
+	var out := {"idle": RIG}
+	var files := Array(DirAccess.get_files_at(D))
+	files.sort()
+	for f: String in files:
+		if f.begins_with("sol_mod_anim_") and f.ends_with(".glb"):
+			out[f.trim_prefix("sol_mod_anim_").trim_suffix(".glb")] = D + f
+	return out
+
+
 func _build_clips(unit: float) -> AnimationLibrary:
 	var lib := AnimationLibrary.new()
-	for cname in CLIPS:
-		var scn: Node = load(CLIPS[cname]).instantiate()
+	var src := _clip_sources()
+	for cname in src:
+		var scn: Node = load(src[cname]).instantiate()
 		var ap: AnimationPlayer = scn.find_children("*", "AnimationPlayer", true, false)[0]
 		var A: Animation = ap.get_animation(ap.get_animation_list()[0]).duplicate(true)
 		scn.free()
@@ -1054,26 +1427,54 @@ func _build_clips(unit: float) -> AnimationLibrary:
 			if A.track_get_type(t) == Animation.TYPE_POSITION_3D:
 				for k in A.track_get_key_count(t):
 					A.track_set_key_value(t, k, A.track_get_key_value(t, k) * unit)
-		_strip_root_motion(A, cname)
-		match cname:
-			"slash":
-				var win := _slash_window(A)
-				A = _trim(A, win.x, win.y)
-				lib.add_animation("slash_back", _reverse(A))
-			"hit":
-				A = _trim(A, 0.0, minf(A.length, 0.8))
-			"jump":
-				A = _trim(A, 0.42, minf(A.length, 0.92))
-		A.loop_mode = Animation.LOOP_LINEAR if cname in LOOPED else Animation.LOOP_NONE
-		lib.add_animation(cname, A)
-		print("clip %s: %.2f s, %d tracks" % [cname, A.length, A.get_track_count()])
+		if cname in LOOPED:
+			_strip_root_motion(A, cname)
+			A.loop_mode = Animation.LOOP_LINEAR
+			lib.add_animation(cname, A)
+			print("clip %s: %.2f s (loop), %d tracks" % [cname, A.length, A.get_track_count()])
+			continue
+		var cuts: Array = CUTS.get(cname, [[cname, 0.0, A.length, false]])
+		for cut in cuts:
+			var win := Vector2(cut[1], minf(cut[2], A.length))
+			if cut[1] < 0.0:
+				win = _slash_window(A)
+			var B := _trim(A, win.x, win.y)
+			if cut[3]:
+				B = _reverse(B)
+			B.set_meta("travel", _strip_root_motion(B, cut[0]))
+			B.set_meta("hit", _hit_time(B))
+			B.loop_mode = Animation.LOOP_NONE
+			lib.add_animation(cut[0], B)
+			print("clip %s (from %s %.2f-%.2f s): %.2f s, hit at %.2f s, travel %.2f m" % [cut[0], cname, win.x, win.y, B.length, B.get_meta("hit"), B.get_meta("travel")])
 	return lib
 
 
-func _strip_root_motion(A: Animation, cname: String) -> void:
+## The moment the right hand moves fastest (the blade's strike), in clip seconds.
+func _hit_time(A: Animation) -> float:
+	var hand := skel.find_bone("RightHand")
+	var step := 1.0 / 60.0
+	var prev := _bone_pos_at(A, hand, 0.0)
+	var best := 0.0
+	var best_t := A.length * 0.5
+	var tt := step
+	while tt <= A.length:
+		var p := _bone_pos_at(A, hand, tt)
+		var sp := p.distance_to(prev)
+		if sp > best:
+			best = sp
+			best_t = tt
+		prev = p
+		tt += step
+	return best_t
+
+
+## Loops: the drift over the loop is removed (an in-place loop that keeps its sway). One-shots: the
+## hips' straight-line travel from start to end is taken out (the character body lunges instead) and
+## what's left is limited to 12 cm of sway. Returns the forward (+Z) travel taken out, in metres.
+func _strip_root_motion(A: Animation, cname: String) -> float:
 	var t := A.find_track(NodePath("Skeleton3D:Hips"), Animation.TYPE_POSITION_3D)
 	if t < 0:
-		return
+		return 0.0
 	var n := A.track_get_key_count(t)
 	var first: Vector3 = A.track_get_key_value(t, 0)
 	var last: Vector3 = A.track_get_key_value(t, n - 1)
@@ -1081,9 +1482,8 @@ func _strip_root_motion(A: Animation, cname: String) -> void:
 	for k in n:
 		var v: Vector3 = A.track_get_key_value(t, k)
 		var f := A.track_get_key_time(t, k) / maxf(A.length, 1e-3)
-		if cname in LOOPED:
-			v -= drift * f # in-place loop, keeps the sway
-		else:
+		v -= drift * f
+		if not cname in LOOPED:
 			var d := Vector2(v.x - first.x, v.z - first.z)
 			if d.length() > 0.12:
 				d = d.normalized() * 0.12
@@ -1092,6 +1492,7 @@ func _strip_root_motion(A: Animation, cname: String) -> void:
 		if cname == "jump":
 			v.y = minf(v.y, first.y) # the character body does the rising, not the hips
 		A.track_set_key_value(t, k, v)
+	return maxf(drift.z, 0.0)
 
 
 ## The fastest stretch of the right hand: wind-up end to follow-through.

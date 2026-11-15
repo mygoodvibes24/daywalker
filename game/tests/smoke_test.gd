@@ -91,6 +91,7 @@ func _initialize() -> void:
 	ok = await _gameplay_checks(main) and ok
 	ok = await _progression_checks(main) and ok
 	ok = await _coat_checks(main) and ok
+	ok = await _move_checks(main) and ok
 	ok = await _audio_checks(main) and ok
 	ok = await _menu_checks(main) and ok
 	ok = await _hunt_checks() and ok
@@ -435,6 +436,113 @@ func _coat_checks(main) -> bool:
 	p.mod_anim.tree.active = true
 	ok = _check("coat comes to rest on a still body (%.4f m/s)" % rest_motion, rest_motion < 0.02) and ok
 	ok = _check("modular model animates with clips", p.mod_anim != null and p.mod_anim.tree != null and p.mod_anim.tree.active) and ok
+	return ok
+
+
+## The sword moves (scripts/sol_moves.gd): hold for the charged slash, attack out of a Blood Dash for
+## the thrust, the execution on a staggered enemy, and a parry that turns a wind-up aside.
+func _move_checks(main) -> bool:
+	var p = main.player
+	var ok := true
+	main.clear_slowmo()
+	_clear_enemies(main)
+	main.time_of_day = 0.9 # night: vampires don't burn
+	p.dead = false
+	p.hp = p.max_hp
+	p.global_position = Vector3(10.0, 0.1, 10.0)
+	p.velocity = Vector3.ZERO
+	p.facing = 0.0
+	for i in 5: await physics_frame
+	var hits: Array = []
+	var rec := func(_e, d): hits.append(d)
+	p.hit_enemy.connect(rec)
+
+	# 1. holding attack turns into the charged slash: a big hit that staggers
+	var e = _spawn(main, 0, p.global_position + Vector3(0, 0.4, 1.6))
+	for i in 3: await physics_frame
+	e.max_hp = 1e6
+	e.hp = 1e6
+	p.attack_cd = 0.0
+	p.combo_t = 0.0
+	p.attack_block_until = 0
+	Input.action_press("attack")
+	var charged := false
+	for i in 90:
+		await physics_frame
+		charged = charged or p.move_name == "charged"
+		if charged and p.pending.is_empty():
+			break
+	Input.action_release("attack")
+	main.clear_slowmo()
+	ok = _check("holding attack does the charged slash (hits %s, staggered %s)" % [str(hits), e.staggered], charged and hits.size() >= 2 and hits[hits.size() - 1] > hits[0] * 2.0 and e.staggered) and ok
+	_clear_enemies(main)
+
+	# 2. attacking just after a Blood Dash is the thrust, and it lands
+	hits.clear()
+	e = _spawn(main, 0, p.global_position + Vector3(0, 0.4, 2.2))
+	for i in 3: await physics_frame
+	e.max_hp = 1e6
+	e.hp = 1e6
+	p.facing = 0.0
+	p.attack_cd = 0.0
+	p.dash_t = 0.0
+	p.since_dash = 0.25
+	p._attack_pressed()
+	var was_dash: bool = p.move_name == "dash"
+	for i in 60:
+		await physics_frame
+		if p.pending.is_empty():
+			break
+	main.clear_slowmo()
+	ok = _check("attack after a dash is the thrust (hits %s)" % str(hits), was_dash and hits.size() == 1) and ok
+	p.since_dash = 99.0
+	_clear_enemies(main)
+
+	# 3. attacking a staggered enemy executes it
+	hits.clear()
+	e = _spawn(main, 0, p.global_position + Vector3(0, 0.4, 1.8))
+	for i in 3: await physics_frame
+	while not e.staggered:
+		e.take_hit(10.0, Vector3.FORWARD)
+	var kills0: int = main.kills
+	p.attack_cd = 0.0
+	p._attack_pressed()
+	var was_fin: bool = p.move_name == "finisher" and p.finisher_t > 0.0
+	for i in 120:
+		await physics_frame
+		if e.dead:
+			break
+	main.clear_slowmo()
+	ok = _check("attack on a staggered enemy is the execution (dead %s, kills +%d)" % [e.dead, main.kills - kills0], was_fin and e.dead and main.kills == kills0 + 1) and ok
+	for i in 100: await physics_frame
+	_clear_enemies(main)
+
+	# 4. a parry during the wind-up negates the strike and staggers the attacker
+	e = _spawn(main, 0, p.global_position + Vector3(0, 0.4, 1.2))
+	for i in 3: await physics_frame
+	p.hp = p.max_hp
+	p.invuln_t = 0.0
+	p.parry_cd = 0.0
+	e.attack_cd = 9.0
+	e.strike_dir = Vector3(0, 0, -1)
+	e.windup_t = 0.2 # the eye-flare: his strike is coming
+	p._parry()
+	for i in 30: await physics_frame
+	main.clear_slowmo()
+	ok = _check("parry negates the strike and staggers him (hp %.0f, staggered %s)" % [p.hp, e.staggered], p.hp == p.max_hp and e.staggered and e.windup_t <= 0.0) and ok
+	# without the parry the same wind-up lands
+	_clear_enemies(main)
+	e = _spawn(main, 0, p.global_position + Vector3(0, 0.4, 1.2))
+	for i in 3: await physics_frame
+	e.attack_cd = 9.0
+	e.strike_dir = Vector3(0, 0, -1)
+	e.windup_t = 0.2
+	for i in 30: await physics_frame
+	ok = _check("the same strike lands without a parry (hp %.0f)" % p.hp, p.hp < p.max_hp) and ok
+	p.hit_enemy.disconnect(rec)
+	p.hp = p.max_hp
+	main.clear_slowmo()
+	_clear_enemies(main)
 	return ok
 
 

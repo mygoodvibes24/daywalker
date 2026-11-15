@@ -9,8 +9,8 @@ const ItemDB = preload("res://scripts/items/item_db.gd")
 static var _mats := {}
 static var _sword_mats := {}
 
-## Modelled swords (built by tools/build_sol_modular.gd): origin at the grip, blade along +Z,
-## flat facing +-X. Blade family -> sword scene.
+## Modelled swords (built by tools/build_sol_modular.gd): blade along +Z, flat facing +-X, and a
+## GripPoint marker where the fist's tunnel centre goes. Blade family -> sword scene.
 const SWORD_DIR := "res://assets/characters/sol/"
 const FAMILY_SWORD := {
 	"saber": "sabre",
@@ -29,6 +29,14 @@ static func sword_for(inst: Dictionary) -> String:
 	return FAMILY_SWORD.get(d.get("family", ""), DEFAULT_SWORD)
 
 
+## Which combo chain (scripts/sol_moves.gd COMBOS) an item swings: the heavy cleaver family uses
+## Weapon_Combo_2, everything else the light Triple_Combo_Attack.
+static func combo_for(inst: Dictionary) -> String:
+	if inst.is_empty():
+		return "light"
+	return "heavy" if sword_for(inst) == "cleaver" else "light"
+
+
 ## The sword model for an item, tinted toward its family's steel and its rarity colour
 ## (Hallowed and Eclipse blades also glow faintly). Null if the scene is missing.
 static func build_model(inst: Dictionary) -> Node3D:
@@ -37,6 +45,12 @@ static func build_model(inst: Dictionary) -> Node3D:
 	if not ResourceLoader.exists(path):
 		return null
 	var node := (load(path) as PackedScene).instantiate() as Node3D
+	# put the sword's GripPoint (where its grip meets the fist's tunnel centre, set per sword by the
+	# build tool) on the hand's grip socket: the parent is the socket, so the sword's own transform is
+	# the inverse of its grip frame
+	var gp := node.get_node_or_null("GripPoint") as Node3D
+	if gp != null:
+		node.transform = gp.transform.affine_inverse()
 	var d := ItemDB.get_def(inst.get("id", "marrow_silver"))
 	var look: Dictionary = ItemDB.BLADE_LOOK.get(d.get("family", "saber"), ItemDB.BLADE_LOOK.saber)
 	var rarity := int(inst.get("r", 0))
