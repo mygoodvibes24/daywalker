@@ -285,6 +285,8 @@ func pick_up(entry: Dictionary) -> bool:
 # ---------------------------------------------------------------- caches
 ## Cold coffins and smuggler crates on the sidewalks (never in a road), plus two in the plaza.
 func cache_spots() -> Array:
+	if main != null and main.city != null and "cache_spots" in main.city and not main.city.cache_spots.is_empty():
+		return main.city.cache_spots # MAP HOOK: spots across every district of the large map
 	var r := RandomNumberGenerator.new()
 	r.seed = CACHE_SEED
 	var blocks: Array = []
@@ -325,7 +327,7 @@ func _build_caches() -> void:
 		add_child(root)
 		root.position = s.pos
 		root.rotation.y = s.yaw
-		var coffin := absf(s.pos.x) < 40.0 or i % 2 == 0 # coffins in the Quarter, crates out by the docks
+		var coffin: bool = s.get("coffin", absf(s.pos.x) < 40.0 or i % 2 == 0) # MAP HOOK: coffins in the Quarter and the Mile, crates in the docks and the wilds
 		var lid: Node3D = Node3D.new()
 		root.add_child(lid)
 		if coffin:

@@ -213,6 +213,7 @@ func _build_city() -> void:
 	city.name = "City"
 	add_child(city)
 	city.build()
+	atmo.fog_scale = city.FOG_SCALE # MAP HOOK: thinner fog so landmarks read across the large map
 	window_mat = city.window_mat
 	lamp_mat = city.lamp_mat
 	lamps = city.lamps
@@ -249,8 +250,10 @@ func _bake_navigation() -> void:
 	nm.agent_radius = 0.5
 	nm.agent_height = 1.75
 	nm.agent_max_climb = 0.25
-	var edge := 4.0 * GRID + 1.0
-	nm.filter_baking_aabb = AABB(Vector3(-edge, -1.0, -edge), Vector3(edge * 2.0, 4.0, edge * 2.0))
+	var pr: Rect2 = city.play_rect # MAP HOOK: bake the whole large map
+	nm.filter_baking_aabb = AABB(Vector3(pr.position.x - 1.0, -1.0, pr.position.y - 1.0), Vector3(pr.size.x + 2.0, 4.0, pr.size.y + 2.0))
+	nm.cell_size = 0.3 # MAP HOOK: coarser cells keep the ~430 m bake fast (the map uses the same size)
+	NavigationServer3D.map_set_cell_size(get_world_3d().navigation_map, nm.cell_size) # MAP HOOK
 	var src := NavigationMeshSourceGeometryData3D.new()
 	NavigationServer3D.parse_source_geometry_data(nm, src, self)
 	NavigationServer3D.bake_from_source_geometry_data(nm, src)
@@ -357,6 +360,8 @@ func spawn_enemy() -> void:
 
 
 func _road_point_near(center: Vector3) -> Vector3:
+	if city != null and not city.road_points.is_empty():
+		return city.road_point_near(center, rng) # MAP HOOK: roads and paths of the large map
 	var best := Vector3(0, 0.5, -60)
 	var best_score := INF
 	for attempt in range(24):

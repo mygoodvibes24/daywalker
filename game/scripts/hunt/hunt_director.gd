@@ -218,7 +218,7 @@ func _set_arena(d: int) -> void:
 	arena = arenas[d]
 	var c: Vector3 = arena.pos
 	ring_full = 0.0
-	for corner in [Vector2(-82, -82), Vector2(82, -82), Vector2(-82, 82), Vector2(82, 82)]:
+	for corner in Cfg.MapLayout.corners(): # MAP HOOK: the Curfew opens round the whole map
 		ring_full = maxf(ring_full, corner.distance_to(Vector2(c.x, c.z)) + 6.0)
 	ring.set_center(c)
 	ring.set_radius(ring_full)

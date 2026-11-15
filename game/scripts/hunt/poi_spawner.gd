@@ -1,50 +1,33 @@
 extends RefCounted
-## Lays out a Hunt's points of interest from the pool with a seeded RNG, on street
-## crossings taken from city.gd's layout data (blocks / lots, read-only).
+## Lays out a Hunt's points of interest from the pool with a seeded RNG, on the open spots
+## the map exposes (city.gd's `poi_anchors`: street crossings, clearings, islands, yards...),
+## each type in its thematic districts (hunt_config.gd POI_TYPES[type].districts).
 
 const Cfg = preload("res://scripts/hunt/hunt_config.gd")
-const CityScript = preload("res://scripts/city.gd")
-const MIN_SPACING := 22.0
+const MIN_SPACING := 30.0 # two camps of enemies get a good sprint between them
+const CALM_SPACING := 20.0 # a chapel or a cart can sit closer
 
 
-## Every street crossing free for a POI: the corners of city.gd's `blocks` (read-only
-## layout data), outside PLAZA_RECT, clear of every building footprint in `lots`, and away
-## from the cathedral front, the boss arenas and the deployment points.
+## Every anchor free for a POI: away from the plaza, the boss arenas and the deployment
+## points. [{pos, district, tag}]
 static func candidate_spots(city) -> Array:
-	var g: float = CityScript.GRID
-	var seen := {}
+	var anchors: Array = city.poi_anchors if city != null and "poi_anchors" in city else []
 	var out: Array = []
-	var blocks: Array = city.blocks if city != null and "blocks" in city else []
-	var lots: Array = city.lots if city != null and "lots" in city else []
-	var plaza: Rect2 = CityScript.PLAZA_RECT.grow(4.0)
-	var edge: float = CityScript.BLOCKS * g - 1.0
-	for b in blocks:
-		var c: Vector2 = b.centre
-		for sx in [-0.5, 0.5]:
-			for sz in [-0.5, 0.5]:
-				var q := Vector2(c.x + sx * g, c.y + sz * g)
-				var key := "%d_%d" % [roundi(q.x), roundi(q.y)]
-				if seen.has(key):
-					continue
-				seen[key] = true
-				if absf(q.x) >= edge or absf(q.y) >= edge or plaza.has_point(q):
-					continue
-				if absf(q.x) <= g and q.y <= -g and q.y >= -2.0 * g:
-					continue # the cathedral front
-				var bad := false
-				for r in lots:
-					if (r as Rect2).grow(2.5).has_point(q):
-						bad = true
-						break
-				for a in Cfg.ARENAS + [Cfg.FINAL_ARENA]:
-					if q.distance_to(Vector2(a.pos.x, a.pos.z)) < 14.0:
-						bad = true
-				for d in Cfg.DEPLOY_POINTS:
-					if q.distance_to(Vector2(d.pos.x, d.pos.z)) < 18.0:
-						bad = true
-				if not bad:
-					out.append(Vector3(q.x, 0.0, q.y))
-	out.sort_custom(func(a, b): return a.x < b.x or (a.x == b.x and a.z < b.z)) # stable before the seeded shuffle
+	for a in anchors:
+		var p: Vector3 = a.pos
+		var q := Vector2(p.x, p.z)
+		if q.length() < 24.0:
+			continue # the plaza
+		var bad := false
+		for ar in Cfg.ARENAS + [Cfg.FINAL_ARENA]:
+			if q.distance_to(Vector2(ar.pos.x, ar.pos.z)) < float(ar.radius) + 6.0:
+				bad = true
+		for d in Cfg.DEPLOY_POINTS:
+			if q.distance_to(Vector2(d.pos.x, d.pos.z)) < 18.0:
+				bad = true
+		if not bad:
+			out.append(a)
+	out.sort_custom(func(a, b): return a.pos.x < b.pos.x or (a.pos.x == b.pos.x and a.pos.z < b.pos.z)) # stable before the seeded shuffle
 	return out
 
 
@@ -75,21 +58,51 @@ static func generate(seed_: int, city) -> Array:
 		bosses[k] = bosses[s]
 		bosses[s] = t
 	var out: Array = []
+	var per_district := {}
 	for type in wanted:
-		for idx in spots.size():
-			var p: Vector3 = spots[idx]
-			var ok := true
-			for o in out:
-				# two camps of enemies need a block between them; a chapel or cart can sit next door
-				var calm: bool = type in ["chapel", "merchant"] or o.type in ["chapel", "merchant"]
-				if o.pos.distance_to(p) < (MIN_SPACING if not calm else 19.0):
-					ok = false
-					break
-			if ok:
-				var e := {"type": type, "pos": p, "seed": rng.randi()}
+		var def: Dictionary = Cfg.POI_TYPES[type]
+		var dists: Array = def.get("districts", [])
+		var tags: Array = def.get("tags", [])
+		# pass 0: the type's own districts (and tags), spreading over districts; pass 1: anywhere
+		var placed := false
+		for pass_ in 2:
+			var best := -1
+			var best_load := 1 << 30
+			for idx in spots.size():
+				var a: Dictionary = spots[idx]
+				if pass_ == 0:
+					if not dists.is_empty() and not a.district in dists:
+						continue
+					if not tags.is_empty() and not a.tag in tags:
+						continue
+				if not _spaced(out, type, a.pos):
+					continue
+				# prefer the district that has the fewest of this type so far (first in shuffle order wins ties)
+				var load: int = per_district.get(type + "|" + a.district, 0)
+				if load < best_load:
+					best_load = load
+					best = idx
+					if load == 0:
+						break
+			if best >= 0:
+				var a: Dictionary = spots[best]
+				var e := {"type": type, "pos": a.pos, "seed": rng.randi(), "district": a.district}
 				if type == "fieldboss":
 					e["boss"] = bosses.pop_front() if not bosses.is_empty() else Cfg.FIELD_BOSSES[0]
 				out.append(e)
-				spots.remove_at(idx)
+				var key: String = type + "|" + a.district
+				per_district[key] = int(per_district.get(key, 0)) + 1
+				spots.remove_at(best)
+				placed = true
 				break
+		if not placed:
+			continue
 	return out
+
+
+static func _spaced(out: Array, type: String, p: Vector3) -> bool:
+	for o in out:
+		var calm: bool = type in ["chapel", "merchant"] or o.type in ["chapel", "merchant"]
+		if o.pos.distance_to(p) < (MIN_SPACING if not calm else CALM_SPACING):
+			return false
+	return true

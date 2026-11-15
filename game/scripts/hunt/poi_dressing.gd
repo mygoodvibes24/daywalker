@@ -250,4 +250,40 @@ static func deploy_point(type: String, root: Node3D, face: Vector3) -> Dictionar
 			_p(root, U.cyl(0.9, 0.9, 0.02), U.glow(Color(0.4, 0.3, 0.2), 0.3), Vector3(0, 0.03, 0))
 		"rooftop":
 			pass # Sol drops from the roofline; the slam leaves a crater decal at runtime
+		"ladder":
+			# an iron ladder up the quay wall out of the river, and a lamp on the bollard
+			var r := Node3D.new()
+			root.add_child(r)
+			r.rotation.y = yaw
+			for s in [-0.28, 0.28]:
+				_p(r, U.box(Vector3(0.06, 2.9, 0.06)), m.rust, Vector3(s, -0.45, -3.05))
+				_p(r, U.box(Vector3(0.06, 0.06, 0.7)), m.rust, Vector3(s, 0.95, -2.75), Vector3(0.6, 0, 0))
+			for k in 8:
+				_p(r, U.box(Vector3(0.56, 0.04, 0.04)), m.rust, Vector3(0, -1.7 + k * 0.32, -3.05))
+			_p(r, U.cyl(0.05, 0.05, 2.4), m.iron, Vector3(1.4, 1.2, -2.4))
+			_p(r, U.sphere(0.2), m.window, Vector3(1.4, 2.5, -2.4))
+		"trail":
+			# a trail marker: a leaning signpost and a lantern hung on a stake
+			var r := Node3D.new()
+			root.add_child(r)
+			r.rotation.y = yaw
+			_p(r, U.box(Vector3(0.14, 2.2, 0.14)), m.wood, Vector3(1.8, 1.1, 0.5), Vector3(0, 0, 0.06))
+			_p(r, U.box(Vector3(1.3, 0.35, 0.06)), m.wood, Vector3(2.2, 1.8, 0.5), Vector3(0, 0, -0.1))
+			label(r, "HOLLOW PINES", Color(0.9, 0.85, 0.7), 2.4).billboard = BaseMaterial3D.BILLBOARD_DISABLED
+			_p(r, U.box(Vector3(0.08, 1.6, 0.08)), m.wood, Vector3(-1.6, 0.8, 0.0))
+			_p(r, U.box(Vector3(0.2, 0.3, 0.2)), m.window, Vector3(-1.6, 1.45, 0.25))
+		"boat":
+			# a flat-bottomed skiff that brings Sol in across the swamp, and a mooring post
+			var boat := Node3D.new()
+			boat.name = "Boat"
+			root.add_child(boat)
+			boat.rotation.y = yaw
+			boat.position = -face * 1.8 + Vector3(0, 0.05, 0)
+			_p(boat, U.box(Vector3(1.3, 0.35, 4.2)), m.wood_dark, Vector3(0, 0.18, 0), Vector3.ZERO, Vector3.ONE, true)
+			for s in [-0.62, 0.62]:
+				_p(boat, U.box(Vector3(0.06, 0.45, 4.2)), m.wood, Vector3(s, 0.32, 0))
+			_p(boat, U.cyl(0.03, 0.03, 0.5), m.iron, Vector3(0, 0.6, 1.8))
+			_p(boat, U.sphere(0.13), m.window, Vector3(0, 0.92, 1.8))
+			out["boat"] = boat
+			_p(root, U.cyl(0.12, 0.14, 1.6), m.wood, face.cross(Vector3.UP) * 1.4 + Vector3(0, 0.8, 0))
 	return out

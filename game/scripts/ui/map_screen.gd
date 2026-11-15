@@ -7,7 +7,8 @@ extends CanvasLayer
 const Icons = preload("res://scripts/ui/poi_icons.gd")
 const S = preload("res://scripts/ui/ui_style.gd")
 const CityScript = preload("res://scripts/city.gd")
-const WORLD := 86.0 # half-extent shown
+const MapLayout = preload("res://scripts/map/map_layout.gd")
+const WORLD := MapLayout.HALF # half-extent shown (MAP HOOK: the large map's bounds)
 
 var director
 var main
@@ -135,16 +136,29 @@ func _draw_map() -> void:
 	_scale = side / (WORLD * 2.0)
 	_origin = Vector2(side, side) * 0.5
 	var tl := Vector2.ZERO
-	canvas.draw_rect(Rect2(tl, Vector2(side, side)), Color(0.13, 0.12, 0.12)) # streets
-	# plaza and buildings
+	canvas.draw_rect(Rect2(tl, Vector2(side, side)), Color(0.03, 0.05, 0.08)) # the river
+	# districts in colour (MAP HOOK: drawn from map_layout.gd), the quay and the waterfront
+	var play: Rect2 = MapLayout.PLAY
+	for d in MapLayout.DISTRICTS:
+		var poly := PackedVector2Array()
+		for v: Vector2 in d.poly:
+			var q := Vector2(clampf(v.x, MapLayout.QUAY_X, MapLayout.HALF), clampf(v.y, -MapLayout.HALF, MapLayout.RIVER_Z))
+			poly.append(_w2m(Vector3(q.x, 0, q.y)))
+		var col: Color = d.color
+		canvas.draw_colored_polygon(poly, Color(col.r * 0.22 + 0.06, col.g * 0.22 + 0.06, col.b * 0.22 + 0.06))
+	canvas.draw_rect(Rect2(_w2m(Vector3(play.position.x, 0, play.position.y)), play.size * _scale), Color(0.6, 0.55, 0.5, 0.25), false, 1.0)
 	var pr: Rect2 = CityScript.PLAZA_RECT
 	canvas.draw_rect(Rect2(_w2m(Vector3(pr.position.x, 0, pr.position.y)), pr.size * _scale), Color(0.3, 0.27, 0.24))
 	var lots: Array = main.city.lots if main.city != null and "lots" in main.city else []
 	for r in lots:
 		var rr: Rect2 = r
-		canvas.draw_rect(Rect2(_w2m(Vector3(rr.position.x, 0, rr.position.y)), rr.size * _scale), Color(0.36, 0.33, 0.31))
-		canvas.draw_rect(Rect2(_w2m(Vector3(rr.position.x, 0, rr.position.y)), rr.size * _scale), Color(0.2, 0.18, 0.17), false, 1.0)
+		canvas.draw_rect(Rect2(_w2m(Vector3(rr.position.x, 0, rr.position.y)), rr.size * _scale), Color(0.34, 0.31, 0.3))
 	canvas.draw_circle(_w2m(Vector3.ZERO), 3.5 * _scale, Color(0.55, 0.1, 0.1))
+	for d in MapLayout.DISTRICTS:
+		var lp: Vector2 = _w2m(Vector3(d.label.x, 0, d.label.y))
+		canvas.draw_string(font, lp + Vector2(-90, 0), d.name, HORIZONTAL_ALIGNMENT_CENTER, 180, 13, (d.color as Color).lightened(0.25))
+	for lm in MapLayout.LANDMARKS:
+		_landmark_icon(_w2m(lm.pos), lm.icon)
 	# the Curfew: the blood-fog beyond the current wall, the next wall dashed
 	var ring = director.ring
 	var rc := _w2m(ring.center)
@@ -176,6 +190,32 @@ func _draw_map() -> void:
 	var rt := Vector2(f.y, -f.x)
 	canvas.draw_colored_polygon(PackedVector2Array([pc + f * 11.0, pc - f * 7.0 + rt * 7.0, pc - f * 3.0, pc - f * 7.0 - rt * 7.0]), Color(1, 1, 1))
 	canvas.draw_polyline(PackedVector2Array([pc + f * 11.0, pc - f * 7.0 + rt * 7.0, pc - f * 3.0, pc - f * 7.0 - rt * 7.0, pc + f * 11.0]), Color(0, 0, 0), 1.5)
+
+
+## Small glyphs for the landmarks you steer by.
+func _landmark_icon(c: Vector2, icon: String) -> void:
+	var col := Color(1.0, 0.92, 0.75)
+	match icon:
+		"spire":
+			for dx in [-4.0, 4.0]:
+				canvas.draw_colored_polygon(PackedVector2Array([c + Vector2(dx - 3, 6), c + Vector2(dx, -10), c + Vector2(dx + 3, 6)]), col)
+		"crane":
+			canvas.draw_line(c + Vector2(-6, 8), c + Vector2(-6, -8), col, 2.0)
+			canvas.draw_line(c + Vector2(6, 8), c + Vector2(6, -8), col, 2.0)
+			canvas.draw_line(c + Vector2(-9, -8), c + Vector2(9, -8), col, 2.5)
+			canvas.draw_circle(c + Vector2(0, -11), 2.0, Color(1, 0.2, 0.15))
+		"tower":
+			canvas.draw_rect(Rect2(c + Vector2(-5, -10), Vector2(10, 7)), col)
+			canvas.draw_line(c + Vector2(-4, -3), c + Vector2(-6, 8), col, 1.5)
+			canvas.draw_line(c + Vector2(4, -3), c + Vector2(6, 8), col, 1.5)
+		"ruin":
+			for k in 4:
+				canvas.draw_line(c + Vector2(-6 + k * 4, 7), c + Vector2(-6 + k * 4, -5 + (k % 2) * 3), col, 2.0)
+			canvas.draw_line(c + Vector2(-8, -6), c + Vector2(4, -6), col, 2.0)
+		"dome":
+			canvas.draw_arc(c + Vector2(0, 2), 7.0, PI, TAU, 12, col, 2.5)
+			canvas.draw_line(c + Vector2(-8, 3), c + Vector2(8, 3), col, 2.0)
+			canvas.draw_line(c + Vector2(0, -5), c + Vector2(0, -10), col, 2.0)
 
 
 func _shade_outside(c: Vector2, r: float, tl: Vector2, side: float) -> void:

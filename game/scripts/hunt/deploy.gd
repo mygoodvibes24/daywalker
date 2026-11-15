@@ -1,8 +1,9 @@
 extends Node3D
 ## The Descent: Sol's entrance into a Hunt. A ~3 s cinematic at one of the deployment
 ## points on the map edge (never the plaza): climbing out of a Vesper Line station mouth,
-## bursting up through a storm-drain manhole, or dropping off a roofline with a landing
-## slam while the camera swoops in. Control is handed over at the end.
+## bursting up through a storm-drain manhole, dropping off a roofline with a landing slam,
+## climbing a quay ladder out of the river, walking out of the pines on a trail, or poling
+## in across the bayou in a skiff, while the camera swoops in. Control is handed over at the end.
 
 const HFx = preload("res://scripts/hunt/hunt_fx.gd")
 const Dressing = preload("res://scripts/hunt/poi_dressing.gd")
@@ -76,6 +77,37 @@ func play(p: Dictionary, dressings: Dictionary) -> void:
 			HFx.puff(main, pos + Vector3(0, 0.2, 0), Color(0.22, 0.2, 0.19), 10, 0.14, 1.6)
 			cam_from = pos + face * 6.0 + side * 3.0 + Vector3(0, 1.0, 0)
 			cam_to = pos - face * 2.4 + side * 1.0 + Vector3(0, 2.8, 0)
+		"ladder":
+			# up the quay ladder out of the black river
+			dur = 2.8
+			pl.global_position = pos - face * 3.4 + Vector3(0, -2.4, 0)
+			tw.tween_property(pl, "global_position", pos - face * 3.2 + Vector3(0, 0.4, 0), 1.3).set_trans(Tween.TRANS_SINE)
+			tw.tween_property(pl, "global_position", pos + face * 1.0 + Vector3(0, 0.15, 0), 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+			cam_from = pos + face * 6.0 + side * 3.5 + Vector3(0, 0.8, 0)
+			cam_to = pos - face * 2.8 + side * 1.2 + Vector3(0, 2.7, 0)
+		"trail":
+			# out of the trees along the trail
+			dur = 2.6
+			pl.global_position = pos - face * 9.0 + Vector3(0, 0.15, 0)
+			tw.tween_property(pl, "global_position", pos + face * 1.0 + Vector3(0, 0.15, 0), 2.2).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+			cam_from = pos + face * 7.0 - side * 3.0 + Vector3(0, 1.2, 0)
+			cam_to = pos - face * 3.0 + side * 1.2 + Vector3(0, 2.6, 0)
+		"boat":
+			# poled in across the swamp in a skiff, then a hop onto the boards
+			dur = 3.2
+			var boat: Node3D = dressing.get("boat")
+			var moored := pos - face * 1.8
+			if boat != null:
+				boat.global_position = moored - face * 12.0 + Vector3(0, 0.05, 0)
+				var bt := create_tween()
+				bt.tween_property(boat, "global_position", moored + Vector3(0, 0.05, 0), 2.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+			pl.global_position = moored - face * 12.0 + Vector3(0, 0.45, 0)
+			tw.tween_property(pl, "global_position", moored + Vector3(0, 0.45, 0), 2.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+			tw.tween_property(pl, "global_position", pos + face * 1.2 + Vector3(0, 1.4, 0), 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			tw.tween_property(pl, "global_position", pos + face * 1.8 + Vector3(0, 0.15, 0), 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+			tw.tween_callback(_slam.bind(0.2))
+			cam_from = pos + face * 5.0 + side * 6.0 + Vector3(0, 2.0, 0)
+			cam_to = pos - face * 3.0 + side * 1.4 + Vector3(0, 2.6, 0)
 		_: # rooftop
 			dur = 3.2
 			pl.global_position = pos - face * 5.0 + side * 6.0 + Vector3(0, 17.0, 0)
