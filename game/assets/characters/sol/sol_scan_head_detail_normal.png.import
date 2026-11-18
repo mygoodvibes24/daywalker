@@ -2,6 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
+uid="uid://dutv82ij4yy3a"
+path="res://.godot/imported/sol_scan_head_detail_normal.png-0ff9582c5eb754125fc1909eca757e1e.ctex"
 metadata={
 "vram_texture": false
 }
@@ -9,6 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/characters/sol/sol_scan_head_detail_normal.png"
+dest_files=["res://.godot/imported/sol_scan_head_detail_normal.png-0ff9582c5eb754125fc1909eca757e1e.ctex"]
 
 [params]
 

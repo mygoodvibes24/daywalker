@@ -9,8 +9,9 @@
  "map_size": 1024,
  "face_strip": 0.45,
  "view_sharpness": 0.06,
+ "albedo_gain": [0.38, 0.42, 0.47],
  "views": [
-  {"img": "s01_front.jpg", "az": 0, "weight": 1.5, "crop_y": 0.74, "yaw_tol": 4, "priority": 0.25},
+  {"img": "s01_front.jpg", "az": 0, "weight": 1.5, "crop_y": 0.74, "yaw_tol": 4, "priority": 0.42},
   {"img": "s02_l30.jpg", "az": 30, "weight": 1.0, "crop_y": 0.70, "yaw_tol": 10, "priority": 0.08},
   {"img": "s03_r30.jpg", "az": -30, "weight": 1.0, "crop_y": 0.70, "yaw_tol": 10, "priority": 0.08},
   {"img": "s04_l60.jpg", "az": 60, "weight": 0.9, "crop_y": 0.70, "yaw_tol": 15},

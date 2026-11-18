@@ -2,6 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
+uid="uid://bn3fylpc57hst"
+path="res://.godot/imported/sol_scan_head_albedo.jpg-6f89db7fe34a3556d4692c35bbf55314.ctex"
 metadata={
 "vram_texture": false
 }
@@ -9,6 +11,7 @@ metadata={
 [deps]
 
 source_file="res://assets/characters/sol/sol_scan_head_albedo.jpg"
+dest_files=["res://.godot/imported/sol_scan_head_albedo.jpg-6f89db7fe34a3556d4692c35bbf55314.ctex"]
 
 [params]
 

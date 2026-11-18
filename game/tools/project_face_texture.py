@@ -469,9 +469,10 @@ def main(cfg_path):
         xi = np.clip(x.astype(np.int64), 0, cam.w - 1)
         yi = np.clip(y.astype(np.int64), 0, cam.h - 1)
         inb = (x >= 0) & (x < cam.w) & (y >= 0) & (y < cam.h)
-        # visibility: compare against the 3x3 minimum of the z-buffer, a small tolerance for grazing texels
-        zmin = ndimage.minimum_filter(np.where(np.isfinite(zb), zb, 1e9), size=3)
-        vis = inb & (depth <= zmin[yi, xi] + 0.006)
+        # visibility: the texel must be the nearest surface at its pixel (small tolerance)
+        zf = np.where(np.isfinite(zb), zb, 1e9)
+        zs = bilinear(zf[..., None], x, y)[:, 0]
+        vis = inb & (depth <= np.minimum(zs, zf[yi, xi]) + 0.005)
         view = cam.eye()[None, :] - Pc
         view /= np.linalg.norm(view, axis=1, keepdims=True)
         cosv = np.clip(np.sum(view * Nc, 1), 0, 1)
