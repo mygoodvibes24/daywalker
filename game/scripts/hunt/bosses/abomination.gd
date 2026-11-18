@@ -21,9 +21,9 @@ func _build() -> void:
 	speed = 6.5
 	keep_dist = 2.6
 	vein_color = Color(1.0, 0.0, 0.15)
-	vein_amount = 1.1
+	vein_amount = 0.8
 	vein_scale = 4.5
-	vein_width = 0.07
+	vein_width = 0.055
 	var wolf := add_rig("werewolf", 1.9, null, Color(1.0, 0.1, 0.1))
 	# the fused rider: a Velvet Court torso growing out of the wolf's back (its legs are
 	# scaled away in boss_base._process); it plays the same clips as the wolf, a beat apart

@@ -286,7 +286,7 @@ func night_card(heading: String, def: Dictionary) -> void:
 	_card.anchor_left = 0.0
 	_card.anchor_top = 0.0
 	_card.offset_left = 36
-	_card.offset_top = 150
+	_card.offset_top = 230 # under the HUD's blood / hunger / dash column
 	_card.custom_minimum_size = Vector2(520, 0)
 	_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_card)
