@@ -106,7 +106,8 @@ func start_game() -> void:
 	started_once = true
 	get_tree().paused = false
 	hud.started = true
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if not OS.has_feature("web"): # R2-A: browsers refuse pointer lock without a click; the HUD asks for one
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	player.block_attack()
 	if hunt != null:
 		hunt.start() # HUNT HOOK: run-scoped reset, hub loadout, the Descent

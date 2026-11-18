@@ -24,11 +24,22 @@ var click_label: Label
 var announce_t := 0.0
 var popup_t := 0.0
 var damage_t := 0.0
-var help_t := 20.0
+var help_t := 30.0 # the basic controls show for the first 30 s of play, then only context tips
+var tip_t := 0.0
+var tips_seen := {}
+var lock_label: Label # desktop web: "Click to take the hunt" while the pointer isn't locked
 var started := false
 var using_pad := false
-const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)\nRMB / Q  Blood Dash   LMB / J  blade combo\nE  bite a staggered enemy (red orb) / take loot   F  drink at the Undercroft\nTAB / I  the Coat (inventory)   1 / 2  quick-use   T  rain   ESC  pause"
-const PAD_HELP := "L-stick move   R-stick camera   LT / L3 sprint   A jump (x2)\nB / RB  Blood Dash   X / RT  blade combo\nY  bite a staggered enemy (red orb) / take loot   LB  drink at the Undercroft\nSTART  the Coat (restart after death)   LB / R3  quick-use   BACK  rain (pause from the Coat)"
+var debug_label: Label # ?debug / --debug: camera, player and draw-call overlay (R2-A, W1)
+const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)   LMB combo (hold: charged)   RMB / Q dash   C parry\nM map   TAB the Coat   1 / 2 quick-use   ESC pause"
+const PAD_HELP := "L-stick move   LT sprint   A jump (x2)   X / RT combo (hold: charged)   B / RB dash   L3 parry\nBACK map   START the Coat   LB / R3 quick-use"
+const ROAM_KEYS := "\nF drink at the Undercroft   T rain" # free roam (debug) only
+const ROAM_PAD := "\nLB drink at the Undercroft"
+## one-shot tips, shown the first time the action becomes possible: [keyboard, pad]
+const TIPS := {
+	"bite": ["E  bite the staggered enemy (red orb): blood, and Tithe", "Y  bite the staggered enemy (red orb): blood, and Tithe"],
+	"rank": ["A rank awaits: rest at a chapel to rise", "A rank awaits: rest at a chapel to rise"],
+}
 
 
 func _ready() -> void:
@@ -77,9 +88,22 @@ func _ready() -> void:
 	popup_label.anchor_top = 0.6
 	popup_label.anchor_bottom = 0.6
 
-	help_label = _label(KEYS_HELP, 15, Color(0.8, 0.8, 0.8))
+	help_label = _label("", 15, Color(0.8, 0.8, 0.8))
 	root.add_child(help_label)
-	_pin(help_label, 0.0, 1.0, Rect2(24, -110, 760, 100))
+	_pin(help_label, 0.0, 1.0, Rect2(24, -84, 900, 74))
+	help_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	_refresh_help()
+
+	lock_label = _centered(22, Color(1, 0.85, 0.75))
+	lock_label.text = "CLICK TO TAKE THE HUNT"
+	lock_label.anchor_top = 0.5
+	lock_label.anchor_bottom = 0.5
+	lock_label.visible = false
+
+	if "--debug" in OS.get_cmdline_user_args() or (main != null and main._url_flag("debug")):
+		debug_label = _label("", 13, Color(0.6, 1.0, 0.6))
+		_pin(debug_label, 0.0, 0.0, Rect2(24, 230, 700, 140))
+		root.add_child(debug_label)
 
 	start_overlay = _build_start()
 	over_panel = ColorRect.new()
@@ -115,15 +139,9 @@ func _build_start() -> Control:
 	story.reparent(panel)
 	story.anchor_top = 0.55
 	story.anchor_bottom = 0.55
-	if DisplayServer.is_touchscreen_available() and OS.has_feature("web"):
-		var note := _centered(20, Color(1, 0.85, 0.4))
-		note.text = "Best on a desktop browser with keyboard + mouse or a controller.\nTouch controls are not supported yet."
-		note.reparent(panel)
-		note.anchor_top = 0.88
-		note.anchor_bottom = 0.88
 	var click := _centered(24, Color(1, 0.4, 0.4))
 	click_label = click
-	click.text = "CLICK TO HUNT  (or press A on a controller)"
+	click.text = "TAP TO HUNT" if _touch() else "CLICK TO HUNT  (or press A on a controller)"
 	click.reparent(panel)
 	click.anchor_top = 0.75
 	click.anchor_bottom = 0.75
@@ -212,11 +230,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	var pad := event is InputEventJoypadButton or (event is InputEventJoypadMotion and absf((event as InputEventJoypadMotion).axis_value) > 0.5)
 	if pad != using_pad and (pad or event is InputEventKey or event is InputEventMouseButton):
 		using_pad = pad
-		help_label.text = PAD_HELP if pad else KEYS_HELP
-		click_label.text = "PRESS A TO HUNT" if pad else "CLICK TO HUNT  (or press A on a controller)"
+		_refresh_help()
+		click_label.text = "PRESS A TO HUNT" if pad else ("TAP TO HUNT" if _touch() else "CLICK TO HUNT  (or press A on a controller)")
 		if started:
-			help_t = maxf(help_t, 6.0)
-	if not started and (event is InputEventKey or event is InputEventMouseButton or event is InputEventJoypadButton) and event.is_pressed():
+			help_t = maxf(help_t, 8.0) # a controller just picked up: show its buttons briefly
+			tip_t = 0.0
+	if not started and (event is InputEventKey or event is InputEventMouseButton or event is InputEventJoypadButton or event is InputEventScreenTouch) and event.is_pressed():
 		get_viewport().set_input_as_handled()
 		Audio.unlock() # AUDIO HOOK: the first click unlocks web audio
 		main.start_game()
@@ -263,6 +282,69 @@ func _process(delta: float) -> void:
 	var low := clampf(1.0 - p.hp / 35.0, 0.0, 1.0) * 0.18
 	vignette.color.a = maxf(damage_t * 0.8, low)
 	frenzy_tint.color.a = lerpf(frenzy_tint.color.a, 0.22 if p.frenzy_t > 0.0 else 0.0, 6.0 * real_dt)
+	if debug_label != null:
+		_update_debug()
 	if started:
-		help_t -= real_dt
+		_update_hints(real_dt)
+	lock_label.visible = OS.has_feature("web") and started and not _touch() and not using_pad \
+		and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not get_tree().paused and not main.game_over and not main.menu_open()
+
+
+func _update_debug() -> void:
+	var cam := get_viewport().get_camera_3d()
+	var p = main.player
+	var t := "fps %d   draws %d   prims %dk   objs %d\n" % [Engine.get_frames_per_second(),
+		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
+		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME) / 1000,
+		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME)]
+	if cam != null:
+		t += "cam %s  %s  far %.0f\n" % [cam.get_path(), str(cam.global_position.snapped(Vector3.ONE * 0.1)), cam.far]
+	else:
+		t += "cam: none\n"
+	t += "sol %s  vel %s" % [str(p.global_position.snapped(Vector3.ONE * 0.1)), str(p.velocity.snapped(Vector3.ONE * 0.1))]
+	debug_label.text = t
+
+
+
+## The touch layer (touch_controls.gd) is up: its buttons are labelled, so no key hints.
+func _touch() -> bool:
+	var t := get_node_or_null("/root/Touch")
+	return t != null and t.enabled
+
+
+func _refresh_help() -> void:
+	var roam: bool = main != null and main.get("hunt") == null
+	if using_pad:
+		help_label.text = PAD_HELP + (ROAM_PAD if roam else "")
+	else:
+		help_label.text = KEYS_HELP + (ROAM_KEYS if roam else "")
+
+
+## Context hints: the basic controls for the first 30 s of play (and for 8 s when the device
+## changes), then one tip the first time something becomes possible (a bite, a rank), else nothing.
+func _update_hints(dt: float) -> void:
+	if _touch() and not using_pad:
+		help_label.visible = false
+		return
+	help_label.visible = true
+	if help_t > 0.0:
+		help_t -= dt
+		if help_t <= 0.0:
+			help_label.text = ""
 		help_label.modulate.a = clampf(help_t / 2.0, 0.0, 1.0)
+		return
+	if tip_t > 0.0:
+		tip_t -= dt
+		help_label.modulate.a = clampf(tip_t, 0.0, 1.0)
+		return
+	var p = main.player
+	if p.get("bite_ready") and not tips_seen.has("bite"):
+		_tip("bite")
+	elif main.progression != null and main.get("hunt") != null and main.progression.can_level() and not tips_seen.has("rank"):
+		_tip("rank")
+
+
+func _tip(id: String) -> void:
+	tips_seen[id] = true
+	help_label.text = TIPS[id][1 if using_pad else 0]
+	tip_t = 6.0
