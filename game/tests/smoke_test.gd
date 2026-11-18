@@ -429,6 +429,10 @@ func _coat_checks(main) -> bool:
 	p.hp = p.max_hp
 	p.global_position = Vector3(10.0, 0.1, 10.0)
 	p.velocity = Vector3.ZERO
+	# no long-idle fidget (the look-around after 12 s standing) during these timed windows
+	if p.mod_anim != null:
+		p.mod_anim.still_t = -60.0
+		p.mod_anim.tree.set("parameters/fidget/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
 	for i in 300: await physics_frame # let the coat settle from the teleport before taking the baseline
 	var still: float = sim.swing_amount()
 	_pad_axis(JOY_AXIS_LEFT_Y, -1.0)
