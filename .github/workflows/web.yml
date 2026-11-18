@@ -62,6 +62,29 @@ jobs:
           mkdir -p ../build/web
           ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless --export-release "Web" ../build/web/index.html
           test -f ../build/web/index.wasm
+      - name: Install Playwright (pinned) + Chromium
+        run: |
+          mkdir -p /tmp/pw && cd /tmp/pw
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund playwright@1.48.2
+          npx playwright install --with-deps chromium
+      - name: Web render check (the Hunt must draw the city, not just sky + HUD)
+        # Loads the export in headless Chromium (SwiftShader WebGL2) with ?autohunt and fails
+        # if the screen centre is near-uniform. Guards the Godot 4.3 nothreads web culling bug
+        # (threaded_cull_minimum_instances.web in project.godot) and any similar regression.
+        timeout-minutes: 8
+        run: |
+          (cd build/web && python3 -m http.server 8060 > /dev/null 2>&1 &)
+          sleep 2
+          cd /tmp/pw
+          node "$GITHUB_WORKSPACE/.github/scripts/web_render_check.js" http://localhost:8060/index.html "$GITHUB_WORKSPACE/web-render-check"
+      - name: Upload render check screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-render-check
+          path: web-render-check
+          if-no-files-found: ignore
       - name: Cache-bust the game data
         # Pages serves everything with max-age=600; give each deploy's .pck its own name so
         # players never run a new index.html against a stale cached .pck (or the reverse).
