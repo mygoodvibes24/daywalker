@@ -30,6 +30,7 @@ static var _n1: FastNoiseLite
 static var _n2: FastNoiseLite
 static var _n3: FastNoiseLite
 static var _clear_t := PackedFloat32Array() # each clearing's levelled height
+static var _anchor_t := PackedFloat32Array() # deployment points, then arenas: their levelled height
 static var _built := false
 static var terrain_mat: ShaderMaterial
 static var water_mat: ShaderMaterial
@@ -48,7 +49,7 @@ static func _noise() -> void:
 	_n1 = FastNoiseLite.new()
 	_n1.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	_n1.seed = 1859
-	_n1.frequency = 1.0 / 120.0
+	_n1.frequency = 1.0 / 170.0
 	_n1.fractal_octaves = 3
 	_n2 = FastNoiseLite.new()
 	_n2.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
@@ -73,7 +74,7 @@ static func _plate_dist(x: float, z: float) -> float:
 
 
 static func _bayou_mask(x: float, z: float) -> float:
-	return _ss(110.0, 136.0, x) * _ss(-58.0, -86.0, z)
+	return _ss(88.0, 140.0, x) * _ss(-58.0, -96.0, z)
 
 
 static func _lake_r(x: float, z: float) -> float:
@@ -85,16 +86,18 @@ static func _lake_r(x: float, z: float) -> float:
 ## Rolling ground before any hand-placed feature (smooth: no fine detail).
 static func _natural(x: float, z: float) -> float:
 	var b := _bayou_mask(x, z)
-	var hills := 3.2 + _n1.get_noise_2d(x, z) * 7.0
-	# the north ridge closes the map; past the east wall the city carries on (flat), then hills
-	hills += _ss(-226.0, -258.0, z) * (17.0 + 6.0 * _n1.get_noise_2d(x * 2.0, 40.0))
+	# Hollow Pines climbs northwards out of the city into real hills (rolling, 8-25 m) ...
+	var hills := 4.0 + _ss(-80.0, -205.0, z) * 13.0 + _n1.get_noise_2d(x, z) * 8.5
+	hills += maxf(0.0, _n1.get_noise_2d(x * 0.6 + 300.0, z * 0.6)) * 6.0 # a few higher knolls
+	# ... and a forested ridge closes the map in the north (it reads over the roofs from the streets)
+	hills += _ss(-224.0, -268.0, z) * (34.0 + 12.0 * _n1.get_noise_2d(x * 2.0, 40.0)) + _ss(-268.0, -420.0, z) * 25.0
 	var bayou := -0.95 - _ss(214.0, 238.0, x) * 2.6 + _ss(300.0, 330.0, x) * 7.0
 	var h := lerpf(hills, bayou, b)
 	var urban := _ss(234.0, 246.0, x) * _ss(-70.0, -52.0, z)
-	h = lerpf(h, _ss(335.0, 390.0, x) * (8.0 + 8.0 * _n1.get_noise_2d(x, z)), urban)
+	h = lerpf(h, _ss(335.0, 420.0, x) * (24.0 + 14.0 * _n1.get_noise_2d(x, z)), urban)
 	# the water tower's hill
 	var dt := Vector2(x - TOWER.x, z - TOWER.z).length()
-	h += 8.5 * exp(-(dt * dt) / (40.0 * 40.0)) * (1.0 - b)
+	h += 9.0 * exp(-(dt * dt) / (30.0 * 30.0)) * (1.0 - b)
 	# a gentle basin round the lake, so its rim is never lower than the water
 	var lp: Vector3 = Layout.LAKE.pos
 	var dl := Vector2(x - lp.x, z - lp.z).length()
@@ -109,35 +112,14 @@ static func _wild(x: float, z: float, hint: Array) -> float:
 	var path := 0.0
 	var mud := b * 0.85
 	var wet := 0.0
-	# the lake: a gently sloping shore, a wading shelf, then the deep middle
-	var lp: Vector3 = Layout.LAKE.pos
-	var lv: float = Layout.LAKE.level
-	var dl := Vector2(x - lp.x, z - lp.z).length()
-	if dl < Layout.LAKE.radius * 1.3 + 30.0:
-		var rr := _lake_r(x, z)
-		var s := dl / rr
-		var shore: float
-		if s >= 1.0:
-			shore = lv + (dl - rr) * 0.2
-		elif s >= 0.72:
-			shore = lv - (1.0 - s) / 0.28 * 0.85
-		else:
-			shore = lv - 0.85 - (0.72 - s) / 0.72 * 4.5
-		var t := 1.0 - _ss(rr + 6.0, rr + 24.0, dl)
-		h = lerpf(h, shore, t)
-		if dl < rr + 6.0:
-			h = shore
-		h = maxf(h, lv + 0.3) if dl >= rr + 1.5 and dl < rr + 24.0 else h
-		wet = maxf(wet, 1.0 - _ss(0.2, 1.4, h - lv))
-		mud = maxf(mud, (1.0 - _ss(0.4, 2.0, h - lv)) * 0.6)
 	# clearings: levelled, trampled to mud and dirt in the middle
 	var cl: Array = Layout.PINE_CLEARINGS
 	for k in cl.size():
 		var c: Vector3 = cl[k][0]
 		var r: float = cl[k][1]
 		var d := Vector2(x - c.x, z - c.z).length()
-		if d < r + 16.0:
-			var f := 1.0 - _ss(r * 0.85, r + 16.0, d)
+		if d < r + 36.0:
+			var f := 1.0 - _ss(r * 0.85, r + 36.0, d)
 			h = lerpf(h, _clear_t[k], f)
 			var trod := 1.0 - _ss(r * 0.35, r * 0.95, d)
 			path = maxf(path, trod * 0.55)
@@ -168,18 +150,64 @@ static func _wild(x: float, z: float, hint: Array) -> float:
 				h = maxf(h, -maxf(q.z - 1.4, 0.0) / 2.6)
 		wet = maxf(wet, (1.0 - _ss(0.05, 0.6, h - Layout.BAYOU_WATER)) * b)
 	# deployment points and boss arenas in the wilds are level with the streets (y = 0)
-	for d: Dictionary in Layout.DEPLOY_POINTS:
-		var dd := Vector2(x - d.pos.x, z - d.pos.z).length()
-		if dd < 30.0:
-			h = lerpf(h, 0.0, 1.0 - _ss(12.0, 30.0, dd))
-	for a: Dictionary in Layout.ARENAS:
-		var da := Vector2(x - a.pos.x, z - a.pos.z).length()
-		if da < a.radius + 26.0:
-			h = lerpf(h, 0.0, 1.0 - _ss(a.radius + 3.0, a.radius + 26.0, da))
+	h = _level_anchors(x, z, h)
+	# the lake: a gently sloping shore, a wading shelf, then the deep middle
+	var lp: Vector3 = Layout.LAKE.pos
+	var lv: float = Layout.LAKE.level
+	var dl := Vector2(x - lp.x, z - lp.z).length()
+	if dl < Layout.LAKE.radius * 1.3 + 30.0:
+		var rr := _lake_r(x, z)
+		var s := dl / rr
+		var shore: float
+		if s >= 1.0:
+			shore = lv + (dl - rr) * 0.2
+		elif s >= 0.72:
+			shore = lv - (1.0 - s) / 0.28 * 0.85
+		else:
+			shore = lv - 0.85 - (0.72 - s) / 0.72 * 4.5
+		var t := 1.0 - _ss(rr + 6.0, rr + 24.0, dl)
+		h = lerpf(h, shore, t)
+		if dl < rr + 6.0:
+			h = shore
+		h = maxf(h, lv + 0.3) if dl >= rr + 1.5 and dl < rr + 24.0 else h
+		wet = maxf(wet, 1.0 - _ss(0.2, 1.4, h - lv))
+		mud = maxf(mud, (1.0 - _ss(0.4, 2.0, h - lv)) * 0.6)
 	hint[0] = path
 	hint[1] = wet
 	hint[2] = mud
 	return h
+
+
+## Deployment points and boss arenas sit on level ground at their own height (never below
+## the streets / the swamp surface), so the Descent and the boss fights land on flat earth.
+static func _level_anchors(x: float, z: float, h: float) -> float:
+	var nd: int = Layout.DEPLOY_POINTS.size()
+	for k in nd:
+		var p: Vector3 = Layout.DEPLOY_POINTS[k].pos
+		var dd := Vector2(x - p.x, z - p.z).length()
+		if dd < 40.0:
+			h = lerpf(h, _anchor_t[k], 1.0 - _ss(11.0, 40.0, dd))
+	for k in Layout.ARENAS.size():
+		var a: Dictionary = Layout.ARENAS[k]
+		var da := Vector2(x - a.pos.x, z - a.pos.z).length()
+		if da < a.radius + 50.0:
+			h = lerpf(h, _anchor_t[nd + k], 1.0 - _ss(a.radius + 2.0, a.radius + 50.0, da))
+	return h
+
+
+## The level ground height for a deployment point or arena at p (0 on the city plates).
+static func ground_target(p: Vector3) -> float:
+	_noise()
+	if _plate_dist(p.x, p.z) <= 0.0:
+		return 0.0
+	return maxf(_natural(p.x, p.z), 0.0)
+
+
+## A copy of a deployment point / arena dictionary with pos.y on the ground.
+static func grounded(d: Dictionary) -> Dictionary:
+	var out := d.duplicate()
+	out.pos = Vector3(d.pos.x, height_at(d.pos.x, d.pos.z), d.pos.z)
+	return out
 
 
 ## A road's height at a centreline point: the smooth ground, levelled through the clearings.
@@ -190,16 +218,9 @@ static func _road_centre(x: float, z: float) -> float:
 		var c: Vector3 = cl[k][0]
 		var r: float = cl[k][1]
 		var d := Vector2(x - c.x, z - c.z).length()
-		if d < r + 16.0:
-			h = lerpf(h, _clear_t[k], 1.0 - _ss(r * 0.85, r + 16.0, d))
-	for d: Dictionary in Layout.DEPLOY_POINTS:
-		var dd := Vector2(x - d.pos.x, z - d.pos.z).length()
-		if dd < 30.0:
-			h = lerpf(h, 0.0, 1.0 - _ss(12.0, 30.0, dd))
-	for a: Dictionary in Layout.ARENAS:
-		var da := Vector2(x - a.pos.x, z - a.pos.z).length()
-		if da < a.radius + 26.0:
-			h = lerpf(h, 0.0, 1.0 - _ss(a.radius + 3.0, a.radius + 26.0, da))
+		if d < r + 36.0:
+			h = lerpf(h, _clear_t[k], 1.0 - _ss(r * 0.85, r + 36.0, d))
+	h = _level_anchors(x, z, h)
 	return h
 
 
@@ -224,7 +245,7 @@ static func _height(x: float, z: float, hint: Array) -> float:
 	# the river round the west and south, then its far bank (where the backdrop stands)
 	if x < Layout.QUAY_X - 0.5 or z > Layout.RIVER_Z + 0.5:
 		var bank := maxf(_ss(-282.0, -294.0, x), _ss(268.0, 280.0, z))
-		var land := 0.25 + _ss(30.0, 110.0, maxf(-290.0 - x, z - 276.0)) * (10.0 + 9.0 * _n1.get_noise_2d(x, z))
+		var land := 0.25 + _ss(40.0, 170.0, maxf(-290.0 - x, z - 276.0)) * (34.0 + 18.0 * _n1.get_noise_2d(x, z))
 		hint[1] = 1.0 - _ss(0.0, 1.5, bank * 2.0)
 		hint[2] = hint[1]
 		return lerpf(-6.0, land, bank)
@@ -250,7 +271,12 @@ static func build() -> void:
 	for k in Layout.PINE_CLEARINGS.size():
 		var c: Vector3 = Layout.PINE_CLEARINGS[k][0]
 		var kind: String = Layout.PINE_CLEARINGS[k][2]
-		_clear_t[k] = 0.0 if kind in ["arena", "trail"] else _natural(c.x, c.z)
+		_clear_t[k] = maxf(_natural(c.x, c.z), 0.0) if kind in ["arena", "trail"] else _natural(c.x, c.z)
+	_anchor_t.clear()
+	for d: Dictionary in Layout.DEPLOY_POINTS:
+		_anchor_t.append(ground_target(d.pos))
+	for a: Dictionary in Layout.ARENAS:
+		_anchor_t.append(ground_target(a.pos))
 	H.resize(N * N)
 	C.resize(N * N)
 	var hint := [0.0, 0.0, 0.0]
@@ -653,8 +679,8 @@ uniform sampler2D dirt_nrm : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform sampler2D rock_alb : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D rock_nrm : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform sampler2D mask_noise : hint_default_white, filter_linear_mipmap, repeat_enable;
-uniform vec3 tint : source_color = vec3(0.62, 0.66, 0.6);
-uniform float wetness = 0.65;
+uniform vec3 tint : source_color = vec3(0.8, 0.8, 0.7);
+uniform float wetness = 0.5;
 
 varying vec3 wp;
 varying vec3 wn;

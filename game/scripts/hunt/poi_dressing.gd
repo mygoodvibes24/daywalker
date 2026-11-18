@@ -18,7 +18,10 @@ static func mats() -> Dictionary:
 	M.iron = U.mat(Color(0.12, 0.12, 0.13), 0.45, 0.8)
 	M.rust = U.mat(Color(0.3, 0.14, 0.08), 0.8, 0.3)
 	M.stone = U.mat(Color(0.58, 0.55, 0.5), 0.9)
-	M.trailer = U.mat(Color(0.75, 0.73, 0.66), 0.6, 0.3)
+	M.trailer = U.mat(Color(0.62, 0.6, 0.54), 0.55, 0.45)
+	M.trailer_band = U.mat(Color(0.18, 0.36, 0.36), 0.6, 0.3)
+	M.trailer_rib = U.mat(Color(0.5, 0.49, 0.45), 0.45, 0.6)
+	M.rust_dark = U.mat(Color(0.18, 0.08, 0.05), 0.85, 0.2)
 	M.tarp = U.mat(Color(0.12, 0.2, 0.3), 0.9)
 	M.bone = U.mat(Color(0.85, 0.8, 0.68), 0.7)
 	M.gold = U.mat(Color(0.85, 0.65, 0.3), 0.3, 1.0)
@@ -110,27 +113,152 @@ static func crate(parent: Node3D, pos: Vector3, size := 1.0, yaw := 0.0, collide
 
 static func barrel(parent: Node3D, pos: Vector3, fire := false) -> void:
 	var m := mats()
-	_p(parent, U.cyl(0.32, 0.3, 0.95), m.rust, pos + Vector3(0, 0.475, 0), Vector3.ZERO, Vector3.ONE, true)
+	_p(parent, U.cyl(0.31, 0.3, 0.95), m.rust, pos + Vector3(0, 0.475, 0), Vector3.ZERO, Vector3.ONE, true)
+	for y in [0.15, 0.48, 0.82]: # rolled hoops
+		_p(parent, U.cyl(0.325, 0.325, 0.05), m.rust_dark, pos + Vector3(0, y, 0))
 	if fire:
-		_p(parent, U.cyl(0.0, 0.26, 0.7), m.fire, pos + Vector3(0, 1.25, 0))
-		_p(parent, U.cyl(0.0, 0.16, 0.5), U.glow(Color(1.0, 0.85, 0.4), 6.0), pos + Vector3(0.05, 1.2, 0.03))
+		# a burn barrel: punched vent holes glowing, embers, flames, smoke and a warm light
+		for i in 6:
+			var a := TAU * i / 6.0
+			_p(parent, U.sphere(0.045), m.fire, pos + Vector3(cos(a) * 0.3, 0.3, sin(a) * 0.3))
+		_p(parent, U.cyl(0.29, 0.29, 0.04), U.glow(Color(1.0, 0.35, 0.05), 3.0), pos + Vector3(0, 0.9, 0))
+		var flame := CPUParticles3D.new()
+		flame.position = pos + Vector3(0, 0.95, 0)
+		flame.amount = 18
+		flame.lifetime = 0.7
+		flame.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+		flame.emission_sphere_radius = 0.18
+		flame.direction = Vector3.UP
+		flame.spread = 15.0
+		flame.gravity = Vector3(0, 1.6, 0)
+		flame.initial_velocity_min = 0.5
+		flame.initial_velocity_max = 1.1
+		flame.scale_amount_min = 0.6
+		flame.scale_amount_max = 1.0
+		var fc := Curve.new()
+		fc.add_point(Vector2(0, 1.0))
+		fc.add_point(Vector2(1, 0.1))
+		flame.scale_amount_curve = fc
+		var fq := QuadMesh.new()
+		fq.size = Vector2(0.38, 0.5)
+		var fm := StandardMaterial3D.new()
+		fm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		fm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		fm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		fm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		fm.vertex_color_use_as_albedo = true
+		fm.albedo_texture = _soft_dot()
+		fq.material = fm
+		flame.mesh = fq
+		var fg := Gradient.new()
+		fg.set_color(0, Color(1.0, 0.75, 0.3, 1.0))
+		fg.set_color(1, Color(0.8, 0.1, 0.0, 0.0))
+		flame.color_ramp = fg
+		flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		flame.visibility_range_end = 60.0
+		parent.add_child(flame)
+		var smoke := CPUParticles3D.new()
+		smoke.position = pos + Vector3(0, 1.4, 0)
+		smoke.amount = 10
+		smoke.lifetime = 4.0
+		smoke.preprocess = 4.0
+		smoke.direction = Vector3.UP
+		smoke.spread = 10.0
+		smoke.gravity = Vector3(0.25, 0.35, 0)
+		smoke.initial_velocity_min = 0.4
+		smoke.initial_velocity_max = 0.8
+		smoke.scale_amount_min = 1.0
+		smoke.scale_amount_max = 1.6
+		var sc := Curve.new()
+		sc.add_point(Vector2(0, 0.5))
+		sc.add_point(Vector2(1, 2.6))
+		smoke.scale_amount_curve = sc
+		var sq := QuadMesh.new()
+		sq.size = Vector2(1.0, 1.0)
+		var sm := StandardMaterial3D.new()
+		sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		sm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		sm.vertex_color_use_as_albedo = true
+		sm.albedo_texture = _soft_dot()
+		sm.disable_receive_shadows = true
+		sq.material = sm
+		smoke.mesh = sq
+		var sg := Gradient.new()
+		sg.set_color(0, Color(0.2, 0.18, 0.17, 0.0))
+		sg.add_point(0.2, Color(0.22, 0.2, 0.19, 0.35))
+		sg.set_color(sg.get_point_count() - 1, Color(0.25, 0.24, 0.24, 0.0))
+		smoke.color_ramp = sg
+		smoke.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		smoke.visibility_range_end = 70.0
+		parent.add_child(smoke)
+		var l := OmniLight3D.new()
+		l.position = pos + Vector3(0, 1.3, 0)
+		l.light_color = Color(1.0, 0.55, 0.22)
+		l.light_energy = 1.8
+		l.omni_range = 7.5
+		l.shadow_enabled = false
+		parent.add_child(l)
 	_col(parent, Vector3(0.6, 1.0, 0.6), pos + Vector3(0, 0.5, 0))
 
 
+static var _dot: ImageTexture
+static func _soft_dot() -> ImageTexture:
+	if _dot == null:
+		var img := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+		for y in 32:
+			for x in 32:
+				var d := Vector2(x - 15.5, y - 15.5).length() / 15.5
+				var a := clampf(1.0 - d, 0.0, 1.0)
+				img.set_pixel(x, y, Color(1, 1, 1, a * a))
+		_dot = ImageTexture.create_from_image(img)
+	return _dot
+
+
+## A single-wide trailer home, built from parts: rounded ends, ribbed aluminium siding in two
+## tones, a rust stain skirt, framed windows (lit), a door with a block step, a hitch tongue,
+## cinder-block piers. ~6.2 x 2.4 m.
 static func trailer(parent: Node3D, pos: Vector3, yaw: float) -> void:
 	var m := mats()
 	var root := Node3D.new()
 	parent.add_child(root)
 	root.position = pos
 	root.rotation.y = yaw
-	_p(root, U.box(Vector3(2.3, 2.3, 6.0)), m.trailer, Vector3(0, 1.45, 0), Vector3.ZERO, Vector3.ONE, true)
-	_p(root, U.box(Vector3(2.32, 0.25, 6.02)), m.rust, Vector3(0, 0.45, 0))
-	for z in [-1.6, 0.4]:
-		_p(root, U.box(Vector3(2.34, 0.6, 1.0)), m.window, Vector3(0, 1.8, z))
-	_p(root, U.box(Vector3(2.34, 1.8, 0.8)), m.wood_dark, Vector3(0, 1.25, 2.0))
+	var L := 6.2
+	var W := 2.3
+	var y0 := 0.55 # floor height on its piers
+	var H := 2.2
+	# the shell, with rounded ends (half cylinders along x)
+	_p(root, U.box(Vector3(W, H, L - W)), m.trailer, Vector3(0, y0 + H * 0.5, 0), Vector3.ZERO, Vector3.ONE, true)
+	for s in [-1.0, 1.0]:
+		var cap := U.cyl(W * 0.5, W * 0.5, H)
+		_p(root, cap, m.trailer, Vector3(0, y0 + H * 0.5, s * (L - W) * 0.5), Vector3.ZERO, Vector3.ONE, true)
+	# the teal band and ribbed siding (horizontal ribs)
+	_p(root, U.box(Vector3(W + 0.03, 0.55, L - W)), m.trailer_band, Vector3(0, y0 + 0.95, 0))
+	for k in 6:
+		_p(root, U.box(Vector3(W + 0.05, 0.03, L - W)), m.trailer_rib, Vector3(0, y0 + 0.25 + k * 0.35, 0))
+	# the roof: a slightly domed cap
+	_p(root, U.box(Vector3(W - 0.1, 0.12, L - 0.3)), m.trailer_rib, Vector3(0, y0 + H + 0.04, 0))
+	# rust skirt and cinder-block piers
+	_p(root, U.box(Vector3(W - 0.1, 0.35, L - 0.4)), m.rust_dark, Vector3(0, y0 - 0.17, 0))
+	for z in [-2.2, 0.0, 2.2]:
+		for x in [-0.8, 0.8]:
+			_p(root, U.box(Vector3(0.4, 0.38, 0.2)), m.stone, Vector3(x, 0.19, z))
+	# windows (lit, framed) along the door side (+x) and one in the end
+	for z in [-1.8, 0.6]:
+		_p(root, U.box(Vector3(0.06, 0.62, 1.0)), m.rust_dark, Vector3(W * 0.5 + 0.02, y0 + 1.45, z))
+		_p(root, U.box(Vector3(0.07, 0.5, 0.86)), m.window, Vector3(W * 0.5 + 0.03, y0 + 1.45, z))
+	_p(root, U.box(Vector3(0.7, 0.45, 0.07)), m.window, Vector3(0, y0 + 1.5, L * 0.5 - 0.02))
+	# the door, a block step, a porch lamp
+	_p(root, U.box(Vector3(0.06, 1.85, 0.8)), m.wood_dark, Vector3(W * 0.5 + 0.03, y0 + 0.95, 2.0))
+	_p(root, U.box(Vector3(0.7, 0.4, 0.9)), m.stone, Vector3(W * 0.5 + 0.38, 0.2, 2.0))
+	_p(root, U.sphere(0.09), m.window, Vector3(W * 0.5 + 0.1, y0 + 2.0, 1.4))
+	# the hitch tongue at the far end
+	_p(root, U.box(Vector3(0.08, 0.08, 1.4)), m.iron, Vector3(-0.3, y0 - 0.05, -L * 0.5 - 0.4), Vector3(0, 0.22, 0))
+	_p(root, U.box(Vector3(0.08, 0.08, 1.4)), m.iron, Vector3(0.3, y0 - 0.05, -L * 0.5 - 0.4), Vector3(0, -0.22, 0))
 	for x in [-0.9, 0.9]:
-		_p(root, U.cyl(0.32, 0.32, 0.25), m.asphalt, Vector3(x, 0.32, 0.6), Vector3(0, 0, PI / 2))
-	_col(root, Vector3(2.3, 2.6, 6.0), Vector3(0, 1.3, 0))
+		_p(root, U.cyl(0.32, 0.32, 0.22), m.asphalt, Vector3(x * 1.25, 0.32, 0.4), Vector3(0, 0, PI / 2))
+	_col(root, Vector3(W, H + y0, L), Vector3(0, (H + y0) * 0.5, 0))
 
 
 # ---------------------------------------------------------------- POI sets

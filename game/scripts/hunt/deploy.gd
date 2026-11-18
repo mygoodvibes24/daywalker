@@ -30,7 +30,7 @@ static func build_points(parent: Node3D) -> Dictionary:
 		var root := Node3D.new()
 		root.name = "Deploy_" + d.name.replace(" ", "_").replace(".", "")
 		parent.add_child(root)
-		root.position = d.pos
+		root.position = Vector3(d.pos.x, preload("res://scripts/map/terrain.gd").height_at(d.pos.x, d.pos.z), d.pos.z) # TERRAIN HOOK
 		out[d.name] = Dressing.deploy_point(d.type, root, d.face)
 	return out
 
@@ -158,7 +158,7 @@ func finish() -> void:
 	if tw != null and tw.is_valid():
 		tw.kill()
 	var pl = main.player
-	pl.global_position = Vector3(pl.global_position.x, 0.15, pl.global_position.z)
+	pl.global_position = Vector3(pl.global_position.x, float(point.get("pos", Vector3.ZERO).y) + 0.15, pl.global_position.z) # TERRAIN HOOK: the point's ground
 	pl.set_physics_process(true)
 	pl.camera.current = true
 	pl.block_attack()

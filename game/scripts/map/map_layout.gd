@@ -112,13 +112,13 @@ const BOARDWALKS := [
 
 
 ## The pine-ringed lake in Hollow Pines: centre, radius at the waterline, water level (m).
-const LAKE := {"pos": Vector3(64, 0, -207), "radius": 17.0, "level": 3.2}
+const LAKE := {"pos": Vector3(64, 0, -207), "radius": 17.0, "level": 14.0}
 const BAYOU_WATER := -0.15 # the swamp's surface; its mud bed lies ~0.8 m below (wadeable)
 const RIVER_WATER := -1.6 # the river round the west and south (docks.gd's quay walls)
 ## The paved city plates (asphalt and quay concrete), held level at y = 0: the Old Quarter, the
 ## Velvet Mile, the cemetery and the docks. The terrain blends into them over PLATE_BLEND metres.
 const PLATES := [Rect2(-80.0, -72.0, 320.0, 294.0), Rect2(-205.0, -240.0, 125.0, 462.0)]
-const PLATE_BLEND := 26.0
+const PLATE_BLEND := 40.0
 
 
 # ---------------------------------------------------------------- the Hunt

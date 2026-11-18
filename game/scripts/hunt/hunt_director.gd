@@ -16,6 +16,7 @@ const DeployScript = preload("res://scripts/hunt/deploy.gd")
 const ItemDB = preload("res://scripts/items/item_db.gd")
 const EnemyScript = preload("res://scripts/enemy.gd")
 const HFx = preload("res://scripts/hunt/hunt_fx.gd")
+const Terrain = preload("res://scripts/map/terrain.gd") # TERRAIN HOOK
 const HuntHud = preload("res://scripts/ui/hunt_hud.gd")
 const MapScreen = preload("res://scripts/ui/map_screen.gd")
 const ResultsScreen = preload("res://scripts/ui/results_screen.gd")
@@ -105,7 +106,7 @@ func build_world() -> void:
 		var t = pool[k]
 		pool[k] = pool[s]
 		pool[s] = t
-	arenas = [pool[0], pool[1], Cfg.FINAL_ARENA]
+	arenas = [Terrain.grounded(pool[0]), Terrain.grounded(pool[1]), Cfg.FINAL_ARENA] # TERRAIN HOOK: on the ground
 	poi_root = Node3D.new()
 	poi_root.name = "HuntPOIs"
 	add_child(poi_root)
@@ -125,7 +126,7 @@ func build_world() -> void:
 	_set_arena(0)
 	# where Sol drops in is known up front, so he never stands in the plaza, even behind
 	# the title overlay of a direct load
-	deploy_point = Cfg.DEPLOY_POINTS[rng.randi() % Cfg.DEPLOY_POINTS.size()]
+	deploy_point = Terrain.grounded(Cfg.DEPLOY_POINTS[rng.randi() % Cfg.DEPLOY_POINTS.size()]) # TERRAIN HOOK
 
 
 ## main.gd, right after the player exists: park Sol at his deployment point (never the plaza).
@@ -172,7 +173,7 @@ func start() -> void:
 	results.director = self
 	add_child(results)
 	if deploy_point.is_empty():
-		deploy_point = Cfg.DEPLOY_POINTS[rng.randi() % Cfg.DEPLOY_POINTS.size()]
+		deploy_point = Terrain.grounded(Cfg.DEPLOY_POINTS[rng.randi() % Cfg.DEPLOY_POINTS.size()]) # TERRAIN HOOK
 	deploy = DeployScript.new()
 	deploy.main = main
 	add_child(deploy)

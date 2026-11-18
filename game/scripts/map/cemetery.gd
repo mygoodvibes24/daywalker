@@ -116,18 +116,35 @@ static func _tomb_row(c, r: RandomNumberGenerator, x0: float, x1: float, z: floa
 		var g := r.randf_range(0.7, 0.95)
 		var col := Color(g, g * 0.98, g * 0.92) if r.randf() < 0.8 else Color(0.55, 0.5, 0.46)
 		var p := Vector3(x + w * 0.5, 0, z + d * 0.5)
-		c.box(st, p + Vector3(0, h * 0.5, 0), Vector3(w - 0.25, h, d), col, Basis.IDENTITY, 8)
-		# gabled cap
+		var dark := col * Color(0.62, 0.6, 0.58)
+		# a stepped plinth, the vault, a cornice and pilasters framing the door
+		c.box(stone, p + Vector3(0, 0.18, 0), Vector3(w - 0.05, 0.36, d + 0.25), dark, Basis.IDENTITY, 8)
+		c.box(st, p + Vector3(0, h * 0.5 + 0.18, 0), Vector3(w - 0.25, h - 0.36, d), col, Basis.IDENTITY, 8)
+		c.box(stone, p + Vector3(0, h - 0.05, 0), Vector3(w - 0.08, 0.2, d + 0.16), col * Color(0.92, 0.92, 0.9))
+		for sx in [-1.0, 1.0]:
+			c.box(st, p + Vector3(sx * (w * 0.5 - 0.3), h * 0.5, d * 0.5 + 0.05), Vector3(0.26, h - 0.2, 0.12), col * Color(0.95, 0.95, 0.95), Basis.IDENTITY, 8)
 		var hw := (w - 0.1) * 0.5
-		var y := h
-		var top := h + 0.7
-		c.hexa(stone, [p + Vector3(-hw, y, -d * 0.5 - 0.05), p + Vector3(hw, y, -d * 0.5 - 0.05), p + Vector3(hw, y, d * 0.5 + 0.05), p + Vector3(-hw, y, d * 0.5 + 0.05),
-			p + Vector3(-0.05, top, -d * 0.5 - 0.05), p + Vector3(0.05, top, -d * 0.5 - 0.05), p + Vector3(0.05, top, d * 0.5 + 0.05), p + Vector3(-0.05, top, d * 0.5 + 0.05)], col * Color(0.85, 0.85, 0.85))
-		# sealed door tablet and a small cross
-		trim.quad(p + Vector3(-0.5, 0.15, d * 0.5 + 0.02), p + Vector3(-0.5, 1.7, d * 0.5 + 0.02), p + Vector3(0.5, 1.7, d * 0.5 + 0.02), p + Vector3(0.5, 0.15, d * 0.5 + 0.02), Vector3(0, 0, 1), Color(0.3, 0.29, 0.27))
-		if r.randf() < 0.6:
-			c.box(stone, p + Vector3(0, top + 0.35, d * 0.5 - 0.2), Vector3(0.1, 0.7, 0.1), Color(0.5, 0.48, 0.45))
-			c.box(stone, p + Vector3(0, top + 0.45, d * 0.5 - 0.2), Vector3(0.45, 0.1, 0.1), Color(0.5, 0.48, 0.45))
+		var y := h + 0.05
+		var top := h + 0.05 + minf(w * 0.32, 0.85)
+		if r.randf() < 0.75:
+			# a pitched roof over a pediment, a cross on the ridge
+			c.hexa(stone, [p + Vector3(-hw, y, -d * 0.5 - 0.08), p + Vector3(hw, y, -d * 0.5 - 0.08), p + Vector3(hw, y, d * 0.5 + 0.08), p + Vector3(-hw, y, d * 0.5 + 0.08),
+				p + Vector3(-0.05, top, -d * 0.5 - 0.08), p + Vector3(0.05, top, -d * 0.5 - 0.08), p + Vector3(0.05, top, d * 0.5 + 0.08), p + Vector3(-0.05, top, d * 0.5 + 0.08)], col * Color(0.85, 0.85, 0.85))
+			if r.randf() < 0.8:
+				var cp := p + Vector3(0, top, d * 0.5 - 0.1)
+				var ch := r.randf_range(0.8, 1.2)
+				c.box(stone, cp + Vector3(0, 0.1, 0), Vector3(0.3, 0.2, 0.3), dark)
+				c.box(stone, cp + Vector3(0, 0.2 + ch * 0.5, 0), Vector3(0.12, ch, 0.12), Color(0.55, 0.53, 0.5))
+				c.box(stone, cp + Vector3(0, 0.2 + ch * 0.7, 0), Vector3(ch * 0.55, 0.11, 0.12), Color(0.55, 0.53, 0.5))
+		else:
+			# a flat top with a balustrade and an urn
+			c.box(stone, p + Vector3(0, h + 0.2, 0), Vector3(w - 0.2, 0.3, d), col * Color(0.88, 0.88, 0.86))
+			c.cyl(stone, p + Vector3(0, h + 0.35, d * 0.5 - 0.5), 0.12, 0.22, 0.5, 8, dark)
+			c.cyl(stone, p + Vector3(0, h + 0.85, d * 0.5 - 0.5), 0.22, 0.08, 0.25, 8, dark)
+		# sealed door tablet with an iron grille in front
+		trim.quad(p + Vector3(-0.5, 0.36, d * 0.5 + 0.02), p + Vector3(-0.5, 1.8, d * 0.5 + 0.02), p + Vector3(0.5, 1.8, d * 0.5 + 0.02), p + Vector3(0.5, 0.36, d * 0.5 + 0.02), Vector3(0, 0, 1), Color(0.26, 0.25, 0.23))
+		for gx in 5:
+			c.box(c._b("metal"), p + Vector3(-0.4 + gx * 0.2, 1.05, d * 0.5 + 0.09), Vector3(0.03, 1.4, 0.03), Color(0.05, 0.05, 0.05))
 		if r.randf() < 0.08:
 			c.box(c._b("lamp"), p + Vector3(0.7, 0.2, d * 0.5 + 0.25), Vector3(0.1, 0.16, 0.1), Color.WHITE) # a grave candle
 		x += w

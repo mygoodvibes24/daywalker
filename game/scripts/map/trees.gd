@@ -189,39 +189,49 @@ class Mb:
 		return m
 
 
-## A tall Southern pine (height h): bare bark trunk, a crown of drooping needle sprays in
-## whorls, a tuft on top. ~200 triangles, one surface.
+## A tall Southern pine (height h): a bark trunk with a slight lean and dead lower stubs, a
+## high crown of drooping needle sprays in whorls (each branch a flat spray plus a smaller
+## upright one, so the crown has volume from any side) and a tuft on top. ~420 triangles.
 static func pine_mesh(h: float, seed_: int) -> ArrayMesh:
 	var r := RandomNumberGenerator.new()
 	r.seed = seed_
 	var b := Mb.new()
 	var s := h / 18.0
-	var lean := Vector3(r.randf_range(-0.3, 0.3), 0, r.randf_range(-0.3, 0.3)) * s
+	var lean := Vector3(r.randf_range(-0.5, 0.5), 0, r.randf_range(-0.5, 0.5)) * s
 	var pts: Array = []
 	var radii: Array = []
-	for k in 6:
-		var t := k / 5.0
-		pts.append(Vector3(0, h * 0.95 * t, 0) + lean * t * t)
-		radii.append(lerpf(0.34, 0.05, t) * s * (1.25 if k == 0 else 1.0))
-	b.tube(pts, radii, 7, Color(1, 1, 1), 1.0, 2.2 * s)
-	var whorls := 7
+	for k in 7:
+		var t := k / 6.0
+		pts.append(Vector3(0, h * 0.97 * t - (0.3 if k == 0 else 0.0), 0) + lean * t * t + Vector3(sin(t * 5.0 + seed_), 0, cos(t * 4.0 + seed_)) * 0.08 * s)
+		radii.append(lerpf(0.33, 0.04, pow(t, 0.8)) * s * (1.3 if k == 0 else 1.0))
+	b.tube(pts, radii, 8, Color(1.12, 1.06, 1.0), 1.0, 2.0 * s)
+	# dead stubs on the bare lower trunk
+	for k in 7:
+		var y := h * r.randf_range(0.18, 0.5)
+		var a := r.randf() * TAU
+		var root := Vector3(0, y, 0) + lean * pow(y / h, 2.0)
+		var tip := root + Vector3(cos(a), r.randf_range(-0.35, 0.1), sin(a)) * r.randf_range(0.5, 1.4) * s
+		b.tube([root, tip], [0.06 * s, 0.015 * s], 3, Color(0.8, 0.75, 0.7), 1.0, 1.0)
+	var whorls := 9
 	var ga := r.randf() * TAU
 	for w in whorls:
 		var t := float(w) / (whorls - 1)
-		var y := h * lerpf(0.5, 0.93, t)
+		var y := h * lerpf(0.55, 0.95, t) + r.randf_range(-0.3, 0.3)
 		var root := Vector3(0, y, 0) + lean * pow(y / h, 2.0)
-		var L := h * lerpf(0.21, 0.08, t) * r.randf_range(0.85, 1.1)
-		var cards := 5 if t < 0.7 else 4
+		var cards := 5 if t < 0.6 else 4
 		for k in cards:
 			ga += 2.39996 # golden angle
-			var tilt := r.randf_range(-0.05, 0.25)
-			var dir := Vector3(cos(ga), tilt, sin(ga)).normalized()
-			b.card(root, dir, L, L * 0.62, L * 0.28, r.randf_range(-0.45, 0.45), 1.0, Color(1, 1, 1))
+			var L := h * lerpf(0.17, 0.07, t) * r.randf_range(0.8, 1.15)
+			var dir := Vector3(cos(ga), r.randf_range(-0.12, 0.22), sin(ga)).normalized()
+			var shade := Color(0.62, 0.7, 0.55) * r.randf_range(0.85, 1.1)
+			b.card(root, dir, L, L * 0.7, L * 0.3, r.randf_range(-0.35, 0.35), 1.0, shade)
+			# an upright spray along the same branch: volume from the side
+			b.card(root + dir * L * 0.25, (dir + Vector3(0, 0.55, 0)).normalized(), L * 0.75, L * 0.5, L * 0.15, PI * 0.5 + r.randf_range(-0.3, 0.3), 1.0, shade * 0.9)
 	# the top tuft: crossed upright sprays
-	var top := Vector3(0, h * 0.95, 0) + lean
+	var top := Vector3(0, h * 0.97, 0) + lean
 	for k in 3:
 		var a := ga + k * PI / 3.0
-		b.card(top - Vector3(0, h * 0.06, 0), Vector3(cos(a) * 0.25, 1.0, sin(a) * 0.25).normalized(), h * 0.11, h * 0.07, 0.0, 0.0, 1.0, Color(1, 1, 1))
+		b.card(top - Vector3(0, h * 0.07, 0), Vector3(cos(a) * 0.3, 1.0, sin(a) * 0.3).normalized(), h * 0.12, h * 0.08, 0.0, 0.0, 1.0, Color(0.62, 0.7, 0.55))
 	return b.mesh(material())
 
 
@@ -235,8 +245,8 @@ static func cypress_mesh(h: float, seed_: int) -> ArrayMesh:
 	var pts := [Vector3(0, -0.6, 0), Vector3(0, 0.6, 0), Vector3(0, 1.8, 0), Vector3(0.2, h * 0.4, 0.1), Vector3(-0.1, h * 0.7, 0.2), Vector3(0.1, h * 0.92, 0)]
 	var radii := [1.35, 0.95, 0.55, 0.38, 0.26, 0.1]
 	b.tube(pts, radii, 8, bark, 2.0, 2.5, [0.35, 0.3, 0.12, 0.05, 0.0, 0.0])
-	var foliage := Color(0.78, 0.86, 0.6)
-	var moss := Color(1, 1, 1)
+	var foliage := Color(0.62, 0.68, 0.45)
+	var moss := Color(0.85, 0.88, 0.8)
 	var limbs := 5
 	for k in limbs:
 		var a := TAU * k / limbs + r.randf_range(-0.4, 0.4)
@@ -246,20 +256,22 @@ static func cypress_mesh(h: float, seed_: int) -> ArrayMesh:
 		var mid := base + Vector3(cos(a) * reach * 0.5, r.randf_range(0.6, 1.4), sin(a) * reach * 0.5)
 		var tip := base + Vector3(cos(a + r.randf_range(-0.3, 0.3)) * reach, r.randf_range(1.2, 2.6), sin(a) * reach)
 		b.tube([base, mid, tip], [0.26, 0.17, 0.07], 4, bark, 1.0, 2.0)
-		# a flat pad of feathery foliage at the tip
-		for q in 5:
-			var qa := a + TAU * q / 5.0 + r.randf() * 0.5
-			b.card(tip + Vector3(0, 0.4, 0), Vector3(cos(qa), r.randf_range(-0.05, 0.15), sin(qa)).normalized(), r.randf_range(2.0, 2.9), 1.9, 0.5, r.randf_range(-0.3, 0.3), 1.0, foliage)
-		# moss curtains off the limb
-		for q in 3:
-			var mp: Vector3 = base.lerp(tip, 0.3 + q * 0.3) + Vector3(0, -0.1, 0)
-			b.strand(mp, r.randf_range(2.2, 4.2), r.randf_range(0.8, 1.2), r.randf() * TAU, moss)
+		# a clump of feathery foliage at the tip: sprays in every direction
+		for q in 9:
+			var qa := a + TAU * q / 9.0 + r.randf() * 0.6
+			var dir := Vector3(cos(qa), r.randf_range(-0.45, 0.6), sin(qa)).normalized()
+			b.card(tip + Vector3(0, 0.3, 0) - dir * 0.4, dir, r.randf_range(1.5, 2.4), r.randf_range(1.0, 1.4), 0.3, r.randf_range(-1.2, 1.2), 1.0, foliage * r.randf_range(0.85, 1.1))
+		# moss strands off the limb
+		for q in 6:
+			var mp: Vector3 = base.lerp(tip, 0.2 + q * 0.14) + Vector3(r.randf_range(-0.3, 0.3), -0.1, r.randf_range(-0.3, 0.3))
+			b.strand(mp, r.randf_range(1.6, 4.0), r.randf_range(0.35, 0.6), r.randf() * TAU, moss)
 	var crown := Vector3(0.1, h * 0.9, 0)
-	for q in 6:
-		var qa := TAU * q / 6.0 + r.randf() * 0.4
-		b.card(crown, Vector3(cos(qa), r.randf_range(0.05, 0.3), sin(qa)).normalized(), r.randf_range(2.4, 3.3), 2.1, 0.4, r.randf_range(-0.3, 0.3), 1.0, foliage)
-	for q in 3:
-		b.strand(crown + Vector3(r.randf_range(-1.5, 1.5), -0.4, r.randf_range(-1.5, 1.5)), r.randf_range(2.0, 3.5), 1.0, r.randf() * TAU, moss)
+	for q in 10:
+		var qa := TAU * q / 10.0 + r.randf() * 0.4
+		var dir := Vector3(cos(qa), r.randf_range(-0.3, 0.7), sin(qa)).normalized()
+		b.card(crown - dir * 0.4, dir, r.randf_range(1.8, 2.8), r.randf_range(1.1, 1.5), 0.3, r.randf_range(-1.2, 1.2), 1.0, foliage * r.randf_range(0.85, 1.1))
+	for q in 4:
+		b.strand(crown + Vector3(r.randf_range(-1.5, 1.5), -0.4, r.randf_range(-1.5, 1.5)), r.randf_range(1.6, 3.2), 0.5, r.randf() * TAU, moss)
 	return b.mesh(material())
 
 

@@ -15,8 +15,9 @@ const Layout = preload("res://scripts/map/map_layout.gd")
 const Trees = preload("res://scripts/map/trees.gd")
 const Terrain = preload("res://scripts/map/terrain.gd")
 
-const PINE_NEAR := 110.0 # full pines up to here, impostor cards beyond
+const PINE_NEAR := 95.0 # full pines up to here, impostor cards beyond
 const PINE_H := 18.0
+const CYPRESS_NEAR := 120.0
 
 ## The hand-placed features live in map_layout.gd (the terrain shapes itself round them too).
 const PINE_ROADS := Layout.PINE_ROADS
@@ -88,7 +89,7 @@ static func build_pines(c) -> void:
 	for v in 3:
 		c.scatter_mm("Pines%d" % v, meshes[v], lists[v], 80.0, 0.0, PINE_NEAR, true, near_cols[v])
 	var card_mat = Trees.impostor_material("pine", c.M["pine_card"].albedo_texture)
-	c.scatter_mm("PineCards", Trees.impostor_mesh(PINE_H * 1.05, PINE_H * 0.62), far_xfs, 120.0, PINE_NEAR, 0.0, false, cols, card_mat)
+	c.scatter_mm("PineCards", Trees.impostor_mesh(PINE_H * 1.05, PINE_H * 0.6), far_xfs, 120.0, PINE_NEAR, 0.0, false, cols, card_mat)
 	_trailer_park(c, r)
 	_logging_yard(c, r)
 	_water_tower(c, _g(c, Vector3(25, -0.1, -192)))
@@ -334,7 +335,17 @@ static func build_bayou(c) -> void:
 				c.cyl(c._b("paint"), kp, r.randf_range(0.12, 0.22), 0.02, r.randf_range(0.3, 0.8), 5, Color(0.28, 0.22, 0.17), false)
 		z += step
 	for v in 2:
-		c.scatter_mm("Cypress%d" % v, meshes[v], lists[v], 80.0, 0.0, 170.0, true, cyp_cols[v])
+		c.scatter_mm("Cypress%d" % v, meshes[v], lists[v], 80.0, 0.0, CYPRESS_NEAR, true, cyp_cols[v])
+	# impostor cards beyond (the same cypress, pre-rendered by tools/bake_tree_impostors.gd)
+	var far_c: Array = []
+	var far_cols: Array = []
+	for v in 2:
+		for k in lists[v].size():
+			var xf: Transform3D = lists[v][k]
+			far_c.append(xf.scaled_local(Vector3.ONE * ((14.0 + v * 2.5) / 15.5)))
+			far_cols.append(cyp_cols[v][k])
+	c.scatter_mm("CypressCards", Trees.impostor_mesh(15.5 * 1.05, 15.5 * 1.05 * 384.0 / 448.0), far_c, 120.0, CYPRESS_NEAR, 0.0, false, far_cols,
+		Trees.impostor_material("cypress", c.M["pine_card"].albedo_texture))
 	var hero: Array = []
 	for k in 12:
 		var a := TAU * k / 12.0 + 0.2
