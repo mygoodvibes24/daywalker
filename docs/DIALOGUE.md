@@ -29,14 +29,34 @@ Rules: one voice channel, so lines never overlap (and a speaker never talks over
 | Hub reached | `Dialogue.play("hunt_hub")` |
 | Deploy | `Dialogue.play_group("hunt_deploy_")` |
 | Point of interest spotted | `Dialogue.play("hunt_poi_found")` |
-| Point of interest cleared | `Dialogue.play_group("poi_cleared_")` |
+| Point of interest cleared | a nest: `Dialogue.play_group("poi_cleared_")`; anything else: `Dialogue.play("poi_cleared_2")` |
 | Red Curfew ring starts closing | `Dialogue.play("curfew_broadcast")`, then `Dialogue.play("curfew_warning")` (they queue) |
 | Ring almost shut | `Dialogue.play("curfew_final")`; optional `Dialogue.play("reyes_scanner")` |
-| Run complete / extraction | `Dialogue.play("hunt_extract")` |
-| Hollow Alpha appears | `Audio.play_at("wolf_howl", pos)`, `Audio.set_boss(true)`, `Dialogue.play("boss_alpha_intro")` |
-| Hollow Alpha dies | `Audio.set_boss(false)`, `Dialogue.play("boss_alpha_death")` |
-| Marcus Crane appears / dies | `Dialogue.play("boss_marcus_intro")` / `Dialogue.play("boss_marcus_death")` (+ `Audio.set_boss`) |
-| Seraphine's Abomination appears / dies | `Dialogue.play("boss_seraphine_intro")` / `Dialogue.play("boss_seraphine_death")` (+ `Audio.set_boss`) |
+| The Hunt is won (dawn after the Final Night) | `Dialogue.play("hunt_extract")` |
+| First Hunt only: the briefing | `hunt_story.gd` plays `intro_brief_1`, `intro_brief_2`, `curfew_broadcast`, `intro_brief_3` under the title card and case-file captions |
+| A boss appears / dies | the boss's `intro` / `death` ids in `hunt_config.gd` (`NIGHT_BOSS_POOL`, `FINAL_BOSS`), plus its `intro_sfx` and `Audio.set_boss` |
+
+Nights 1 and 2 draw two different bosses from the pool (the Hollow Alpha, Marcus Crane, Cassius Vane the Blood Knight); the Final Night is always Seraphine's Abomination. So a boss line must name its boss, never its night. Cassius Vane has no voice of his own yet: his intro borrows `court_taunt_3`.
+
+## Story framing (hunt_story.gd)
+
+| id | speaker | line | hooked in |
+|---|---|---|---|
+| `intro_brief_1` | Nia | Somebody broke the Accord. Wren's husband, bitten. A Court duke, torn to pieces. | first-Hunt intro |
+| `intro_brief_2` | Nia | Both sides smell you on it. Lucien's called the Red Curfew. | first-Hunt intro |
+| `intro_brief_3` | Nia | Three nights, Sol. Stay alive, and find who's framing you. | first-Hunt intro |
+
+The intro runs once per save (`user://story.cfg`), never in tests, headless runs, `--nointro` or `?autohunt`. Each day opens with a framing card (tonight's boss and the boss's `why`), and the results screen ends on an epilogue line (a win line, the boss's `epitaph` if a boss killed Sol, or a line by bosses slain).
+
+## Boss and world sounds
+
+`boss_slam` (leap and slam impacts, entrances, deaths), `boss_swipe` (swipes, dash starts), `blood_bolt` (bolt fans), `boss_blink` (vanish and reappear), `curfew_drone` (a 3D loop on the Curfew wall, at its point nearest Sol, plus a thunder crack on some lightning), `manhole_clank` and `land_thud` (the Descent, timed per deploy type from `hunt_director._deploy_sfx`), `parry_clang` (on `player.parried`, wired in `Audio.attach_world`).
+
+## Deferred
+
+- A real Marcus Crane model (suit, long coat, own rig and clips, about 20 credits) and a unique Alpha body: the bosses reuse the street bodies, set apart by scale, aura, veins, a cape / mane / spikes / the fused rider.
+- Sol hurt grunts (player.gd's hurt signal is ready; no SFX yet), boss phase-change voice lines, a boss-only music track.
+- Seraphine on a rooftop on the Final Night (S2) and case-file logs per boss kill (S3).
 
 ## Main menu: the lair
 
@@ -69,7 +89,7 @@ Nia and Sol, while the menu idles. One exchange (a then b) roughly every 22-36 s
 |---|---|---|---|
 | `hunt_start` | Nia | Comms are up. I can hear you breathing, so that's a good start. | main.gd `start_game()` |
 | `hunt_hub` | Nia | Pick your steel, pick your ground. Every district's crawling tonight. |  |
-| `hunt_deploy_1` | Nia | Dropping you in. Three marks on the map. Hit them before the Curfew closes. |  |
+| `hunt_deploy_1` | Nia | Dropping you in. Hit what you can before the Curfew closes. |  |
 | `hunt_deploy_2` | Nia | Out of the tunnels and into the rain. Try to bring the coat back dry. |  |
 | `hunt_poi_found` | Nia | That signal's a nest. Clear it, and whatever they're guarding is yours. |  |
 
@@ -102,12 +122,12 @@ Nia, plus Lucien's curfew broadcast and Detective Reyes on the police scanner.
 |---|---|---|---|
 | `curfew_warning` | Nia | Red Curfew's closing. Get inside the ring, Sol, or it gets inside you. |  |
 | `curfew_final` | Nia | Ring's almost shut. Move. Now. |  |
-| `poi_cleared_1` | Nia | Nest's clear. Nice work. Grab what's shiny and go. |  |
+| `poi_cleared_nest` | Nia | Nest's clear. Nice work. Grab what's shiny and go. | nests only |
 | `poi_cleared_2` | Nia | That's one less hole full of teeth. |  |
 | `nia_low_blood` | Nia | Your blood's crashing. Find a neck. Well, not any neck. | player.gd `take_damage()` below 20% blood |
 | `nia_full_moon` | Nia | Full moon's up. The Pack is out in force. Don't let them flank you. | main.gd full-moon nightfall |
 | `nia_sunrise` | Nia | Sun's coming. The bloodsuckers scramble. You don't. | main.gd sunrise (or Sol's bark) |
-| `hunt_extract` | Nia | Hunt's done. Get to extraction and I'll put the kettle on. |  |
+| `hunt_extract` | Nia | Dawn's up. Hunt's done. Come home, Sol. I'll put the kettle on. | the Hunt is won |
 | `curfew_broadcast` | Lucien | Citizens of Port Vesper. The Red Curfew is in effect. Stay indoors... and stay delicious. |  |
 | `reyes_scanner` | Det. Reyes | All units, Curfew zone is sealed. Man in the long coat, do not engage. I mean it. |  |
 
@@ -130,7 +150,7 @@ The Hollow Alpha gets the growl and howl SFX plus Nia's lines.
 
 | id | speaker | line | hooked in |
 |---|---|---|---|
-| `boss_alpha_intro` | Nia | That howl is the Alpha. She's big, she's angry, and she brought family. |  |
+| `boss_alpha_intro` | Nia | That howl's the Alpha. Wren's firstborn. He's big, and he brought family. |  |
 | `boss_alpha_death` | Nia | Alpha's down. The Pack won't forget that. |  |
 | `boss_marcus_intro` | Marcus Crane | Look at us. Two fast men in nice coats. Only one walks out tonight. |  |
 | `boss_marcus_death` | Marcus Crane | Faster... than me? Nobody's... faster... |  |

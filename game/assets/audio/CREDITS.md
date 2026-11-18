@@ -4,9 +4,9 @@ All audio in `game/assets/audio/` was generated for Daywalker through the Higgsf
 
 | Folder | Higgsfield model | Files |
 |---|---|---|
-| `voice/` | `elevenlabs_v4` (Eleven v4, preset voices) | 57 dialogue lines, ids in `game/data/dialogue.json` |
+| `voice/` | `elevenlabs_v4` (Eleven v4, preset voices) | 60 dialogue lines, ids in `game/data/dialogue.json` |
 | `music/` | `elevenlabs_music_v2` (ElevenLabs Music v2, instrumental) | `menu_lair` (90 s), `explore` (70 s), `combat` (55 s, also the boss track) |
-| `sfx/` | `mirelo_text_to_audio` (Mirelo SFX) | 23 sounds |
+| `sfx/` | `mirelo_text_to_audio` (Mirelo SFX) | 29 sounds (+2 made with ffmpeg, see below) |
 
 ## Voices (Higgsfield preset voices)
 
@@ -30,3 +30,9 @@ The Hollow Alpha and the werewolves have no voice: they use the `wolf_growl`, `w
 
 ## Sound effects
 sword_swing_1/2, sword_hit_1/2, bite, blood_dash, perfect_dodge, level_up, loot_pickup, loot_rare_hum, tithe_collect, wolf_transform, wolf_growl, wolf_howl, vamp_hiss, vamp_burn, death, rain_loop, thunder, step_wet_1/2, ui_hover, ui_click.
+
+## Round 2 additions (2026-11-18)
+Generated on Higgsfield (7.4 credits), processed as above.
+- **Voice (Nia, Naomi):** re-recorded `hunt_deploy_1`, `boss_alpha_intro` and `hunt_extract` so they match the game (no "three marks", the Alpha is male, no extraction); new `intro_brief_1`, `intro_brief_2`, `intro_brief_3` (the first-Hunt briefing). `poi_cleared_1` was re-keyed as `poi_cleared_nest` (same audio).
+- **SFX (Mirelo):** boss_slam (decay envelope and low boost added), boss_swipe, blood_bolt, boss_blink, curfew_drone (crossfaded into a 3 s loop), manhole_clank (+19 dB, it came back very quiet).
+- **Made with ffmpeg:** the Mirelo `parry_clang` and `land_thud` generations came back near silent (peaks at -30 and -35 dB), so `parry_clang` is `sword_hit_1` pitched up 25% with three decaying steel partials (2.35, 3.72, 5.23 kHz), and `land_thud` is the low end (below 260 Hz) of `boss_slam`, cut to 0.6 s.
