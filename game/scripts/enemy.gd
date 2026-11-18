@@ -693,6 +693,9 @@ func _update_bar(player) -> void:
 		if windup_t > 0.0 or main.attack_tokens.has(self) or global_position.distance_squared_to(player.global_position) < 64.0:
 			engaged_t = maxf(engaged_t, 2.5)
 	var show := engaged_t > 0.0 or staggered
+	var cam := get_viewport().get_camera_3d()
+	if cam != null and cam.global_position.distance_squared_to(global_position) < 6.25:
+		show = false # right at the lens it would cover the screen (the bar draws over everything)
 	if not show:
 		if hp_bar != null:
 			hp_bar.visible = false
