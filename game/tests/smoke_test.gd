@@ -89,6 +89,7 @@ func _initialize() -> void:
 	main.inventory_ui.close() # START opened the Coat during the button sweep
 	main.levelup_ui.close()
 	ok = await _gameplay_checks(main) and ok
+	ok = await _terrain_checks(main) and ok
 	ok = await _progression_checks(main) and ok
 	ok = await _coat_checks(main) and ok
 	ok = await _move_checks(main) and ok
@@ -145,6 +146,64 @@ func _spawn(main, kind: int, pos: Vector3):
 	e.position = pos
 	main.enemies_root.add_child(e)
 	return e
+
+
+## The terrain: real hills and a lake, everything stands on the ground, enemies path uphill.
+func _terrain_checks(main) -> bool:
+	var ok := true
+	var c = main.city
+	var L = load("res://scripts/map/map_layout.gd")
+	var hmax := -INF
+	for z in range(-220, -80, 10):
+		for x in range(-60, 120, 10):
+			hmax = maxf(hmax, c.height_at(x, z))
+	ok = _check("Hollow Pines has hills (highest %.1f m)" % hmax, hmax > 12.0) and ok
+	ok = _check("the city plates stay level", absf(c.height_at(0, 0)) < 0.001 and absf(c.height_at(150, 100)) < 0.001 and absf(c.height_at(-150, 0)) < 0.001) and ok
+	var lp: Vector3 = L.LAKE.pos
+	ok = _check("the lake is deep in the middle, wadeable at the edge", c.height_at(lp.x, lp.z) < L.LAKE.level - 3.0 and c.height_at(lp.x + L.LAKE.radius * 0.9, lp.z) > L.LAKE.level - 1.0) and ok
+	var space = main.get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(Vector3(30, 80, -150), Vector3(30, -20, -150))
+	var hit: Dictionary = space.intersect_ray(q)
+	ok = _check("terrain collision matches height_at", not hit.is_empty() and absf(hit.position.y - c.height_at(30, -150)) < 0.15) and ok
+	var on_ground := true
+	for s in c.cache_spots:
+		if absf(s.pos.y - 0.1 - c.height_at(s.pos.x, s.pos.z)) > 0.05:
+			on_ground = false
+	for a in c.poi_anchors:
+		if absf(a.pos.y - c.height_at(a.pos.x, a.pos.z)) > 0.05:
+			on_ground = false
+	ok = _check("caches and POI anchors sit on the ground", on_ground) and ok
+	# enemies climb to Sol on a hilltop clearing in the pines
+	var p = main.player
+	_clear_enemies(main)
+	var top: Vector3 = L.PINE_CLEARINGS[0][0] # the trailer park
+	top.y = c.height_at(top.x, top.z)
+	p.global_position = top + Vector3(0, 0.3, 0)
+	p.velocity = Vector3.ZERO
+	var keep_hp: float = p.hp
+	var keep_max: float = p.max_hp
+	var keep_pos: Vector3 = Vector3(10.0, 0.1, 10.0)
+	p.hp = 1e9
+	p.max_hp = 1e9
+	var pack: Array = []
+	for o in [Vector3(0, 0, 34), Vector3(-6, 0, -30), Vector3(30, 0, 8)]:
+		var sp: Vector3 = top + o
+		pack.append(_spawn(main, 0, Vector3(sp.x, c.height_at(sp.x, sp.z) + 0.5, sp.z)))
+	var reached := {}
+	for i in 60 * 15:
+		await physics_frame
+		for e in pack:
+			if e.global_position.distance_to(p.global_position) < 6.0:
+				reached[e] = true
+	ok = _check("enemies path over the hills to Sol (%d/%d)" % [reached.size(), pack.size()], reached.size() >= pack.size() - 1) and ok
+	ok = _check("Sol stands on the hill (y %.2f vs ground %.2f)" % [p.global_position.y, top.y], absf(p.global_position.y - top.y) < 0.6) and ok
+	_clear_enemies(main)
+	p.max_hp = keep_max
+	p.hp = keep_hp
+	p.global_position = keep_pos
+	p.velocity = Vector3.ZERO
+	for i in 5: await physics_frame
+	return ok
 
 
 ## Regression checks for the critic report's bugs.

@@ -224,7 +224,7 @@ static func pine_mesh(h: float, seed_: int) -> ArrayMesh:
 			var L := h * lerpf(0.17, 0.07, t) * r.randf_range(0.8, 1.15)
 			var dir := Vector3(cos(ga), r.randf_range(-0.12, 0.22), sin(ga)).normalized()
 			var shade := Color(0.62, 0.7, 0.55) * r.randf_range(0.85, 1.1)
-			b.card(root, dir, L, L * 0.7, L * 0.3, r.randf_range(-0.35, 0.35), 1.0, shade)
+			b.card(root, dir, L, L * 0.55, L * 0.3, r.randf_range(-0.35, 0.35), 1.0, shade)
 			# an upright spray along the same branch: volume from the side
 			b.card(root + dir * L * 0.25, (dir + Vector3(0, 0.55, 0)).normalized(), L * 0.75, L * 0.5, L * 0.15, PI * 0.5 + r.randf_range(-0.3, 0.3), 1.0, shade * 0.9)
 	# the top tuft: crossed upright sprays
@@ -272,6 +272,39 @@ static func cypress_mesh(h: float, seed_: int) -> ArrayMesh:
 		b.card(crown - dir * 0.4, dir, r.randf_range(1.8, 2.8), r.randf_range(1.1, 1.5), 0.3, r.randf_range(-1.2, 1.2), 1.0, foliage * r.randf_range(0.85, 1.1))
 	for q in 4:
 		b.strand(crown + Vector3(r.randf_range(-1.5, 1.5), -0.4, r.randf_range(-1.5, 1.5)), r.randf_range(1.6, 3.2), 0.5, r.randf() * TAU, moss)
+	return b.mesh(material())
+
+
+## A cheap stand-in that only casts the tree's shadow: a 5-sided trunk and a few crossed
+## needle cards through the crown. ~24 triangles (the full tree draws without shadows).
+static func shadow_mesh(h: float, crown_r: float, crown_y0: float) -> ArrayMesh:
+	var b := Mb.new()
+	b.tube([Vector3(0, 0, 0), Vector3(0, h * 0.95, 0)], [0.3 * h / 18.0, 0.06], 5, Color.WHITE, 1.0, 2.0)
+	var mid := (crown_y0 + h) * 0.5
+	for k in 3:
+		var a := PI * k / 3.0
+		var rt := Vector3(cos(a), 0, sin(a)) * crown_r
+		var base := b.v.size()
+		var nr := Vector3(-sin(a), 0, cos(a))
+		b.vert(-rt + Vector3(0, crown_y0, 0), nr, Vector2(0, 1), 1.0, Color.WHITE)
+		b.vert(rt + Vector3(0, crown_y0, 0), nr, Vector2(1, 1), 1.0, Color.WHITE)
+		b.vert(-rt * 0.3 + Vector3(0, h, 0), nr, Vector2(0, 0), 1.0, Color.WHITE)
+		b.vert(rt * 0.3 + Vector3(0, h, 0), nr, Vector2(1, 0), 1.0, Color.WHITE)
+		b.i.append_array([base, base + 2, base + 1, base + 1, base + 2, base + 3])
+	b.card(Vector3(0, mid, 0) - Vector3(crown_r, 0, 0), Vector3(1, 0, 0), crown_r * 2.0, crown_r * 2.0, 0.0, 0.0, 1.0, Color.WHITE)
+	return b.mesh(material())
+
+
+## Undergrowth: a low clump of needle/fern sprays arching out of the ground (~1 m), for the
+## forest floor and the bayou banks. 40 triangles.
+static func bush_mesh(seed_: int, col: Color) -> ArrayMesh:
+	var r := RandomNumberGenerator.new()
+	r.seed = seed_
+	var b := Mb.new()
+	for k in 5:
+		var a := TAU * k / 5.0 + r.randf() * 0.6
+		var dir := Vector3(cos(a), r.randf_range(0.7, 1.3), sin(a)).normalized()
+		b.card(Vector3(0, -0.05, 0), dir, r.randf_range(0.8, 1.2), r.randf_range(0.5, 0.7), 0.45, r.randf_range(-0.6, 0.6), 1.0, col * r.randf_range(0.8, 1.1))
 	return b.mesh(material())
 
 

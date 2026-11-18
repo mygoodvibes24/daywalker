@@ -112,7 +112,7 @@ const BOARDWALKS := [
 
 
 ## The pine-ringed lake in Hollow Pines: centre, radius at the waterline, water level (m).
-const LAKE := {"pos": Vector3(64, 0, -207), "radius": 17.0, "level": 14.0}
+const LAKE := {"pos": Vector3(64, 0, -207), "radius": 23.0, "level": 14.0}
 const BAYOU_WATER := -0.15 # the swamp's surface; its mud bed lies ~0.8 m below (wadeable)
 const RIVER_WATER := -1.6 # the river round the west and south (docks.gd's quay walls)
 ## The paved city plates (asphalt and quay concrete), held level at y = 0: the Old Quarter, the

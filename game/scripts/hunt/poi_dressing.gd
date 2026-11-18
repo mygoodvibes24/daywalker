@@ -261,6 +261,74 @@ static func trailer(parent: Node3D, pos: Vector3, yaw: float) -> void:
 	_col(root, Vector3(W, H + y0, L), Vector3(0, (H + y0) * 0.5, 0))
 
 
+## Frame cost: bake every static primitive under `root` into one mesh per material and shadow
+## setting (a camp was ~90 separate draws). Animated parts (coffin lids, the manhole cover, the
+## skiff) and anything under a node in `keep` stay as they are.
+static func merge_parts(root: Node3D, keep: Array) -> void:
+	var groups := {}
+	var done: Array = []
+	for n in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		var xf := Transform3D.IDENTITY
+		var p: Node = mi
+		var skip := false
+		while p != root and p != null:
+			if p in keep or p.name in ["Lid", "Cover", "Boat"]:
+				skip = true
+				break
+			xf = (p as Node3D).transform * xf
+			p = p.get_parent()
+		if skip or mi.mesh == null or mi.get_child_count() > 0 or mi.material_override == null:
+			continue
+		var key := [mi.material_override, mi.cast_shadow]
+		var k := str(mi.material_override.get_instance_id()) + "|" + str(mi.cast_shadow)
+		if not groups.has(k):
+			groups[k] = {"key": key, "v": PackedVector3Array(), "n": PackedVector3Array(), "t": PackedVector2Array(), "i": PackedInt32Array()}
+		var g: Dictionary = groups[k]
+		for s in mi.mesh.get_surface_count():
+			var a: Array = mi.mesh.surface_get_arrays(s)
+			var base: int = g.v.size()
+			var vs: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+			var ns: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+			var nb := xf.basis.inverse().transposed()
+			for k2 in vs.size():
+				g.v.append(xf * vs[k2])
+				g.n.append((nb * ns[k2]).normalized() if k2 < ns.size() else Vector3.UP)
+			var ts = a[Mesh.ARRAY_TEX_UV]
+			if ts is PackedVector2Array and ts.size() == vs.size():
+				g.t.append_array(ts)
+			else:
+				for k2 in vs.size():
+					g.t.append(Vector2.ZERO)
+			var ids = a[Mesh.ARRAY_INDEX]
+			if ids is PackedInt32Array and not ids.is_empty():
+				for id in ids:
+					g.i.append(base + id)
+			else:
+				for k2 in vs.size():
+					g.i.append(base + k2)
+		done.append(mi)
+	for k in groups.keys():
+		var g: Dictionary = groups[k]
+		var arr := []
+		arr.resize(Mesh.ARRAY_MAX)
+		arr[Mesh.ARRAY_VERTEX] = g.v
+		arr[Mesh.ARRAY_NORMAL] = g.n
+		arr[Mesh.ARRAY_TEX_UV] = g.t
+		arr[Mesh.ARRAY_INDEX] = g.i
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+		var mi := MeshInstance3D.new()
+		mi.name = "Merged"
+		mi.mesh = mesh
+		mi.material_override = g.key[0]
+		mi.cast_shadow = g.key[1]
+		root.add_child(mi)
+	for mi in done:
+		mi.get_parent().remove_child(mi)
+		mi.free()
+
+
 # ---------------------------------------------------------------- POI sets
 static func build(type: String, root: Node3D, rng: RandomNumberGenerator, c: Color) -> Dictionary:
 	var out := {"coffins": []}
@@ -347,6 +415,7 @@ static func build(type: String, root: Node3D, rng: RandomNumberGenerator, c: Col
 			_p(root, U.cyl(0.0, 0.3, 0.55), m.cloth, Vector3(-1.4, 1.75, 0.2))
 			for x in [-0.06, 0.06]:
 				_p(root, U.sphere(0.025), m.eyes, Vector3(-1.4 + x, 1.55, 0.44))
+	merge_parts(root, out.coffins) # one draw per material instead of one per primitive
 	return out
 
 
@@ -419,4 +488,5 @@ static func deploy_point(type: String, root: Node3D, face: Vector3) -> Dictionar
 			_p(boat, U.sphere(0.13), m.window, Vector3(0, 0.92, 1.8))
 			out["boat"] = boat
 			_p(root, U.cyl(0.12, 0.14, 1.6), m.wood, face.cross(Vector3.UP) * 1.4 + Vector3(0, 0.8, 0))
+	merge_parts(root, [])
 	return out

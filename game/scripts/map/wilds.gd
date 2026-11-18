@@ -15,9 +15,9 @@ const Layout = preload("res://scripts/map/map_layout.gd")
 const Trees = preload("res://scripts/map/trees.gd")
 const Terrain = preload("res://scripts/map/terrain.gd")
 
-const PINE_NEAR := 95.0 # full pines up to here, impostor cards beyond
+const PINE_NEAR := 75.0 # full pines up to here, impostor cards beyond
 const PINE_H := 18.0
-const CYPRESS_NEAR := 120.0
+const CYPRESS_NEAR := 90.0
 
 ## The hand-placed features live in map_layout.gd (the terrain shapes itself round them too).
 const PINE_ROADS := Layout.PINE_ROADS
@@ -87,9 +87,11 @@ static func build_pines(c) -> void:
 			cols.append(hue * Color(0.9, 0.95, 0.9))
 		z += step
 	for v in 3:
-		c.scatter_mm("Pines%d" % v, meshes[v], lists[v], 80.0, 0.0, PINE_NEAR, true, near_cols[v])
+		c.scatter_mm("Pines%d" % v, meshes[v], lists[v], 80.0, 0.0, PINE_NEAR, false, near_cols[v])
+		c.scatter_mm("PineShadows%d" % v, Trees.shadow_mesh(PINE_H, 3.2, PINE_H * 0.55), lists[v], 80.0, 0.0, PINE_NEAR, true, [], null, true)
 	var card_mat = Trees.impostor_material("pine", c.M["pine_card"].albedo_texture)
 	c.scatter_mm("PineCards", Trees.impostor_mesh(PINE_H * 1.05, PINE_H * 0.6), far_xfs, 120.0, PINE_NEAR, 0.0, false, cols, card_mat)
+	_undergrowth(c, r, Rect2(-80, -230, 210, 165), Color(0.72, 0.78, 0.55), "PineBush")
 	_trailer_park(c, r)
 	_logging_yard(c, r)
 	_water_tower(c, _g(c, Vector3(25, -0.1, -192)))
@@ -137,6 +139,43 @@ static func c_dist(p: Vector3, pts: Array) -> float:
 		var t := clampf((q - a).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
 		best = minf(best, q.distance_to(a + ab * t))
 	return best
+
+
+## Low undergrowth (fern/needle clumps) scattered over the floor, kept off the roads, the
+## clearings and the water; drawn only up close.
+static func _undergrowth(c, r: RandomNumberGenerator, area: Rect2, col: Color, name: String, wet_ok := false) -> void:
+	var xfs: Array = []
+	var cols: Array = []
+	var meshes := [Trees.bush_mesh(31, col), Trees.bush_mesh(32, col * Color(1.1, 1.0, 0.8))]
+	var lists := [[], []]
+	var lcols := [[], []]
+	var y := area.position.y
+	while y < area.end.y:
+		var x := area.position.x
+		while x < area.end.x:
+			var p := Vector3(x + r.randf_range(-1.8, 1.8), 0, y + r.randf_range(-1.8, 1.8))
+			x += 3.6
+			if Terrain.in_plate(p.x, p.z) or Layout.district_at(p.x, p.z) not in ["pines", "bayou"]:
+				continue
+			var hint: Color = Terrain.hint_at(p.x, p.z)
+			if hint.r > 0.25 or (hint.g > 0.5 and not wet_ok):
+				continue # roads, trampled clearings, the water's edge
+			p.y = c.height_at(p.x, p.z)
+			if wet_ok and p.y < Layout.BAYOU_WATER - 0.1:
+				continue
+			var lp: Vector3 = Layout.LAKE.pos
+			if Vector2(p.x - lp.x, p.z - lp.z).length() < Layout.LAKE.radius * 1.15:
+				continue
+			if r.randf() < 0.35:
+				continue
+			var s := r.randf_range(1.0, 2.2)
+			var v := r.randi() % 2
+			lists[v].append(Transform3D(Basis(Vector3.UP, r.randf() * TAU).scaled(Vector3(s, s * r.randf_range(0.7, 1.2), s)), p))
+			var g := r.randf_range(0.75, 1.15)
+			lcols[v].append(Color(g, g, g))
+		y += 3.6
+	for v in 2:
+		c.scatter_mm("%s%d" % [name, v], meshes[v], lists[v], 40.0, 0.0, 55.0, false, lcols[v])
 
 
 ## p lifted onto the terrain (plus its own y as an offset).
@@ -210,7 +249,7 @@ static func _trailer_park(c, r: RandomNumberGenerator) -> void:
 		if blocked:
 			continue
 		c.ck = c._chunk_of(mid.x, mid.z)
-		iron = c._b("iron")
+		iron = c._b("chainlink")
 		var n := Vector3.UP.cross(p1 - p0).normalized()
 		var len := p0.distance_to(p1)
 		iron.quad(p0, p0 + Vector3(0, 2.2, 0), p1 + Vector3(0, 2.2, 0), p1, n, Color.WHITE, Vector2(0, 0.5), Vector2(len * 0.5, 1.0))
@@ -335,7 +374,8 @@ static func build_bayou(c) -> void:
 				c.cyl(c._b("paint"), kp, r.randf_range(0.12, 0.22), 0.02, r.randf_range(0.3, 0.8), 5, Color(0.28, 0.22, 0.17), false)
 		z += step
 	for v in 2:
-		c.scatter_mm("Cypress%d" % v, meshes[v], lists[v], 80.0, 0.0, CYPRESS_NEAR, true, cyp_cols[v])
+		c.scatter_mm("Cypress%d" % v, meshes[v], lists[v], 80.0, 0.0, CYPRESS_NEAR, false, cyp_cols[v])
+		c.scatter_mm("CypressShadows%d" % v, Trees.shadow_mesh(14.0 + v * 2.5, 5.0, 7.0), lists[v], 80.0, 0.0, CYPRESS_NEAR, true, [], null, true)
 	# impostor cards beyond (the same cypress, pre-rendered by tools/bake_tree_impostors.gd)
 	var far_c: Array = []
 	var far_cols: Array = []
@@ -354,7 +394,8 @@ static func build_bayou(c) -> void:
 			continue
 		hero.append(Transform3D(Basis(Vector3.UP, r.randf() * TAU), _g(c, p) - Vector3(0, 0.2, 0)))
 		c.post_collider(p, 0.9, 4.0)
-	c.glb_multimesh("cypress_tree", 17.0, hero, 80.0, 140.0, true)
+	c.glb_multimesh("cypress_tree", 17.0, hero, 80.0, 95.0, true)
+	_undergrowth(c, r, Rect2(118, -236, 112, 170), Color(0.7, 0.72, 0.48), "BayouBush", true)
 	_plantation(c)
 	# fireflies over the water
 	for f in [Vector3(165, 1.2, -120), Vector3(200, 1.2, -150), Vector3(160, 1.2, -185), Vector3(185, 1.2, -100)]:

@@ -169,6 +169,11 @@ func _b(mat: String) -> Batch:
 
 const CHUNK := 80.0 # main geometry is merged per 80 m cell...
 const MAIN_RANGE := 115.0
+## Web tier (Compatibility, phones): main chunks hand over to their HLOD boxes sooner and the
+## detail chunks drop sooner (the frame-cost budget: <= 300 draws, <= 400k triangles).
+var main_range := MAIN_RANGE
+var detail_range := 72.0
+var web_tier := false
 const FOG_SCALE := 0.72 # atmosphere.gd's fog_scale for this map # ...drawn up to this far, then swapped for its HLOD boxes
 var _near := true # the building being made is close to the hub: a little more relief
 
@@ -1157,6 +1162,11 @@ func _make_materials() -> void:
 	iron.roughness = 0.5
 	iron.metallic = 0.6
 	M["iron"] = iron
+	var chain := iron.duplicate()
+	chain.metallic = 0.15
+	chain.roughness = 0.75
+	chain.albedo_color = Color(0.55, 0.55, 0.52)
+	M["chainlink"] = chain # fences out in the wilds (metallic iron mirrored the pink horizon)
 
 	var awn := StandardMaterial3D.new()
 	awn.albedo_texture = _awning_texture()
@@ -1286,6 +1296,10 @@ func _make_materials() -> void:
 # ================================================================ build
 func build() -> void:
 	rng.seed = SEED
+	web_tier = preload("res://scripts/atmosphere.gd").detect_tier() == "web"
+	if web_tier:
+		main_range = 80.0
+		detail_range = 48.0
 	Terrain.build_nodes(self) # the ground: heightmap collision, terrain chunks, water
 	_make_materials()
 	collider_root = Node3D.new()
@@ -1492,14 +1506,14 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 			mi.position = shift
 		match kind:
 			"D":
-				mi.visibility_range_end = DETAIL_RANGE
+				mi.visibility_range_end = detail_range
 				mi.visibility_range_end_margin = 8.0
 				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			"K":
-				mi.visibility_range_end = MAIN_RANGE
+				mi.visibility_range_end = main_range
 				mi.visibility_range_end_margin = 10.0
 			"H":
-				mi.visibility_range_begin = MAIN_RANGE
+				mi.visibility_range_begin = main_range
 				mi.visibility_range_begin_margin = 10.0
 				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		(parent if parent else self).add_child(mi)
@@ -3160,7 +3174,7 @@ func _build_props() -> void:
 				mmi.multimesh = mm
 				mmi.material_override = entry[1]
 				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if big and entry[2] else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				mmi.visibility_range_end = 100.0 if kind == "lamp" else 80.0
+				mmi.visibility_range_end = (100.0 if kind == "lamp" else 80.0) * (0.7 if web_tier else 1.0)
 				add_child(mmi)
 	# warm halos round every lantern: camera-facing quads in one MultiMesh
 	if not halo_xfs.is_empty():
@@ -3537,7 +3551,7 @@ func _moss_texture() -> ImageTexture:
 
 ## MultiMesh instances of `mesh` (its own surface materials), bucketed per `cell` metres so
 ## off-screen ones cull, each bucket drawn between range_begin and range_end (0 = always).
-func scatter_mm(name: String, mesh: Mesh, xfs: Array, cell: float, range_begin := 0.0, range_end := 0.0, shadow := false, cols: Array = [], mat: Material = null) -> void:
+func scatter_mm(name: String, mesh: Mesh, xfs: Array, cell: float, range_begin := 0.0, range_end := 0.0, shadow := false, cols: Array = [], mat: Material = null, shadow_only := false) -> void:
 	var cells := {}
 	for k in xfs.size():
 		var o: Vector3 = (xfs[k] as Transform3D).origin
@@ -3562,6 +3576,8 @@ func scatter_mm(name: String, mesh: Mesh, xfs: Array, cell: float, range_begin :
 		if mat != null:
 			mmi.material_override = mat
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if shadow_only:
+			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
 		if range_begin > 0.0:
 			mmi.visibility_range_begin = range_begin
 			mmi.visibility_range_begin_margin = 8.0

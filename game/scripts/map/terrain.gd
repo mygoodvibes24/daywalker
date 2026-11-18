@@ -21,7 +21,7 @@ const ORIGIN := -256.0 # the grid covers ORIGIN .. -ORIGIN on x and z
 const N := 257 # samples per side
 const CHUNK_CELLS := 32 # 64 m render chunks
 const LOD1_EVERY := 4 # the far LOD keeps every 4th sample (8 m)
-const LOD_RANGE := 150.0 # LOD0 up to here, LOD1 beyond
+const LOD_RANGE := 120.0 # LOD0 up to here, LOD1 beyond
 const TOWER := Vector3(25, 0, -190)
 
 static var H := PackedFloat32Array() # heights, row-major (z * N + x)
@@ -170,8 +170,8 @@ static func _wild(x: float, z: float, hint: Array) -> float:
 		if dl < rr + 6.0:
 			h = shore
 		h = maxf(h, lv + 0.3) if dl >= rr + 1.5 and dl < rr + 24.0 else h
-		wet = maxf(wet, 1.0 - _ss(0.2, 1.4, h - lv))
-		mud = maxf(mud, (1.0 - _ss(0.4, 2.0, h - lv)) * 0.6)
+		wet = maxf(wet, 1.0 - _ss(0.3, 1.8, h - lv))
+		mud = maxf(mud, (1.0 - _ss(0.5, 2.6, h - lv)) * 0.95)
 	hint[0] = path
 	hint[1] = wet
 	hint[2] = mud
@@ -743,7 +743,7 @@ render_mode blend_mix, cull_disabled, depth_draw_opaque, diffuse_burley, specula
 uniform sampler2D wave_nrm : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform vec3 deep_col : source_color = vec3(0.006, 0.012, 0.012);
 uniform vec3 shallow_col : source_color = vec3(0.06, 0.055, 0.04);
-uniform vec3 sky_col : source_color = vec3(0.12, 0.15, 0.2);
+uniform vec3 sky_col : source_color = vec3(0.1, 0.11, 0.12);
 uniform float shallow_alpha = 0.35;
 uniform float deep_alpha = 0.94;
 uniform float flow = 1.0;
@@ -767,11 +767,11 @@ void fragment() {
 	// a thin pale line where the water meets the shore
 	float edge = 1.0 - smoothstep(0.0, 0.07, depth);
 	col += vec3(0.08, 0.08, 0.075) * edge * (0.5 + 0.5 * a.r);
-	ALBEDO = mix(col, sky_col, fres * 0.6);
+	ALBEDO = mix(col, sky_col, fres * 0.35);
 	ALPHA = clamp(mix(shallow_alpha, deep_alpha, smoothstep(0.0, 0.6, depth)) + fres * 0.35, 0.0, 1.0) * smoothstep(-0.02, 0.05, depth + 0.04);
-	ROUGHNESS = 0.05;
+	ROUGHNESS = 0.08;
 	METALLIC = 0.0;
-	SPECULAR = 0.6;
+	SPECULAR = 0.4;
 }
 """
 
