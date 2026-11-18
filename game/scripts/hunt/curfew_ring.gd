@@ -52,6 +52,8 @@ var bolt_t := 0.5
 var flash := 0.0
 var tween: Tween
 var main
+var drone: AudioStreamPlayer3D # AUDIO: the wall hums where it is nearest Sol
+var crackle_t := 2.0
 
 
 func _ready() -> void:
@@ -114,6 +116,7 @@ func _ready() -> void:
 		b.visible = false
 		add_child(b)
 		bolts.append(b)
+	drone = Audio.loop_3d("curfew_drone", self, -2.0) # AUDIO HOOK
 	_apply()
 
 
@@ -194,6 +197,24 @@ func _process(delta: float) -> void:
 		bolt_t = randf_range(0.35, 1.4)
 		_strike()
 	mat.set_shader_parameter("flash", flash)
+	_drone(delta)
+
+
+## Keep the drone on the wall at the point nearest Sol; silent when he's far from it.
+func _drone(delta: float) -> void:
+	if drone == null or main == null or main.player == null:
+		return
+	var p: Vector3 = main.player.global_position
+	var to := Vector3(p.x - center.x, 0.0, p.z - center.z)
+	var dir := to.normalized() if to.length() > 0.1 else Vector3.RIGHT
+	var near := absf(outside_by(p))
+	drone.global_position = center + dir * radius + Vector3(0, minf(p.y + 1.5, 8.0), 0)
+	var want: bool = Audio.unlocked and near < 70.0
+	if want and not drone.playing:
+		drone.play()
+	elif not want and drone.playing:
+		drone.stop()
+	crackle_t -= delta
 
 
 ## Crimson lightning somewhere on the wall in Sol's half of the sky.
@@ -210,4 +231,7 @@ func _strike() -> void:
 			b.rotation.y = -a + PI * 0.5
 			b.scale = Vector3(randf_range(0.7, 1.3), randf_range(0.6, 1.0), 1.0)
 			flash = 1.0
+			if crackle_t <= 0.0 and main != null and main.player != null and absf(outside_by(main.player.global_position)) < 45.0:
+				crackle_t = randf_range(4.0, 9.0)
+				Audio.play_at("thunder", global_position + b.position + Vector3(0, 6, 0), -9.0, 0.25) # AUDIO HOOK: the lightning cracks
 			return
