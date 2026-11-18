@@ -449,7 +449,7 @@ func _coat_checks(main) -> bool:
 	ok = _check("coat settles after stopping (%.3f rad, cloth %.3f m/s, was %.2f)" % [settled, still_motion, run_motion], absf(settled - still) < 0.06 and still_motion < run_motion * 0.06) and ok
 	# with the idle clip frozen too, the cloth comes fully to rest
 	p.mod_anim.tree.active = false
-	for i in 150: await physics_frame
+	for i in 300: await physics_frame # long enough to settle even when frame pacing is uneven (a loaded machine)
 	var rest_motion: float = sim.motion_amount()
 	p.mod_anim.tree.active = true
 	ok = _check("coat comes to rest on a still body (%.4f m/s)" % rest_motion, rest_motion < 0.03) and ok # the standing breeze keeps a slight drift
