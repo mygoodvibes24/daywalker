@@ -26,5 +26,6 @@ window/stretch/aspect="expand"
 renderer/rendering_method="forward_plus"
 renderer/rendering_method.mobile="gl_compatibility"
 renderer/rendering_method.web="gl_compatibility"
+limits/spatial_indexer/threaded_cull_minimum_instances.web=65536
 anti_aliasing/quality/msaa_3d=1
 textures/vram_compression/import_etc2_astc=true

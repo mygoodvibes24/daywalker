@@ -43,6 +43,24 @@ func _ready() -> void:
 	Audio.set_music("menu"); Dialogue.start_menu_banter() # AUDIO HOOK (starts after the first click on the web)
 	var tw := create_tween()
 	tw.tween_property(fade, "color:a", 0.0, 1.6).set_trans(Tween.TRANS_SINE)
+	if not _autohunt_done and _autohunt_wanted(): # ?autohunt (web) / --autohunt: straight into a Hunt (CI render check), once per page load
+		_autohunt_done = true
+		_begin_hunt.call_deferred()
+
+
+static var _autohunt_done := false
+
+
+static func _autohunt_wanted() -> bool:
+	if "--autohunt" in OS.get_cmdline_user_args():
+		return true
+	if not OS.has_feature("web"):
+		return false
+	var q := str(JavaScriptBridge.eval("window.location.search", true)).trim_prefix("?")
+	for part in q.split("&", false):
+		if part.split("=")[0] == "autohunt":
+			return true
+	return false
 
 
 func _build_ui() -> void:

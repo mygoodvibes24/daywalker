@@ -706,6 +706,10 @@ func _menu_checks(main) -> bool:
 	main.queue_free()
 	await process_frame
 	ok = _check("main menu is the main scene", ProjectSettings.get_setting("application/run/main_scene") == "res://scenes/main_menu.tscn") and ok
+	# WEB FIX: Godot 4.3's single-threaded web build culls a scene of more than
+	# threaded_cull_minimum_instances (default 1000) to nothing (its cull tasks go to worker
+	# threads that never run), so the Hunt drew only sky + HUD. Keep the web override high.
+	ok = _check("web: threaded culling stays off", int(ProjectSettings.get_setting("rendering/limits/spatial_indexer/threaded_cull_minimum_instances.web", 0)) >= 65536) and ok
 	var menu = load("res://scenes/main_menu.tscn").instantiate()
 	root.add_child(menu)
 	for i in 5: await process_frame
