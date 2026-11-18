@@ -1,0 +1,29 @@
+{
+ "raw_mesh": "game/assets/characters/sol/sol_scan_head_raw.glb",
+ "scan_yaw": -90.0,
+ "target_tris": 36000,
+ "out_dir": "game/assets/characters/sol",
+ "out_prefix": "sol_scan_head",
+ "cam_dist": 4.0,
+ "albedo_size": 2048,
+ "map_size": 1024,
+ "face_strip": 0.45,
+ "view_sharpness": 0.06,
+ "albedo_gain": [0.38, 0.42, 0.47],
+ "views": [
+  {"img": "s01_front.jpg", "az": 0, "weight": 1.5, "crop_y": 0.74, "yaw_tol": 4, "priority": 0.42},
+  {"img": "s02_l30.jpg", "az": 30, "weight": 1.0, "crop_y": 0.70, "yaw_tol": 10, "priority": 0.08},
+  {"img": "s03_r30.jpg", "az": -30, "weight": 1.0, "crop_y": 0.70, "yaw_tol": 10, "priority": 0.08},
+  {"img": "s04_l60.jpg", "az": 60, "weight": 0.9, "crop_y": 0.70, "yaw_tol": 15},
+  {"img": "s05_r60.jpg", "az": -60, "weight": 0.9, "crop_y": 0.70, "yaw_tol": 15},
+  {"img": "s06_l90.jpg", "az": 90, "weight": 0.9, "crop_y": 0.74, "yaw_tol": 4, "priority": 0.05},
+  {"img": "s07_r90.jpg", "az": -90, "weight": 0.9, "crop_y": 0.74, "yaw_tol": 4, "priority": 0.05},
+  {"img": "s08_back.jpg", "az": 180, "weight": 1.0, "crop_y": 0.70, "yaw_tol": 4},
+  {"img": "s09_above.jpg", "az": 0, "el": 20, "weight": 0.4, "crop_y": 0.66, "yaw_tol": 5, "priority": -0.35},
+  {"img": "s10_below.jpg", "az": 0, "el": -20, "weight": 0.6, "crop_y": 0.72, "yaw_tol": 5, "priority": -0.3}
+ ],
+ "eyes_px": [[325, 343], [505, 342]],
+ "skin_plate": "plate_skin.jpg",
+ "beard_plate": "plate_beard.jpg",
+ "placement": {"ipd_m": 0.064, "eye_mid": [0.0, 1.741, 0.106], "cut_y": 1.565}
+}

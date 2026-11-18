@@ -68,6 +68,13 @@ const NECK_CUT := 1.585 # body triangles above this (around the head) are remove
 const HEAD_SCALE := 0.37
 const HEAD_OFF := Vector3(-0.02, 1.699, -0.005)
 const HEAD_CUT := -0.47 # bust units: everything below is cut (shirt, shoulders)
+## The face-scan head (tools/project_face_texture.py, docs/face_scans/): a reconstruction textured by
+## projecting the capture photos, placed in skeleton space by its eyes. false = the older Tripo bust.
+const USE_SCANNED_HEAD := false # scanned head works; enable after the seam cleanup pass (docs/face_scans)
+const SCAN := D + "sol_scan_head"
+const DETAIL_TILE := 14.0 # skin-pore detail repeats per UV unit
+const EYE_RADIUS := 0.0115
+const EYE_PROTRUDE := 0.0016 # how far the eyeball's front sits in front of the scanned eye surface
 const HAND_SCALE := 0.15
 const HAND_WRIST := Vector3(0.0, -0.3, 0.0) # point of the fist mesh (units) placed on the wrist joint
 const FIST_TWIST := -50.0 # degrees about the forearm: turns the knuckles (and blade) more forward
@@ -170,10 +177,24 @@ func _initialize() -> void:
 
 	# ---------------------------------------------------------------- head + glasses
 	var head_att := _attach(root, "Head", "Head")
-	var head_arr := _load_arrays(D + "sol_mod_head_src.glb", Transform3D(Basis(Vector3.UP, -PI / 2.0).scaled(Vector3.ONE * HEAD_SCALE), HEAD_OFF))
-	head_arr = _extend_neck(_cut_bust(head_arr, D + "sol_mod_head_src.glb"))
-	var head_mat := _material(D + "sol_mod_head_src.glb")
-	head_mat.metallic_specular = 0.32 # the generated skin reads plastic at full specular
+	var head_arr: Array
+	var head_mat: StandardMaterial3D
+	if USE_SCANNED_HEAD:
+		# the face-scan head (docs/face_scans/README.md): already in skeleton space, cut at the collar
+		head_arr = _load_arrays(SCAN + ".glb", Transform3D.IDENTITY)
+		head_arr = _extend_neck(_cover_body_neck(head_arr))
+		var uv: PackedVector2Array = head_arr[Mesh.ARRAY_TEX_UV]
+		var uv2 := PackedVector2Array()
+		uv2.resize(uv.size())
+		for i in uv.size():
+			uv2[i] = uv[i] * DETAIL_TILE # tiling skin-pore detail (detail normal on UV2)
+		head_arr[Mesh.ARRAY_TEX_UV2] = uv2
+		head_mat = _skin_material()
+	else:
+		head_arr = _load_arrays(D + "sol_mod_head_src.glb", Transform3D(Basis(Vector3.UP, -PI / 2.0).scaled(Vector3.ONE * HEAD_SCALE), HEAD_OFF))
+		head_arr = _extend_neck(_cut_bust(head_arr, D + "sol_mod_head_src.glb"))
+		head_mat = _material(D + "sol_mod_head_src.glb")
+		head_mat.metallic_specular = 0.32 # the generated skin reads plastic at full specular
 	# the head is skinned, not rigid: its neck takes the body's own neck / spine weights where it meets
 	# the collar, blending into the head bone above, so neck and body bend together in every clip
 	var head_mi := MeshInstance3D.new()
@@ -184,6 +205,8 @@ func _initialize() -> void:
 	skel.add_child(head_mi)
 	head_mi.owner = root
 	_add_glasses(head_att, root, head_arr[Mesh.ARRAY_VERTEX])
+	if USE_SCANNED_HEAD:
+		_add_eyes(head_att, root)
 
 	# ---------------------------------------------------------------- hands + sword
 	var fist_r := _fist_xf("Right")
@@ -1022,6 +1045,36 @@ func _skin_head(arr: Array) -> Skin:
 	return skin
 
 
+## The scanned neck is placed by the eyes, not fitted to the body: where the body's own neck (kept up
+## to NECK_CUT) would show outside it, the scan's neck is pushed out to just cover it, fading to
+## nothing by the jaw line, so no strip of the body's skin shows between beard and collar.
+func _cover_body_neck(arr: Array) -> Array:
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX].duplicate()
+	var n := 0
+	var worst := 0.0
+	for i in v.size():
+		var p := v[i]
+		var t := 1.0 - smoothstep(NECK_CUT + 0.0, NECK_CUT + 0.045, p.y)
+		if t <= 0.0:
+			continue
+		# the body surface under this point: the nearest body vertex at or below the neck cut
+		var q := Vector3(p.x, minf(p.y, NECK_CUT - 0.004), p.z)
+		var bi := _nearest_body(q)
+		if bi < 0:
+			continue
+		var bn := body_nrm[bi]
+		var d := (p - body_pts[bi]).dot(bn)
+		if d < 0.003:
+			var push := minf(0.003 - d, 0.012) * t
+			v[i] = p + bn * push
+			worst = maxf(worst, push)
+			n += 1
+	print("head: pushed %d neck vertices out over the body's neck (up to %.1f mm)" % [n, worst * 1000.0])
+	arr = arr.duplicate()
+	arr[Mesh.ARRAY_VERTEX] = v
+	return arr
+
+
 ## Close the neck seam: the bust's lower edge is ragged (the white T-shirt is cut away by colour), and
 ## between it and the body's neck cut a thin gap let the background show through as a white line. The
 ## open boundary along the bottom of the neck is pushed 4.5 cm down and in, so it tucks inside the
@@ -1083,6 +1136,8 @@ func _add_glasses(att: BoneAttachment3D, root: Node, hv: PackedVector3Array) -> 
 				eye_front = maxf(eye_front, p.z)
 			if p.z < nose.z - 0.05 and p.z > nose.z - 0.11:
 				temple = maxf(temple, absf(p.x - cx))
+	if USE_SCANNED_HEAD:
+		temple = minf(temple, 0.074) # the scan's locs stand off the temples: the arms go under them
 	var lz := maxf(eye_front + 0.008, nose.z - 0.004)
 	print("glasses: nose bridge %s, eye surface z %.3f, lens plane z %.3f, temples at +-%.3f" % [nose, eye_front, lz, temple])
 	g.transform = att.transform.affine_inverse() * Transform3D(Basis(), Vector3(cx, ey, lz))
@@ -1141,6 +1196,123 @@ func _add_glasses(att: BoneAttachment3D, root: Node, hv: PackedVector3Array) -> 
 	bridge.position = Vector3(0, 0.007, 0.001)
 	g.add_child(bridge)
 	bridge.owner = root
+
+
+## Skin for the scanned head. Albedo projected from the capture photos; normal (baked from the full
+## scan, plus stubble relief), ORM (AO / roughness: oilier T-zone, matte cheeks, rough beard and hair)
+## and a tiling pore normal from the close-up skin plate on UV2, masked off in the hair and beard.
+## Forward+ adds subsurface scattering (skin mode, reddish transmittance); the Compatibility renderer
+## (web, mobile) ignores it, so the albedo and roughness alone must already read as skin, and the
+## low rim term stands in for the soft forward scatter / peach-fuzz sheen on both.
+func _skin_material() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = load(SCAN + "_albedo.jpg")
+	m.normal_enabled = true
+	m.normal_texture = load(SCAN + "_normal.png")
+	m.normal_scale = 1.0
+	var orm: Texture2D = load(SCAN + "_orm.png")
+	m.roughness = 1.0
+	m.roughness_texture = orm
+	m.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+	m.ao_enabled = true
+	m.ao_texture = orm
+	m.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+	m.ao_light_affect = 0.25
+	m.metallic = 0.0
+	m.metallic_specular = 0.38 # skin F0 is about 2.8 %
+	m.detail_enabled = true
+	m.detail_uv_layer = BaseMaterial3D.DETAIL_UV_2
+	m.detail_blend_mode = BaseMaterial3D.BLEND_MODE_MUL
+	m.detail_mask = load(SCAN + "_detail_mask.png")
+	m.detail_normal = load(SCAN + "_detail_normal.png")
+	# the detail albedo is white (no colour change); its alpha sets how much of the pore normal is
+	# mixed over the baked normal where the mask is full
+	var w := Image.create(4, 4, false, Image.FORMAT_RGBA8)
+	w.fill(Color(1, 1, 1, 0.55))
+	m.detail_albedo = ImageTexture.create_from_image(w)
+	m.subsurf_scatter_enabled = true
+	m.subsurf_scatter_skin_mode = true
+	m.subsurf_scatter_strength = 0.4
+	m.subsurf_scatter_transmittance_enabled = true
+	m.subsurf_scatter_transmittance_color = Color(0.62, 0.16, 0.1)
+	m.subsurf_scatter_transmittance_depth = 0.06
+	m.subsurf_scatter_transmittance_boost = 0.05
+	m.rim_enabled = true
+	m.rim = 0.12
+	m.rim_tint = 0.55
+	m.cull_mode = BaseMaterial3D.CULL_BACK
+	return m
+
+
+## Eyeballs: a sphere behind each scanned eye whose front cap pokes just through the scanned eye
+## surface, so only the iris and a little sclera show inside the lids; the rest of the eye white comes
+## from the projected photo. A procedural iris texture (pupil, brown iris with radial fibres and a dark
+## limbal ring) under a clear-coat "cornea" gives the wet highlight. Parented to the head bone.
+func _add_eyes(att: BoneAttachment3D, root: Node) -> void:
+	var info = JSON.parse_string(FileAccess.get_file_as_string(SCAN + "_eyes.json"))
+	var tex := _iris_texture()
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = tex
+	mat.roughness = 0.12
+	mat.metallic_specular = 0.6
+	mat.clearcoat_enabled = true
+	mat.clearcoat = 1.0
+	mat.clearcoat_roughness = 0.03
+	mat.rim_enabled = true
+	mat.rim = 0.1
+	var sm := SphereMesh.new()
+	sm.radius = EYE_RADIUS
+	sm.height = EYE_RADIUS * 2.0
+	sm.radial_segments = 24
+	sm.rings = 12
+	var k := 0
+	for e in info["eyes"]:
+		var p := Vector3(e[0], e[1], e[2])
+		var mi := MeshInstance3D.new()
+		mi.name = "EyeR" if k == 0 else "EyeL"
+		mi.mesh = sm
+		mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		att.add_child(mi)
+		mi.owner = root
+		# the sphere's +Y pole (centre of the iris) looks forward (+Z)
+		var c := p - Vector3(0, 0, EYE_RADIUS - EYE_PROTRUDE)
+		mi.transform = att.transform.affine_inverse() * Transform3D(Basis(Vector3.RIGHT, PI / 2.0), c)
+		k += 1
+	print("eyes: centres at %s" % [info["eyes"]])
+
+
+func _iris_texture() -> ImageTexture:
+	# SphereMesh UVs: v = 0 at the +Y pole (the front of the eye here), u around it
+	var w := 256
+	var h := 128
+	var img := Image.create(w, h, true, Image.FORMAT_RGB8)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var fibres := PackedFloat32Array()
+	fibres.resize(w)
+	for x in w:
+		fibres[x] = rng.randf()
+	for y in h:
+		var ang := float(y) / float(h - 1) * 180.0 # degrees from the front pole
+		for x in w:
+			var c: Color
+			if ang < 9.0:
+				c = Color(0.01, 0.008, 0.008) # pupil
+			elif ang < 30.0:
+				var t := (ang - 9.0) / 21.0
+				var f := 0.75 + 0.5 * fibres[x] * (0.6 + 0.4 * sin(t * 9.0 + fibres[(x + 7) % w] * 6.0))
+				c = Color(0.20, 0.11, 0.055).lerp(Color(0.11, 0.06, 0.03), t) * f
+				if t > 0.82:
+					c = c.lerp(Color(0.03, 0.02, 0.015), (t - 0.82) / 0.18) # limbal ring
+				if t < 0.15:
+					c = c.lerp(Color(0.06, 0.035, 0.02), 1.0 - t / 0.15)
+			else:
+				var t2 := clampf((ang - 30.0) / 60.0, 0.0, 1.0)
+				c = Color(0.72, 0.64, 0.58).lerp(Color(0.62, 0.5, 0.45), t2) # sclera, darker toward the back
+			img.set_pixel(x, y, c)
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
 
 
 # =========================================================================== hands
