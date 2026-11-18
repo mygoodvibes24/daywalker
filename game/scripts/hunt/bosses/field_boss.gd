@@ -20,6 +20,8 @@ func _build() -> void:
 		body_radius = 0.85
 		body_height = 3.3
 		speed = 7.0
+		vein_color = Color(0.7, 0.5, 1.0)
+		vein_amount = 0.45
 		add_rig("werewolf", 1.4, null, Color(0.7, 0.5, 1.0))
 	else:
 		kind = 0
@@ -29,7 +31,10 @@ func _build() -> void:
 		body_radius = 0.7
 		body_height = 2.9
 		speed = 5.5
-		add_rig("vampire", 1.45, null, Color(1.0, 0.1, 0.4))
+		vein_color = Color(1.0, 0.15, 0.55)
+		vein_amount = 0.4
+		var r := add_rig("vampire", 1.45, null, Color(1.0, 0.1, 0.4))
+		add_plate_spikes(r)
 
 
 func _choose_attack(dist: float) -> Dictionary:
@@ -48,3 +53,10 @@ func _choose_attack(dist: float) -> Dictionary:
 func _on_half() -> void:
 	speed *= 1.25
 	windup_mult = 0.85
+
+
+## Blackened plate: spiked pauldrons on both shoulders (shared with the night-boss Blood Knight).
+func add_plate_spikes(r: Dictionary) -> void:
+	var plate := U.mat(Color(0.06, 0.06, 0.08), 0.35, 0.8)
+	add_spikes(bone_mount(r, "LeftArm"), 3, 0.32, Vector3(-0.5, 1.0, 0.0), 1.0, plate, 0.06)
+	add_spikes(bone_mount(r, "RightArm"), 3, 0.32, Vector3(0.5, 1.0, 0.0), 1.0, plate, 0.06)

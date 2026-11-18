@@ -41,11 +41,29 @@ const ARENAS := MapLayout.ARENAS
 const FINAL_ARENA := MapLayout.FINAL_ARENA
 
 # ---------------------------------------------------------------- bosses
-const BOSSES := [
-	{"script": "res://scripts/hunt/bosses/hollow_alpha.gd", "name": "THE HOLLOW ALPHA", "title": "Night 1  ·  Mother Wren's Firstborn", "hp": 1400.0, "tithe": 260, "full_moon": true},
-	{"script": "res://scripts/hunt/bosses/velvet_fang.gd", "name": "MARCUS CRANE, THE VELVET FANG", "title": "Night 2  ·  Blood Dealer of the Velvet Mile", "hp": 1500.0, "tithe": 340, "full_moon": false},
-	{"script": "res://scripts/hunt/bosses/abomination.gd", "name": "SERAPHINE'S ABOMINATION", "title": "The Final Night  ·  Stitched from Court and Pack", "hp": 2400.0, "tithe": 500, "full_moon": true},
+## Nights 1 and 2 each draw a different boss from this pool (seeded per Hunt); the Final Night
+## is always Seraphine's Abomination. tithe/hp are for the boss itself; "night_hp" scales the
+## pool bosses up on Night 2. "why" is the framing card's line (hunt_story.gd), "intro"/"death"
+## the voiced lines (data/dialogue.json), "epitaph" the results-screen line if it killed you.
+const NIGHT_BOSS_POOL := [
+	{"id": "alpha", "script": "res://scripts/hunt/bosses/hollow_alpha.gd", "name": "THE HOLLOW ALPHA", "title": "Mother Wren's Firstborn",
+		"hp": 1400.0, "tithe": 260, "full_moon": true, "intro": "boss_alpha_intro", "death": "boss_alpha_death", "intro_sfx": "wolf_howl",
+		"why": "Wren's husband was found with a bite in his throat. Her firstborn thinks it was yours, and he's bringing the Pack.",
+		"epitaph": "The Pack carried word of it home to Mother Wren before dawn."},
+	{"id": "marcus", "script": "res://scripts/hunt/bosses/velvet_fang.gd", "name": "MARCUS CRANE, THE VELVET FANG", "title": "Blood Dealer of the Velvet Mile",
+		"hp": 1500.0, "tithe": 340, "full_moon": false, "intro": "boss_marcus_intro", "death": "boss_marcus_death", "intro_sfx": "boss_blink",
+		"why": "The Court duke died on Marcus's doorstep, and Marcus sells whatever he hears. He knows who was really there.",
+		"epitaph": "Marcus told the whole Velvet Mile he was faster. For one night, he was."},
+	{"id": "knight", "script": "res://scripts/hunt/bosses/blood_knight.gd", "name": "CASSIUS VANE, LUCIEN'S BLOOD KNIGHT", "title": "The Count's Champion",
+		"hp": 1450.0, "tithe": 300, "full_moon": false, "intro": "court_taunt_3", "death": "", "intro_sfx": "vamp_hiss",
+		"why": "Lucien wants you brought before the Court, breathing. He has sent his champion to collect you.",
+		"epitaph": "Cassius Vane dragged what was left of you to the Count's table."},
 ]
+const FINAL_BOSS := {"id": "abomination", "script": "res://scripts/hunt/bosses/abomination.gd", "name": "SERAPHINE'S ABOMINATION", "title": "Stitched from Court and Pack",
+	"hp": 2400.0, "tithe": 500, "full_moon": true, "intro": "boss_seraphine_intro", "death": "boss_seraphine_death", "intro_sfx": "wolf_howl",
+	"why": "Pack blood, Court blood and yours, stitched into one body. Whoever framed you made this. End it at the Undercroft.",
+	"epitaph": "Seraphine kept what was left of you. She has plans for your blood."}
+const NIGHT2_HP_MULT := 1.1
 
 # ---------------------------------------------------------------- points of interest
 ## n = how many per Hunt. Enemy specs: {kind 0 vampire | 1 Pack civilian, n, elite?}.

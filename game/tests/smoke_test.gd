@@ -646,6 +646,42 @@ func _key(code: int, pressed: bool) -> void:
 	Input.flush_buffered_events()
 
 
+## L6: a full win. All three bosses die in turn (Night 1, Night 2, the Final Night), the Hunt is
+## won and the results screen shows, with the win epilogue.
+func _three_boss_win(m) -> bool:
+	var ok := true
+	var h = m.hunt
+	var p = m.player
+	p.max_hp = 1e9
+	p.hp = 1e9
+	_clear_enemies(m)
+	for night in 3:
+		if night < 2:
+			h.debug_skip_to("boss")
+		else:
+			await _wait_physics(int((h.T.final_dusk + 1.0) * 60.0)) # dusk -> the Undercroft Plaza
+		await _wait_physics(5)
+		var b = h.boss
+		var want: Dictionary = h.boss_def(night)
+		ok = _check("win run: night %d boss is %s" % [night + 1, want.id], b != null and is_instance_valid(b) and b.boss_id == want.id and h.state == "boss") and ok
+		if b == null or not is_instance_valid(b):
+			return false
+		p.hp = 1e9
+		b.take_hit(1e7, Vector3.FORWARD)
+		m.clear_slowmo()
+		await _wait_physics(3)
+		if night == 0:
+			await _wait_physics(int((h.T.victory + 1.0) * 60.0))
+			ok = _check("win run: dawn of Day 2 (%s)" % h.state, h.day == 1 and h.state == "explore") and ok
+		elif night == 1:
+			ok = _check("win run: the Final Night's dusk (%s)" % h.state, h.state == "final_dusk") and ok
+	await _wait_physics(int((h.T.victory + 1.5) * 60.0))
+	ok = _check("win run: 3 bosses, won, results up (%s)" % h.state, h.bosses_killed == 3 and h.won and h.state == "over" and h.results.visible) and ok
+	ok = _check("win run: results carry the win epilogue", h.summary.get("won", false) and String(h.summary.get("epilogue", "")) != "" and h.results.epilogue.visible) and ok
+	paused = false
+	return ok
+
+
 func _menu_checks(main) -> bool:
 	var ok := true
 	# Esc opens the pause menu (and frees the mouse); Esc again resumes
@@ -912,13 +948,30 @@ func _hunt_checks() -> bool:
 	p.max_hp = 1e9
 	h.debug_skip_to("shrink2")
 	await _wait_physics(int((h.T.shrink2 + 0.5) * 60.0))
-	ok = _check("the boss spawns when the Curfew closes (state %s)" % h.state, h.state == "boss" and h.boss != null and is_instance_valid(h.boss) and h.boss.boss_name == "THE HOLLOW ALPHA") and ok
+	var night1: Dictionary = h.boss_def(0)
+	ok = _check("the boss spawns when the Curfew closes (state %s, %s)" % [h.state, night1.get("id", "?")], h.state == "boss" and h.boss != null and is_instance_valid(h.boss) and h.boss.boss_name == night1.name) and ok
+	ok = _check("nights 1-2 draw two different pool bosses, the Final Night is the Abomination", h.boss_def(0).id != h.boss_def(1).id and h.boss_def(2).id == "abomination" and Cfg.NIGHT_BOSS_POOL.has(h.boss_def(1))) and ok
+	var seen_first := {}
+	for sd in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]:
+		var hh = HD.new()
+		hh.seed = sd
+		hh._pick_bosses()
+		seen_first[hh.boss_def(0).id] = true
+		hh.free()
+	ok = _check("the night-boss pool shuffles by seed (%s)" % ", ".join(seen_first.keys()), seen_first.size() >= 2) and ok
 	ok = _check("the Curfew holds as the arena wall", is_equal_approx(h.ring.radius, h.arena.radius)) and ok
-	ok = _check("boss night is night under a full moon", not m.is_day() and m.is_full_moon()) and ok
-	await _wait_physics(150) # let the Alpha finish his entrance and swing a few times
+	ok = _check("boss night is night, full moon as the boss wants", not m.is_day() and m.is_full_moon() == bool(night1.full_moon)) and ok
+	await _wait_physics(150) # let the boss finish its entrance and swing a few times
 	var boss = h.boss
+	var clip_ok := false
+	for r in boss.rigs:
+		if r.anim != null and r.anim.has_animation("boss/heavy") and r.anim.current_animation != "":
+			clip_ok = true
+	ok = _check("the boss is clip-driven (*_anim body + boss clip library, playing %s)" % (boss.rigs[0].anim.current_animation if boss.rigs[0].anim != null else "none"), clip_ok) and ok
+	ok = _check("the boss has its silhouette and veins", boss.overlay is ShaderMaterial and float(boss.overlay.get_shader_parameter("vein_amount")) > 0.0) and ok
+	ok = _check("tonight's framing card names the boss", h.story != null and h.story.card_text().contains(night1.name)) and ok
 	boss.take_hit(boss.max_hp * 0.6, Vector3.FORWARD)
-	ok = _check("the Alpha frenzies below half", boss.enraged) and ok
+	ok = _check("the boss enrages below half", boss.enraged) and ok
 	boss.take_hit(1e6, Vector3.FORWARD)
 	await _wait_physics(3)
 	ok = _check("killing the boss counts", h.bosses_killed == 1 and boss.dead) and ok
@@ -953,6 +1006,7 @@ func _hunt_checks() -> bool:
 	ok = _check("persistent charms survive (loadout on disk)", Meta.loadout_charms()[0].get("id", "") == "john_root") and ok
 	var m2 = await _start_hunt()
 	ok = _check("the next Hunt wears them again, fresh run", m2.inventory.charms[0].get("id", "") == "john_root" and m2.progression.level == 1 and m2.hunt.seed == 4242) and ok
+	ok = await _three_boss_win(m2) and ok
 	m2.queue_free()
 	await process_frame
 	HD.requested = false
