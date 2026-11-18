@@ -1337,6 +1337,15 @@ func _place_camera(time: float) -> void:
 	var fov: float = lerpf(SHOT_A[2], SHOT_B[2], k)
 	var wob := Vector3(sin(time * 0.71) * 0.012 + sin(time * 1.93) * 0.004,
 		sin(time * 0.53 + 1.0) * 0.009 + sin(time * 2.3) * 0.003, 0.0)
+	# narrower than 16:9 (4:3 tablets, split screens): hold the 16:9 horizontal view instead of
+	# the vertical one, so Sol at the bench and Nia by the fridges stay in frame (R2-A, U2)
+	var vs := get_viewport().get_visible_rect().size
+	var aspect := vs.x / maxf(vs.y, 1.0)
+	if aspect < 16.0 / 9.0 - 0.01:
+		camera.keep_aspect = Camera3D.KEEP_WIDTH
+		fov = rad_to_deg(2.0 * atan(tan(deg_to_rad(fov) * 0.5) * 16.0 / 9.0))
+	else:
+		camera.keep_aspect = Camera3D.KEEP_HEIGHT
 	camera.fov = fov
 	camera.look_at_from_position(pos + wob, tgt + wob * 0.4 + Vector3(sin(time * 0.37) * 0.02, 0, 0), Vector3.UP)
 

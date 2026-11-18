@@ -43,6 +43,33 @@ void fragment() {
 }
 """
 
+## The web tier's version (R2-A, W5): no screen-texture read, so no full-screen copy and
+## no "GPU stall due to ReadPixels" each frame. A plain alpha-blended overlay that darkens
+## the edges (vignette) and adds 24 fps grain; the split-tone lives in the Environment grade.
+const OVERLAY_SHADER := """
+shader_type canvas_item;
+render_mode blend_mix;
+
+uniform float grain = 0.035;
+uniform float vignette = 0.32;
+
+float hash(vec2 p) {
+	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
+}
+
+void fragment() {
+	vec2 d = SCREEN_UV - 0.5;
+	float v = 1.0 - smoothstep(0.95, 0.25, length(d * vec2(1.0, 1.25)));
+	float t = floor(TIME * 24.0);
+	float n = hash(FRAGCOORD.xy + vec2(t * 17.0, t * 31.0));
+	// dark speckles plus the vignette, as one black layer of varying alpha
+	float a = clamp(v * vignette + (n - 0.5) * grain * 2.0, 0.0, 1.0);
+	COLOR = vec4(0.0, 0.0, 0.0, a);
+}
+"""
+
 var rect: ColorRect
 var mat: ShaderMaterial
 
@@ -64,8 +91,16 @@ func _ready() -> void:
 	add_child(rect)
 
 
-## Cinematic tier gets the full look; the web tier a lighter one (and cheaper aberration).
+## Cinematic tier gets the full look; the web tier the cheap overlay above.
 func configure(cinematic: bool) -> void:
+	if not cinematic and mat.shader.code != OVERLAY_SHADER:
+		var sh := Shader.new()
+		sh.code = OVERLAY_SHADER
+		mat.shader = sh
+	if not cinematic:
+		mat.set_shader_parameter("grain", 0.035)
+		mat.set_shader_parameter("vignette", 0.32)
+		return
 	mat.set_shader_parameter("grain", 0.05 if cinematic else 0.035)
 	mat.set_shader_parameter("vignette", 0.4 if cinematic else 0.32)
 	mat.set_shader_parameter("aberration", 0.003 if cinematic else 0.0015)
