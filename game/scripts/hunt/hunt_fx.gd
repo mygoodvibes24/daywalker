@@ -114,10 +114,15 @@ static func _mi(parent: Node, mesh: Mesh, mat: Material) -> MeshInstance3D:
 
 
 ## A ground circle telegraph: outline + a fill that grows over `seconds`. Frees itself after.
+## TERRAIN HOOK: ground height (map/terrain.gd; 0 on the city plates).
+static func _gy(p: Vector3) -> float:
+	return preload("res://scripts/map/terrain.gd").height_at(p.x, p.z)
+
+
 static func circle_telegraph(parent: Node, pos: Vector3, radius: float, seconds: float, c := Color(1.0, 0.1, 0.05)) -> Node3D:
 	var root := Node3D.new()
 	parent.add_child(root)
-	root.global_position = Vector3(pos.x, 0.12, pos.z)
+	root.global_position = Vector3(pos.x, _gy(pos) + 0.12, pos.z) # TERRAIN HOOK
 	var edge := _mi(root, ring_mesh(), flat(Color(c.r, c.g, c.b, 0.9)))
 	edge.scale = Vector3(radius, 1.0, radius)
 	var fill := _mi(root, disc_mesh(), flat(Color(c.r * 0.45, c.g * 0.45, c.b * 0.45, 0.28)))
@@ -132,7 +137,7 @@ static func circle_telegraph(parent: Node, pos: Vector3, radius: float, seconds:
 static func line_telegraph(parent: Node, from: Vector3, dir: Vector3, length: float, width: float, seconds: float, c := Color(1.0, 0.1, 0.1)) -> Node3D:
 	var root := Node3D.new()
 	parent.add_child(root)
-	root.global_position = Vector3(from.x, 0.13, from.z)
+	root.global_position = Vector3(from.x, _gy(from) + 0.13, from.z) # TERRAIN HOOK
 	root.rotation.y = atan2(dir.x, dir.z)
 	var bar := _mi(root, box_mesh(), flat(Color(c.r, c.g, c.b, 0.55)))
 	bar.scale = Vector3(width, 0.02, 0.1)
@@ -149,7 +154,7 @@ static func line_telegraph(parent: Node, from: Vector3, dir: Vector3, length: fl
 static func shockwave(parent: Node, pos: Vector3, radius: float, c := Color(1.0, 0.25, 0.1), seconds := 0.45) -> void:
 	var root := Node3D.new()
 	parent.add_child(root)
-	root.global_position = Vector3(pos.x, 0.15, pos.z)
+	root.global_position = Vector3(pos.x, _gy(pos) + 0.15, pos.z) # TERRAIN HOOK
 	var r := _mi(root, ring_mesh(), flat(Color(c.r, c.g, c.b, 0.9)))
 	r.scale = Vector3(0.3, 1.0, 0.3)
 	var tw := root.create_tween()

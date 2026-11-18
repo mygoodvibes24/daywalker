@@ -208,7 +208,7 @@ func debug_view_camp() -> void:
 		to = NavigationServer3D.map_get_closest_point(nav_map, to)
 	var look := Vector3(c.x - to.x, 0.0, c.z - to.z).normalized()
 	var yaw := atan2(-look.x, -look.z)
-	p.global_position = Vector3(to.x, 0.2, to.z)
+	p.global_position = Vector3(to.x, main.city.height_at(to.x, to.z) + 0.2, to.z) # TERRAIN HOOK
 	p.velocity = Vector3.ZERO
 	p.cam_yaw = yaw
 	p.facing = atan2(look.x, look.z)
@@ -542,6 +542,7 @@ func summon(kind: int, pos: Vector3) -> void:
 	e.kind = kind
 	var a := rng.randf() * TAU
 	e.position = pos + Vector3(cos(a) * 3.5, 0.1, sin(a) * 3.5)
+	e.position.y = maxf(e.position.y, main.city.height_at(e.position.x, e.position.z) + 0.1) # TERRAIN HOOK
 	main.enemies_root.add_child(e)
 	summons.append(e)
 	HFx.puff(main, e.position + Vector3(0, 1.0, 0), Color(0.6, 0.05, 0.05), 8, 0.2, 1.5)

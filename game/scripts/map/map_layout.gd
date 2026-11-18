@@ -60,6 +60,67 @@ const LANDMARKS := [
 	{"id": "opera", "name": "Le Velours Opera", "pos": Vector3(180, 0, 60), "icon": "dome", "height": 34.0},
 ]
 
+# ---------------------------------------------------------------- the wilds and the terrain
+## Hollow Pines' rutted roads (polylines), its clearings and the bayou's islands and boardwalks.
+## wilds.gd builds on them; terrain.gd levels the clearings, cuts the roads into the hills and
+## raises the islands and boardwalk causeways out of the swamp.
+const PINE_ROADS := [
+	[Vector3(-40, 0, -62), Vector3(-40, 0, -118), Vector3(-30, 0, -150), Vector3(-38, 0, -182), Vector3(-40, 0, -222)],
+	[Vector3(-40, 0, -100), Vector3(-92, 0, -100)],
+	[Vector3(0, 0, -62), Vector3(8, 0, -100), Vector3(10, 0, -140), Vector3(22, 0, -172), Vector3(25, 0, -185)],
+	[Vector3(40, 0, -62), Vector3(46, 0, -100), Vector3(75, 0, -128), Vector3(75, 0, -150), Vector3(108, 0, -150), Vector3(140, 0, -150)],
+	[Vector3(-30, 0, -150), Vector3(10, 0, -140)],
+	[Vector3(75, 0, -150), Vector3(98, 0, -180), Vector3(100, 0, -205)],
+	[Vector3(25, 0, -185), Vector3(-38, 0, -182)],
+	[Vector3(80, 0, -62), Vector3(95, 0, -90), Vector3(75, 0, -128)],
+]
+## [centre, radius, kind]. Trees keep out; POIs and the arena use them.
+const PINE_CLEARINGS := [
+	[Vector3(-30, 0, -150), 24.0, "trailers"],
+	[Vector3(10, 0, -122), 19.0, "arena"],
+	[Vector3(75, 0, -150), 22.0, "logging"],
+	[Vector3(25, 0, -190), 13.0, "tower"],
+	[Vector3(100, 0, -205), 11.0, "camp"],
+	[Vector3(-56, 0, -196), 10.0, "camp"],
+	[Vector3(46, 0, -96), 9.0, "camp"],
+	[Vector3(-62, 0, -122), 9.0, "camp"],
+	[Vector3(-8, 0, -176), 9.0, "camp"],
+	[Vector3(-40, 0, -214), 7.0, "trail"],
+	[Vector3(100, 0, -108), 9.0, "camp"],
+]
+
+const BAYOU_ISLANDS := [
+	[Vector3(185, 0, -132), 21.0, "lawn"],
+	[Vector3(185, 0, -170), 17.0, "house"],
+	[Vector3(150, 0, -92), 10.0, "camp"],
+	[Vector3(207, 0, -80), 9.0, "camp"],
+	[Vector3(152, 0, -202), 11.0, "camp"],
+	[Vector3(207, 0, -206), 10.0, "camp"],
+	[Vector3(142, 0, -150), 9.0, "camp"],
+	[Vector3(212, 0, -112), 7.0, "landing"],
+	[Vector3(130, 0, -125), 7.0, "isle"],
+	[Vector3(168, 0, -210), 6.0, "isle"],
+]
+const BOARDWALKS := [
+	[Vector3(212, 0, -112), Vector3(198, 0, -122), Vector3(185, 0, -132)],
+	[Vector3(185, 0, -132), Vector3(160, 0, -110), Vector3(150, 0, -92), Vector3(140, 0, -66)],
+	[Vector3(185, 0, -132), Vector3(155, 0, -145), Vector3(142, 0, -150), Vector3(125, 0, -150)],
+	[Vector3(185, 0, -170), Vector3(170, 0, -195), Vector3(152, 0, -202)],
+	[Vector3(185, 0, -170), Vector3(200, 0, -190), Vector3(207, 0, -206)],
+	[Vector3(185, 0, -132), Vector3(200, 0, -100), Vector3(207, 0, -80)],
+]
+
+
+## The pine-ringed lake in Hollow Pines: centre, radius at the waterline, water level (m).
+const LAKE := {"pos": Vector3(64, 0, -207), "radius": 17.0, "level": 3.2}
+const BAYOU_WATER := -0.15 # the swamp's surface; its mud bed lies ~0.8 m below (wadeable)
+const RIVER_WATER := -1.6 # the river round the west and south (docks.gd's quay walls)
+## The paved city plates (asphalt and quay concrete), held level at y = 0: the Old Quarter, the
+## Velvet Mile, the cemetery and the docks. The terrain blends into them over PLATE_BLEND metres.
+const PLATES := [Rect2(-80.0, -72.0, 320.0, 294.0), Rect2(-205.0, -240.0, 125.0, 462.0)]
+const PLATE_BLEND := 26.0
+
+
 # ---------------------------------------------------------------- the Hunt
 ## The Descent: around the map edge, across the districts. type: subway | manhole |
 ## rooftop | ladder (up a quay ladder out of the river) | trail (out of the trees) | boat.

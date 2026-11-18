@@ -195,7 +195,7 @@ func _update_motes(delta: float, p) -> void:
 			m.vel.y -= 9.0 * delta
 			m.vel.x *= 1.0 - minf(3.0 * delta, 1.0)
 			m.vel.z *= 1.0 - minf(3.0 * delta, 1.0)
-			var floor_y := 0.7 + sin(clock * 3.0 + m.phase) * 0.12
+			var floor_y := _ground(pos) + 0.7 + sin(clock * 3.0 + m.phase) * 0.12 # TERRAIN HOOK
 			if pos.y < floor_y and m.vel.y < 0.0:
 				m.vel.y = (floor_y - pos.y) * 4.0
 		node.global_position = pos + m.vel * delta
@@ -207,12 +207,17 @@ func _update_motes(delta: float, p) -> void:
 		Audio.play("tithe_collect", -8.0, 0.15) # AUDIO HOOK
 
 
+## TERRAIN HOOK: the ground height under p (the city plates are level at 0).
+func _ground(p: Vector3) -> float:
+	return main.city.height_at(p.x, p.z) if main != null and main.city != null and main.city.has_method("height_at") else 0.0
+
+
 # ---------------------------------------------------------------- ground items
 func spawn_item(inst: Dictionary, pos: Vector3) -> Dictionary:
 	var root := Node3D.new()
 	root.name = "Drop_" + str(inst.id)
 	add_child(root)
-	root.global_position = Vector3(pos.x, 0.1, pos.z)
+	root.global_position = Vector3(pos.x, _ground(pos) + 0.1, pos.z) # TERRAIN HOOK
 	var r := int(inst.get("r", 0))
 	_beam(root, ItemDB.RARITY_COLORS[r], ItemDB.RARITY_ACCENT[r] if r == ItemDB.LEGENDARY else ItemDB.RARITY_COLORS[r], r == ItemDB.LEGENDARY)
 	var spin := Node3D.new()

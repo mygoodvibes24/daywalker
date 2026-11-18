@@ -17,6 +17,7 @@ const Docks = preload("res://scripts/map/docks.gd")
 const Velvet = preload("res://scripts/map/velvet.gd")
 const Wilds = preload("res://scripts/map/wilds.gd")
 const Cemetery = preload("res://scripts/map/cemetery.gd")
+const Terrain = preload("res://scripts/map/terrain.gd")
 const SEED := 1859
 const ATLAS_COLS := 4.0
 const ATLAS_ROWS := 5.0
@@ -1285,6 +1286,7 @@ func _make_materials() -> void:
 # ================================================================ build
 func build() -> void:
 	rng.seed = SEED
+	Terrain.build_nodes(self) # the ground: heightmap collision, terrain chunks, water
 	_make_materials()
 	collider_root = Node3D.new()
 	collider_root.name = "Colliders"
@@ -1329,6 +1331,24 @@ func build() -> void:
 	_flush()
 	_build_walls()
 	_collect_grid_spots()
+	_settle_on_terrain()
+
+
+## Ground height at (x, z): the one API everything placed on the map uses (terrain.gd).
+## The paved plates (the Quarter, the Mile, the cemetery, the docks) are level at 0.
+func height_at(x: float, z: float) -> float:
+	return Terrain.height_at(x, z)
+
+
+## Spawn points, POI anchors and loot caches collected flat by the builders sit on the ground.
+func _settle_on_terrain() -> void:
+	for k in road_points.size():
+		var p := road_points[k]
+		road_points[k] = Vector3(p.x, height_at(p.x, p.z), p.z)
+	for a in poi_anchors:
+		a.pos = Vector3(a.pos.x, height_at(a.pos.x, a.pos.z), a.pos.z)
+	for s in cache_spots:
+		s.pos = Vector3(s.pos.x, height_at(s.pos.x, s.pos.z) + 0.1, s.pos.z)
 
 
 ## Invisible walls round the walkable area: the river (west, south), deep bayou water,
@@ -1505,17 +1525,9 @@ func _bd(mat: String, x: float, z: float) -> Batch:
 
 # ---------------------------------------------------------------- ground
 func _build_ground() -> void:
-	# Collision: one big slab under the whole map. Visual: wet asphalt under the street grids
-	# (with a hole for the Undercroft shaft); the districts lay their own ground over the rest.
-	var ground := StaticBody3D.new()
-	ground.name = "Ground"
-	add_child(ground)
-	var gcol := CollisionShape3D.new()
-	var gshape := BoxShape3D.new()
-	gshape.size = Vector3(bounds.size.x, 1, bounds.size.y)
-	gcol.shape = gshape
-	gcol.position = Vector3(bounds.get_center().x, -0.5, bounds.get_center().y)
-	ground.add_child(gcol)
+	# Collision: the terrain's heightmap (terrain.gd; level at 0 under the city plates). Visual:
+	# wet asphalt under the street grids (with a hole for the Undercroft shaft); the districts
+	# lay their own ground over the rest, the terrain shader paints the wilds.
 	var bt := Batch.new()
 	var x0 := -80.0
 	var z0 := -72.0
@@ -2837,7 +2849,8 @@ func _build_streets() -> void:
 						_strip(setts, c0 + across * (k + 0.25) + Vector3(0, 0.003, 0), c1 + across * (k + 0.25) + Vector3(0, 0.003, 0), 0.5, Color(1.0, 0.98, 0.94))
 						k += 1.0
 					var stop_side := -1.0 if end == 0.0 else 1.0
-					_strip(paint, e0 + along * sgn * 6.4 + across * stop_side * 0.2, e0 + along * sgn * 6.4 + across * stop_side * (ROAD_HALF - 0.2), 0.0, white, 0.3)
+					# worn stop line (a clean white bar read as a floating quad in daylight)
+					_strip(paint, e0 + along * sgn * 6.4 + across * stop_side * 0.2, e0 + along * sgn * 6.4 + across * stop_side * (ROAD_HALF - 0.2), 0.0, white * Color(0.55, 0.55, 0.55), 0.22)
 				# manhole, sometimes steaming
 				if rng.randf() < 0.55:
 					var mp := Vector3(px, 0.0, pz) + along * rng.randf_range(-2.0, 2.0) + across * rng.randf_range(-1.5, 1.5)
@@ -3364,12 +3377,8 @@ func _make_map_materials() -> void:
 	M["earth"].set_shader_parameter("damp_roughness", 0.7)
 	M["dock"] = WetMats._make(Color(0.1, 0.098, 0.095), 0.3, 0.7) # quay concrete
 	# open water: near-black with a weak, glossy sheen (a full mirror reads as snow at grazing angles)
-	for k in ["water", "swamp"]:
-		var wm := StandardMaterial3D.new()
-		wm.albedo_color = Color(0.004, 0.006, 0.008) if k == "water" else Color(0.006, 0.012, 0.009)
-		wm.roughness = 0.12 if k == "water" else 0.3
-		wm.metallic_specular = 0.12 if k == "water" else 0.06
-		M[k] = wm
+	M["water"] = Terrain.river_mat # the river: the terrain's water shader (moving normals, fresnel)
+	M["swamp"] = Terrain.water_mat
 	M["corrugated"] = _surface_mat(_corrugated_textures(), 2.0, 0.9)
 	M["wood"] = _surface_mat(_plank_textures(), 2.0)
 	M["pine"] = _surface_mat(_needle_textures(), 2.0)

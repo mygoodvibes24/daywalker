@@ -240,8 +240,13 @@ static func deploy_point(type: String, root: Node3D, face: Vector3) -> Dictionar
 				_p(r, U.sphere(0.22), m.subway, Vector3(s * 1.35, 2.7, -0.9))
 				_col(r, Vector3(0.1, 1.0, 3.4), Vector3(s * 1.35, 0.5, -2.6))
 			_col(r, Vector3(2.6, 1.0, 0.1), Vector3(0, 0.5, -4.3))
-			_p(r, U.box(Vector3(2.8, 0.5, 0.06)), U.glow(Color(0.1, 0.5, 0.25), 1.6), Vector3(0, 2.3, -0.9))
-			label(r, "VESPER LINE", Color(0.7, 1.0, 0.8), 2.3).billboard = BaseMaterial3D.BILLBOARD_DISABLED
+			# an enamel sign board (it was a solid glowing slab: the bright green rectangle at the
+			# station spawns); only the lettering and a thin lit edge glow now
+			_p(r, U.box(Vector3(2.8, 0.5, 0.06)), U.mat(Color(0.02, 0.07, 0.045), 0.5, 0.2), Vector3(0, 2.3, -0.9))
+			_p(r, U.box(Vector3(2.8, 0.03, 0.07)), U.glow(Color(0.1, 0.5, 0.25), 0.8), Vector3(0, 2.04, -0.9))
+			var sign_lbl := label(r, "VESPER LINE", Color(0.6, 0.95, 0.75), 2.3)
+			sign_lbl.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+			sign_lbl.position.z = -0.86
 		"manhole":
 			_p(root, U.cyl(0.55, 0.55, 0.03), U.mat(Color(0, 0, 0), 1.0), Vector3(0, 0.02, 0))
 			var cover := _p(root, U.cyl(0.6, 0.6, 0.06), m.iron, Vector3(0.9, 0.04, 0.4), Vector3(0, 0, 0.0), Vector3.ONE, true)

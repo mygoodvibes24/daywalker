@@ -252,12 +252,15 @@ func _bake_navigation() -> void:
 	nm.agent_height = 1.75
 	nm.agent_max_climb = 0.25
 	var pr: Rect2 = city.play_rect # MAP HOOK: bake the whole large map
-	nm.filter_baking_aabb = AABB(Vector3(pr.position.x - 1.0, -1.0, pr.position.y - 1.0), Vector3(pr.size.x + 2.0, 4.0, pr.size.y + 2.0))
+	nm.filter_baking_aabb = AABB(Vector3(pr.position.x - 1.0, -6.0, pr.position.y - 1.0), Vector3(pr.size.x + 2.0, 40.0, pr.size.y + 2.0)) # TERRAIN HOOK: the hills and the lake bed
+	nm.agent_max_slope = 38.0 # TERRAIN HOOK: walkable hills, the steep faces stay out
 	nm.cell_size = 0.3 # MAP HOOK: coarser cells keep the ~430 m bake fast (the map uses the same size)
 	NavigationServer3D.map_set_cell_size(get_world_3d().navigation_map, nm.cell_size) # MAP HOOK
 	var src := NavigationMeshSourceGeometryData3D.new()
+	var t0 := Time.get_ticks_msec()
 	NavigationServer3D.parse_source_geometry_data(nm, src, self)
 	NavigationServer3D.bake_from_source_geometry_data(nm, src)
+	print("navmesh: %d polys in %d ms" % [nm.get_polygon_count(), Time.get_ticks_msec() - t0]) # TERRAIN HOOK
 	nav_region = NavigationRegion3D.new()
 	nav_region.navigation_mesh = nm
 	add_child(nav_region)
