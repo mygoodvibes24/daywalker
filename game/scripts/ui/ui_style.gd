@@ -13,14 +13,37 @@ const TEXT_DIM := Color(0.62, 0.57, 0.54)
 static var _serif: Font
 
 
-## A serif system font (Georgia, Times, DejaVu Serif...) or the default font where there is none (web).
+## The house serif: Cormorant Garamond (OFL, bundled in assets/ui/fonts so the web build has
+## it too; browsers expose no system fonts to Godot). Falls back to a system serif.
+const SERIF_PATH := "res://assets/ui/fonts/CormorantGaramond-SemiBold.ttf"
+const SERIF_BOLD_PATH := "res://assets/ui/fonts/CormorantGaramond-Bold.ttf"
+static var _serif_bold: Font
+
+
 static func serif() -> Font:
 	if _serif == null:
-		var f := SystemFont.new()
-		f.font_names = PackedStringArray(["Cormorant Garamond", "Georgia", "Times New Roman", "Liberation Serif", "DejaVu Serif", "Noto Serif", "serif"])
-		f.font_weight = 600
-		_serif = f
+		_serif = _bundled(SERIF_PATH, 600)
 	return _serif
+
+
+## The heavier cut, for the big title lockups.
+static func serif_bold() -> Font:
+	if _serif_bold == null:
+		_serif_bold = _bundled(SERIF_BOLD_PATH, 700)
+	return _serif_bold
+
+
+static func _bundled(path: String, weight: int) -> Font:
+	var sys := SystemFont.new()
+	sys.font_names = PackedStringArray(["Cormorant Garamond", "Georgia", "Times New Roman", "Liberation Serif", "DejaVu Serif", "Noto Serif", "serif"])
+	sys.font_weight = weight
+	var f: Font = load(path) as Font if ResourceLoader.exists(path) else null
+	if f == null:
+		return sys
+	var fv := FontVariation.new() # the bundled cut, with the system serif behind it for odd glyphs
+	fv.base_font = f
+	fv.fallbacks = [sys]
+	return fv
 
 
 static func box(bg: Color, border: Color, width := 1, radius := 2, pad := 0) -> StyleBoxFlat:

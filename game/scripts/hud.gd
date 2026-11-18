@@ -27,6 +27,7 @@ var damage_t := 0.0
 var help_t := 20.0
 var started := false
 var using_pad := false
+var debug_label: Label # ?debug / --debug: camera, player and draw-call overlay (R2-A, W1)
 const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)\nRMB / Q  Blood Dash   LMB / J  blade combo\nE  bite a staggered enemy (red orb) / take loot   F  drink at the Undercroft\nTAB / I  the Coat (inventory)   1 / 2  quick-use   T  rain   ESC  pause"
 const PAD_HELP := "L-stick move   R-stick camera   LT / L3 sprint   A jump (x2)\nB / RB  Blood Dash   X / RT  blade combo\nY  bite a staggered enemy (red orb) / take loot   LB  drink at the Undercroft\nSTART  the Coat (restart after death)   LB / R3  quick-use   BACK  rain (pause from the Coat)"
 
@@ -80,6 +81,11 @@ func _ready() -> void:
 	help_label = _label(KEYS_HELP, 15, Color(0.8, 0.8, 0.8))
 	root.add_child(help_label)
 	_pin(help_label, 0.0, 1.0, Rect2(24, -110, 760, 100))
+
+	if "--debug" in OS.get_cmdline_user_args() or (main != null and main._url_flag("debug")):
+		debug_label = _label("", 13, Color(0.6, 1.0, 0.6))
+		_pin(debug_label, 0.0, 0.0, Rect2(24, 230, 700, 140))
+		root.add_child(debug_label)
 
 	start_overlay = _build_start()
 	over_panel = ColorRect.new()
@@ -263,6 +269,41 @@ func _process(delta: float) -> void:
 	var low := clampf(1.0 - p.hp / 35.0, 0.0, 1.0) * 0.18
 	vignette.color.a = maxf(damage_t * 0.8, low)
 	frenzy_tint.color.a = lerpf(frenzy_tint.color.a, 0.22 if p.frenzy_t > 0.0 else 0.0, 6.0 * real_dt)
+	if debug_label != null:
+		_update_debug()
+	_beacon()
 	if started:
 		help_t -= real_dt
 		help_label.modulate.a = clampf(help_t / 2.0, 0.0, 1.0)
+
+
+func _update_debug() -> void:
+	var cam := get_viewport().get_camera_3d()
+	var p = main.player
+	var t := "fps %d   draws %d   prims %dk   objs %d\n" % [Engine.get_frames_per_second(),
+		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
+		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME) / 1000,
+		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME)]
+	if cam != null:
+		t += "cam %s  %s  far %.0f\n" % [cam.get_path(), str(cam.global_position.snapped(Vector3.ONE * 0.1)), cam.far]
+	else:
+		t += "cam: none\n"
+	t += "sol %s  vel %s" % [str(p.global_position.snapped(Vector3.ONE * 0.1)), str(p.velocity.snapped(Vector3.ONE * 0.1))]
+	debug_label.text = t
+
+
+## Web: tell the page what the game is doing (window.dwState) so CI can wait for the Hunt.
+var _beacon_state := ""
+func _beacon() -> void:
+	if not OS.has_feature("web"):
+		return
+	var st := "title"
+	if started:
+		st = "play"
+		var h = main.get("hunt")
+		if h != null:
+			st = "deploy" if h.state in ["idle", "deploy"] else ("over" if h.state == "over" else "hunt")
+	if st != _beacon_state:
+		_beacon_state = st
+		JavaScriptBridge.eval("window.dwState = '%s'" % st)
+
