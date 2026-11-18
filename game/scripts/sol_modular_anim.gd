@@ -30,6 +30,10 @@ var in_combat := false
 var _slot := 1
 var _slot_left := [0.0, 0.0] # seconds of the move left in each slot
 var _has_stance := false
+var _has_fidget := false
+const FIDGET_AFTER := 12.0 # seconds standing still (out of combat) before the look-around fidget
+var still_t := 0.0
+var fidgeting := false
 
 
 func setup(model: Node) -> bool:
@@ -69,6 +73,18 @@ func setup(model: Node) -> bool:
 	bt.connect_node("air", 0, "combat")
 	bt.connect_node("air", 1, "jump_seek")
 	var prev := "air"
+	# the old look-around idle as a rare fidget after FIDGET_AFTER s standing still (round 2: the calm
+	# Idle_02 breathing stance is the idle now)
+	_has_fidget = lib.has_animation("idle_look")
+	if _has_fidget:
+		bt.add_node("fidget_clip", _clip("idle_look"))
+		var fo := AnimationNodeOneShot.new()
+		fo.fadein_time = 0.6
+		fo.fadeout_time = 0.7
+		bt.add_node("fidget", fo)
+		bt.connect_node("fidget", 0, prev)
+		bt.connect_node("fidget", 1, "fidget_clip")
+		prev = "fidget"
 	for s in ["actA", "actB"]:
 		bt.add_node(s + "_clip", _clip("slash"))
 		bt.add_node(s + "_seek", AnimationNodeTimeSeek.new())
@@ -224,6 +240,20 @@ func update(delta: float, s: Dictionary) -> void:
 	var want := (1.0 - clampf(speed / 3.0, 0.0, 1.0)) if (in_combat and _has_stance) else 0.0
 	combat = move_toward(combat, want, delta * 3.0)
 	tree.set("parameters/combat/blend_amount", combat)
+	# the long-idle fidget: only standing still, out of combat, no move playing
+	if _has_fidget:
+		var calm := speed < 0.2 and not in_air and not in_combat and not move_playing() and not dead
+		if calm:
+			still_t += delta
+			if still_t >= FIDGET_AFTER:
+				tree.set("parameters/fidget/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+				fidgeting = true
+				still_t = -lib.get_animation("idle_look").length # the next one waits a full spell again
+		else:
+			still_t = 0.0
+			if fidgeting:
+				tree.set("parameters/fidget/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FADE_OUT)
+				fidgeting = false
 	# a move runs out: fade it back into locomotion
 	for i in 2:
 		if _slot_left[i] > 0.0:

@@ -51,6 +51,10 @@ const CUTS := {
 	"quick_slash": [["quick_slash", 0.1, 1.25, false]], # Right_Hand_Sword_Slash: strike at 0.57 s
 }
 const LOOPED := ["idle", "run", "sprint", "stance"]
+## Sol's standing idle: Idle_02 (a calm, grounded breathing stance, 1.9 s loop) replaced the rig's own
+## look-around idle in round 2. The old one stays in the library as "idle_look", played only as an
+## occasional long-idle fidget (scripts/sol_modular_anim.gd).
+const IDLE_CLIP := "idle02"
 const SWORDS := {
 	# name: [source, overall length (m)]
 	"silver": [D + "sol_mod_sword_silver.glb", 1.05],
@@ -763,6 +767,14 @@ func _build_coat() -> Array:
 	for b in skel.get_bone_count():
 		skin.add_named_bind(skel.get_bone_name(b), bone_rest_g[b].affine_inverse())
 	var mat := _material(D + "sol_mod_coat_src.glb")
+	# matte black leather, not the generated metal map (it read silver under the rim light); player.gd
+	# applies the same at runtime (Player.matte_coat)
+	mat.metallic = 0.0
+	mat.metallic_texture = null
+	mat.metallic_specular = 0.3
+	mat.roughness = 0.62
+	mat.roughness_texture = null
+	mat.albedo_color = Color(0.35, 0.35, 0.336)
 	return [_mesh(arr, mat, true), skin, v]
 
 
@@ -1581,6 +1593,10 @@ func _clip_sources() -> Dictionary:
 	for f: String in files:
 		if f.begins_with("sol_mod_anim_") and f.ends_with(".glb"):
 			out[f.trim_prefix("sol_mod_anim_").trim_suffix(".glb")] = D + f
+	if out.has(IDLE_CLIP):
+		out["idle_look"] = RIG # the old look-around idle: a long-idle fidget now
+		out["idle"] = out[IDLE_CLIP]
+		out.erase(IDLE_CLIP)
 	return out
 
 
