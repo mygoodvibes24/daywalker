@@ -182,7 +182,7 @@ func _initialize() -> void:
 	if USE_SCANNED_HEAD:
 		# the face-scan head (docs/face_scans/README.md): already in skeleton space, cut at the collar
 		head_arr = _load_arrays(SCAN + ".glb", Transform3D.IDENTITY)
-		head_arr = _extend_neck(head_arr)
+		head_arr = _extend_neck(_cover_body_neck(head_arr))
 		var uv: PackedVector2Array = head_arr[Mesh.ARRAY_TEX_UV]
 		var uv2 := PackedVector2Array()
 		uv2.resize(uv.size())
@@ -1043,6 +1043,36 @@ func _skin_head(arr: Array) -> Skin:
 	for b in skel.get_bone_count():
 		skin.add_named_bind(skel.get_bone_name(b), bone_rest_g[b].affine_inverse())
 	return skin
+
+
+## The scanned neck is placed by the eyes, not fitted to the body: where the body's own neck (kept up
+## to NECK_CUT) would show outside it, the scan's neck is pushed out to just cover it, fading to
+## nothing by the jaw line, so no strip of the body's skin shows between beard and collar.
+func _cover_body_neck(arr: Array) -> Array:
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX].duplicate()
+	var n := 0
+	var worst := 0.0
+	for i in v.size():
+		var p := v[i]
+		var t := 1.0 - smoothstep(NECK_CUT + 0.0, NECK_CUT + 0.045, p.y)
+		if t <= 0.0:
+			continue
+		# the body surface under this point: the nearest body vertex at or below the neck cut
+		var q := Vector3(p.x, minf(p.y, NECK_CUT - 0.004), p.z)
+		var bi := _nearest_body(q)
+		if bi < 0:
+			continue
+		var bn := body_nrm[bi]
+		var d := (p - body_pts[bi]).dot(bn)
+		if d < 0.003:
+			var push := minf(0.003 - d, 0.012) * t
+			v[i] = p + bn * push
+			worst = maxf(worst, push)
+			n += 1
+	print("head: pushed %d neck vertices out over the body's neck (up to %.1f mm)" % [n, worst * 1000.0])
+	arr = arr.duplicate()
+	arr[Mesh.ARRAY_VERTEX] = v
+	return arr
 
 
 ## Close the neck seam: the bust's lower edge is ragged (the white T-shirt is cut away by colour), and

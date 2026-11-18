@@ -546,6 +546,28 @@ def main(cfg_path):
         rest = idx[~got]
         albedo_c[rest] = np.median(albedo_c[seen], 0)
 
+    # The neck under the jaw is only ever seen at grazing angles (and the photos' necks are lit
+    # differently), so its tone is matched to the cheeks: a gain fading in below the chin.
+    relc = (Pc - eyes.mean(0)) / ipd
+    lumc = albedo_c @ np.array([0.2126, 0.7152, 0.0722])
+    cheek = (relc[:, 1] > -1.3) & (relc[:, 1] < -0.4) & (np.abs(relc[:, 0]) > 0.55) & (np.abs(relc[:, 0]) < 1.1) & (Nc[:, 2] > 0.3)
+    neck_t = np.clip((-relc[:, 1] - 2.0) / 0.6, 0, 1) * (relc[:, 2] > -1.6)
+    skinish = lumc > np.percentile(lumc[cheek], 20) * 0.6
+    nz = (neck_t > 0.5) & skinish
+    log('tone match: %d cheek texels, %d neck texels' % (cheek.sum(), nz.sum()))
+    if cheek.sum() > 100 and nz.sum() > 100:
+        g = np.median(albedo_c[cheek], 0) / np.maximum(np.median(albedo_c[nz], 0), 1e-4)
+        g = np.clip(g, 0.4, 1.5)
+        albedo_c *= (1.0 + (g[None, :] - 1.0) * neck_t[:, None])
+        log('neck tone gain %s' % np.round(g, 3).tolist())
+    # debug: which photo each texel came from
+    src = np.argmax(np.stack([s[0] for s in samples]), 0)
+    pal = np.array([[255, 255, 255], [255, 80, 80], [80, 255, 80], [255, 160, 0], [0, 200, 255], [255, 0, 255],
+                    [0, 120, 255], [120, 60, 0], [255, 255, 0], [0, 255, 200]] * 2, np.uint8)
+    dbg_src = np.zeros((SH, S, 3), np.uint8)
+    dbg_src[cov] = np.where(seen[:, None], pal[src], 0)
+    Image.fromarray(dbg_src).resize((1024, 1024 * SH // S), Image.NEAREST).save(os.path.join(dbg, 'source_view.png'))
+
     alb = np.zeros((SH, S, 3))
     alb[cov] = albedo_c
     tone = cfg.get('albedo_gain', [1.0, 1.0, 1.0])
