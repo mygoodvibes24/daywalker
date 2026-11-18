@@ -253,7 +253,11 @@ func _gameplay_checks(main) -> bool:
 	weak.take_hit(35.0, Vector3.FORWARD)
 	p.attack_cd = 0.0
 	p._attack()
-	ok = _check("combo spares the staggered enemy", weak.staggered and not weak.dead) and ok
+	for i in 30: # the hit lands on the clip's strike frame
+		await physics_frame
+		if p.pending.is_empty():
+			break
+	ok = _check("combo spares the staggered enemy", weak.staggered and not weak.dead and fighter.hp < fighter.max_hp) and ok
 	main.clear_slowmo()
 	_clear_enemies(main)
 	return ok
@@ -341,10 +345,19 @@ func _progression_checks(main) -> bool:
 	p.combo_t = 0.0
 	p.attack_cd = 0.0
 	p._attack()
+	for i in 30: # damage lands on the strike frame
+		await physics_frame
+		if p.pending.is_empty():
+			break
 	inv.add(ItemDB.make("foundry_cleaver", 2))
 	inv.equip_from_bag(inv.bag.size() - 1)
+	target.global_position = Vector3(12.0, 0.5, 11.6) # undo the first hit's knockback
 	p.combo_t = 0.0
 	p._attack()
+	for i in 30:
+		await physics_frame
+		if p.pending.is_empty():
+			break
 	p.hit_enemy.disconnect(rec)
 	main.clear_slowmo()
 	ok = _check("equipping a blade changes damage (%s)" % str(hits), hits.size() == 2 and hits[1] > hits[0] and inv.weapon.id == "foundry_cleaver") and ok
@@ -416,6 +429,10 @@ func _coat_checks(main) -> bool:
 	p.hp = p.max_hp
 	p.global_position = Vector3(10.0, 0.1, 10.0)
 	p.velocity = Vector3.ZERO
+	# no long-idle fidget (the look-around after 12 s standing) during these timed windows
+	if p.mod_anim != null:
+		p.mod_anim.still_t = -60.0
+		p.mod_anim.tree.set("parameters/fidget/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
 	for i in 300: await physics_frame # let the coat settle from the teleport before taking the baseline
 	var still: float = sim.swing_amount()
 	_pad_axis(JOY_AXIS_LEFT_Y, -1.0)
@@ -509,6 +526,8 @@ func _move_checks(main) -> bool:
 	p.attack_cd = 0.0
 	p._attack_pressed()
 	var was_fin: bool = p.move_name == "finisher" and p.finisher_t > 0.0
+	await physics_frame
+	ok = _check("the execution victim reacts (exec_t %.2f, clip %s)" % [e.exec_t, e.anim_state], e.exec_t > 0.0 and not e.dead and (e.anim == null or e.anim_state == "executed")) and ok
 	for i in 120:
 		await physics_frame
 		if e.dead:
@@ -540,10 +559,124 @@ func _move_checks(main) -> bool:
 	e.windup_t = 0.2
 	for i in 30: await physics_frame
 	ok = _check("the same strike lands without a parry (hp %.0f)" % p.hp, p.hp < p.max_hp) and ok
-	p.hit_enemy.disconnect(rec)
-	p.hp = p.max_hp
 	main.clear_slowmo()
 	_clear_enemies(main)
+
+	# 5. a light hit lands on the clip's strike frame (~0.1 s after the press), not on the press
+	hits.clear()
+	e = _spawn(main, 0, p.global_position + Vector3(0, 0.4, 1.6))
+	for i in 3: await physics_frame
+	e.max_hp = 1e6
+	e.hp = 1e6
+	e.attack_cd = 99.0
+	e.special_cd = 99.0
+	p.facing = 0.0
+	p.combo_t = 0.0
+	p.attack_cd = 0.0
+	p._attack()
+	var wait: float = p.pending.get("t", 0.0)
+	var on_press: bool = hits.is_empty() and p.pending.has("combo")
+	for i in 30:
+		await physics_frame
+		if p.pending.is_empty():
+			break
+	main.clear_slowmo()
+	ok = _check("light hit lands on the strike frame (%.3f s after the press, hits %s)" % [wait, str(hits)], on_press and wait > 0.05 and wait < 0.2 and hits.size() == 1) and ok
+
+	# 6. input buffer: a press during the cooldown comes out when it ends (a tap, not a charge)
+	for i in 30: await physics_frame
+	p.combo_t = 0.0
+	p.attack_cd = 0.15
+	p.move_name = ""
+	p.attack_block_until = 0
+	Input.action_press("attack")
+	await physics_frame
+	Input.action_release("attack")
+	await physics_frame
+	await physics_frame
+	var held: bool = p.attack_buffer_t > 0.0 and p.move_name == ""
+	for i in 20: await physics_frame
+	main.clear_slowmo()
+	ok = _check("a press during the cooldown is buffered (%s -> %s)" % [held, p.move_name], held and p.combo == 1 and p.move_name.ends_with("1") and p.attack_buffer_t == 0.0 and p.hold_t < 0.0) and ok
+	p.hit_enemy.disconnect(rec)
+	for i in 30: await physics_frame
+	main.clear_slowmo()
+	_clear_enemies(main)
+
+	# 7. movement ramps: not full speed on the first frame, full speed within ~0.1 s
+	p.walk_vel = Vector3.ZERO
+	p.velocity = Vector3.ZERO
+	p.swing_t = 0.0
+	for i in 3: await physics_frame
+	_pad_axis(JOY_AXIS_LEFT_Y, -1.0)
+	await physics_frame
+	var v1 := Vector2(p.velocity.x, p.velocity.z).length()
+	for i in 10: await physics_frame
+	var v2 := Vector2(p.velocity.x, p.velocity.z).length()
+	_pad_axis(JOY_AXIS_LEFT_Y, 0.0)
+	await physics_frame
+	var v3 := Vector2(p.velocity.x, p.velocity.z).length()
+	for i in 12: await physics_frame
+	var v4 := Vector2(p.velocity.x, p.velocity.z).length()
+	ok = _check("run ramps up and down (%.1f -> %.1f, stop %.1f -> %.1f)" % [v1, v2, v3, v4], v1 < p.WALK * 0.6 and v2 > p.WALK * 0.95 and v3 > 0.5 and v4 < 0.2) and ok
+	ok = _check("camera arm casts a sphere against the world", p.spring.shape is SphereShape3D and p.spring.collision_mask & 1) and ok
+	var coat_mi = p.visual.find_child("Coat", true, false)
+	var coat_mat = coat_mi.material_override if coat_mi != null else null
+	ok = _check("the coat is matte leather, not metal", coat_mi == null or (coat_mat is StandardMaterial3D and coat_mat.metallic == 0.0 and coat_mat.metallic_texture == null and coat_mat.roughness >= 0.55)) and ok
+
+	# 8. second attacks: the vampire lunge and the wolf leap telegraph on the ground and land
+	p.global_position = Vector3(10.0, 0.1, 10.0)
+	p.velocity = Vector3.ZERO
+	p.hp = p.max_hp
+	p.invuln_t = 0.0
+	p.dash_t = 0.0
+	p.since_dash = 99.0
+	p.parry_t = 0.0
+	for kind in [0, 1]:
+		var name: String = "lunge" if kind == 0 else "leap"
+		e = _spawn(main, kind, p.global_position + Vector3(0, 0.4, 6.5))
+		for i in 3: await physics_frame
+		if kind == 1:
+			e.transform_t = 0.0 # skip the change
+		e.special_cd = 0.0
+		e.attack_cd = 0.0
+		p.hp = p.max_hp
+		p.invuln_t = 0.0
+		var started := false
+		var tele := false
+		for i in 240:
+			await physics_frame
+			p.global_position = Vector3(10.0, 0.1, 10.0) # Sol stands his ground
+			if e.special.begins_with(name):
+				if not started:
+					tele = e.telegraph != null and is_instance_valid(e.telegraph)
+				started = true
+			elif started:
+				break
+		main.clear_slowmo()
+		ok = _check("%s %s: telegraphed %s, landed (hp %.0f)" % ["vampire" if kind == 0 else "wolf", name, tele, p.hp], started and tele and p.hp < p.max_hp) and ok
+		_clear_enemies(main)
+		for i in 3: await physics_frame
+	p.hp = p.max_hp
+
+	# 9. health bar over an engaged enemy: pale above the stagger threshold, red at or under it
+	e = _spawn(main, 0, p.global_position + Vector3(0, 0.4, 3.0))
+	for i in 3: await physics_frame
+	e.attack_cd = 99.0
+	e.special_cd = 99.0
+	e.take_hit(12.0, Vector3.FORWARD)
+	for i in 2: await physics_frame
+	var shown: bool = e.hp_bar != null and e.hp_bar.visible
+	var pale: Color = e.hp_bar_mat.get_shader_parameter("fill_col") if shown else Color.BLACK
+	e.take_hit(20.0, Vector3.FORWARD) # 8 / 40 left: under 25%, he staggers
+	for i in 2: await physics_frame
+	var red: Color = e.hp_bar_mat.get_shader_parameter("fill_col") if shown else Color.BLACK
+	var frac: float = e.hp_bar_mat.get_shader_parameter("frac") if shown else 1.0
+	e._die(false)
+	ok = _check("engaged enemy shows a health bar (pale %s, red %s, frac %.2f)" % [pale, red, frac], shown and pale.g > 0.6 and red.r > 0.9 and red.g < 0.6 and frac <= 0.25 and not e.hp_bar.visible) and ok
+	_clear_enemies(main)
+	p.hp = p.max_hp
+	main.clear_slowmo()
 	return ok
 
 

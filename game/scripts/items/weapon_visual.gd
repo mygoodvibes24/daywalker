@@ -61,19 +61,117 @@ static func build_model(inst: Dictionary) -> Node3D:
 		if base == null:
 			continue
 		if not _sword_mats.has(key):
-			var mat := base.duplicate() as StandardMaterial3D
 			var tint: Color = Color.WHITE.lerp(look.col, 0.35)
 			if rarity > ItemDB.COMMON:
 				tint = tint.lerp(ItemDB.RARITY_COLORS[rarity], 0.1 + 0.04 * rarity)
-			mat.albedo_color = tint
+			var glow := Color(0, 0, 0)
 			if rarity >= ItemDB.RARE:
-				mat.emission_enabled = true
-				mat.emission = ItemDB.RARITY_COLORS[rarity]
-				mat.emission_energy_multiplier = 0.08 if rarity == ItemDB.RARE else 0.16
-			_sword_mats[key] = mat
+				glow = ItemDB.RARITY_COLORS[rarity] * (0.08 if rarity == ItemDB.RARE else 0.16)
+			var hz := _hilt_z(sword, m.mesh, gp.transform.origin.z if gp != null else 0.0)
+			_sword_mats[key] = sword_material(base, tint, glow, hz)
 		m.material_override = _sword_mats[key]
 	node.name = "WeaponVisual"
 	return node
+
+
+# ---------------------------------------------------------------- sword look (round 2)
+## The generated sword textures paint the guard and pommel near-white, and under Sol's rim light the
+## guard read as a glowing white disc while the blade itself vanished edge-on. The sword material
+## keeps the textured steel for the blade (with a thin fresnel edge so it reads from the follow
+## camera) and turns everything below the top of the guard (guard, grip, pommel) to dark, blackened
+## iron: no white, no glow on the hilt.
+const SWORD_SHADER := """
+shader_type spatial;
+uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable;
+uniform sampler2D orm_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
+uniform sampler2D normal_tex : hint_normal, filter_linear_mipmap, repeat_enable;
+uniform bool has_normal = false;
+uniform int metal_ch = 2;
+uniform int rough_ch = 1;
+uniform vec4 tint : source_color = vec4(1.0);
+uniform vec4 glow : source_color = vec4(0.0, 0.0, 0.0, 1.0);
+uniform float hilt_z = 0.05;
+uniform vec4 hilt_col : source_color = vec4(0.075, 0.068, 0.062, 1.0);
+uniform vec4 edge_col : source_color = vec4(0.55, 0.62, 0.75, 1.0);
+uniform float edge_strength = 0.35;
+varying float vz;
+void vertex() {
+	vz = VERTEX.z;
+}
+void fragment() {
+	vec4 a = texture(albedo_tex, UV);
+	vec4 orm = texture(orm_tex, UV);
+	float hilt = 1.0 - smoothstep(hilt_z - 0.006, hilt_z + 0.006, vz);
+	float lum = dot(a.rgb, vec3(0.299, 0.587, 0.114));
+	vec3 steel = a.rgb * tint.rgb;
+	vec3 iron = hilt_col.rgb * (0.6 + 0.8 * lum);
+	ALBEDO = mix(steel, iron, hilt);
+	METALLIC = mix(orm[metal_ch], 0.55, hilt);
+	ROUGHNESS = mix(max(orm[rough_ch], 0.16), 0.58, hilt);
+	SPECULAR = mix(0.5, 0.3, hilt);
+	if (has_normal) {
+		NORMAL_MAP = texture(normal_tex, UV).rgb;
+	}
+	float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
+	EMISSION = (glow.rgb + edge_col.rgb * fres * edge_strength) * (1.0 - hilt);
+}
+"""
+static var _sword_shader: Shader
+static var _hilt_cache := {}
+
+
+static func sword_material(base: StandardMaterial3D, tint: Color, glow: Color, hilt_z: float) -> ShaderMaterial:
+	if _sword_shader == null:
+		_sword_shader = Shader.new()
+		_sword_shader.code = SWORD_SHADER
+	var m := ShaderMaterial.new()
+	m.shader = _sword_shader
+	m.set_shader_parameter("albedo_tex", base.albedo_texture)
+	var orm: Texture2D = base.metallic_texture if base.metallic_texture != null else base.roughness_texture
+	if orm != null:
+		m.set_shader_parameter("orm_tex", orm)
+		m.set_shader_parameter("metal_ch", mini(int(base.metallic_texture_channel), 3))
+		m.set_shader_parameter("rough_ch", mini(int(base.roughness_texture_channel), 3))
+	if base.normal_enabled and base.normal_texture != null:
+		m.set_shader_parameter("normal_tex", base.normal_texture)
+		m.set_shader_parameter("has_normal", true)
+	m.set_shader_parameter("tint", base.albedo_color * tint)
+	m.set_shader_parameter("glow", glow)
+	m.set_shader_parameter("hilt_z", hilt_z)
+	return m
+
+
+## Where the hilt ends along the sword's +Z (mesh space): the top face of the guard, found the way
+## the build tool finds the guard (the widest cross-section in the lower part, then up while the
+## section stays wide). Falls back to a little above the grip point.
+static func _hilt_z(sword: String, mesh: Mesh, grip_z: float) -> float:
+	if _hilt_cache.has(sword):
+		return _hilt_cache[sword]
+	var hz := grip_z + 0.08
+	var arr := mesh.surface_get_arrays(0) if mesh != null and mesh.get_surface_count() > 0 else []
+	if arr.size() > Mesh.ARRAY_VERTEX and arr[Mesh.ARRAY_VERTEX] is PackedVector3Array and (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() > 50:
+		var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var aabb := mesh.get_aabb()
+		var zmin := aabb.position.z
+		var zlen := maxf(aabb.size.z, 0.01)
+		var bins := 80
+		var wid := PackedFloat32Array()
+		wid.resize(bins)
+		for p in v:
+			var b := clampi(int((p.z - zmin) / zlen * bins), 0, bins - 1)
+			wid[b] = maxf(wid[b], Vector2(p.x, p.y).length())
+		var gb := 0
+		for b in int(bins * 0.45):
+			if wid[b] > wid[gb]:
+				gb = b
+		var top := gb
+		while top + 1 < bins and top < gb + 6 and wid[top + 1] > wid[gb] * 0.6:
+			top += 1
+		var found := zmin + (top + 1.0) / bins * zlen
+		if found > grip_z and found < grip_z + 0.25:
+			hz = found
+	_hilt_cache[sword] = hz
+	return hz
 
 
 static func _steel(c: Color, rarity: int) -> StandardMaterial3D:
