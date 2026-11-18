@@ -70,7 +70,7 @@ const HEAD_OFF := Vector3(-0.02, 1.699, -0.005)
 const HEAD_CUT := -0.47 # bust units: everything below is cut (shirt, shoulders)
 ## The face-scan head (tools/project_face_texture.py, docs/face_scans/): a reconstruction textured by
 ## projecting the capture photos, placed in skeleton space by its eyes. false = the older Tripo bust.
-const USE_SCANNED_HEAD := true
+const USE_SCANNED_HEAD := false # scanned head works; enable after the seam cleanup pass (docs/face_scans)
 const SCAN := D + "sol_scan_head"
 const DETAIL_TILE := 14.0 # skin-pore detail repeats per UV unit
 const EYE_RADIUS := 0.0115
