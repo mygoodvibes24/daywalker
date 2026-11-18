@@ -2,7 +2,39 @@ extends CharacterBody3D
 ## Vampires of the Velvet Court and the Hollow Pack (who change at night).
 
 const U = preload("res://scripts/util.gd")
+const HFx = preload("res://scripts/hunt/hunt_fx.gd") # ground telegraphs, shockwave, blood puff
 enum { VAMPIRE, WEREWOLF }
+
+## Second attacks, as data (the swipe is the first). Each telegraphs on the ground for its wind-up.
+##   lunge (vampires): a crouched wind-up, then a straight dash of up to `dist` m at `speed`; the
+##     first contact strikes. Dodge sideways or Blood Dash through it; a parry still turns it aside.
+##   leap (wolves, changed): a crouch, then a jump onto where Sol stood (`radius` m slam ring).
+## min / max: the distance band it is used from. cd: seconds before it can come again. dmg: x damage.
+const SPECIALS := {
+	"lunge": {"windup": 0.55, "dist": 7.5, "speed": 17.0, "width": 1.4, "dmg": 1.25,
+		"min": 3.5, "max": 8.0, "cd": 5.5, "color": Color(1.0, 0.05, 0.15)},
+	"leap": {"windup": 0.5, "air": 0.6, "height": 2.4, "radius": 2.4, "dmg": 1.4,
+		"min": 4.0, "max": 10.0, "cd": 6.5, "color": Color(1.0, 0.35, 0.05)},
+}
+const STAGGER_FRAC := 0.25 # at or below this share of max hp a hit staggers (the bar turns red)
+const BAR_SIZE := Vector2(0.9, 0.09)
+const BAR_SHADER := """
+shader_type spatial;
+render_mode unshaded, cull_disabled, depth_test_disabled, shadows_disabled;
+uniform float frac = 1.0;
+uniform vec4 fill_col : source_color = vec4(0.86, 0.82, 0.78, 1.0);
+void vertex() {
+	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
+}
+void fragment() {
+	bool edge = UV.x < 0.015 || UV.x > 0.985 || UV.y < 0.16 || UV.y > 0.84;
+	vec3 c = UV.x < frac ? fill_col.rgb : vec3(0.06, 0.05, 0.05);
+	ALBEDO = edge ? vec3(0.0) : c;
+	ALPHA = 0.92;
+}
+"""
+static var _bar_shader: Shader
+static var _bar_mesh: QuadMesh
 
 var main
 var kind: int = VAMPIRE
@@ -70,6 +102,20 @@ var anim_lock_t := 0.0 # one-shot clip time left before locomotion takes over ag
 var strike_time := 1.0 # clip time of the attack's strike
 var anim_accum := 0.0
 var anim_slot := 0
+# second attack (SPECIALS): "" or "<name>_windup" / "<name>" / "<name>_recover"
+var special := ""
+var special_t := 0.0
+var special_cd := 0.0
+var special_from := Vector3.ZERO
+var special_to := Vector3.ZERO
+var special_hit := false # the lunge connects once
+var telegraph: Node3D
+# health bar over an engaged enemy (red at the stagger threshold)
+var hp_bar: MeshInstance3D
+var hp_bar_mat: ShaderMaterial
+var engaged_t := 0.0
+# the execution: seconds the victim's half of Sword Judgment still owns his animation
+var exec_t := 0.0
 
 
 func _ready() -> void:
@@ -92,6 +138,7 @@ func _ready() -> void:
 	hp = max_hp
 	human_stats = {"max_hp": max_hp, "speed": speed, "damage": damage, "range": attack_range, "body": body_color, "skin": skin_color, "eye": eye_color}
 	orbit_sign = 1.0 if randf() < 0.5 else -1.0
+	special_cd = randf_range(2.0, 4.5) # not the instant they arrive
 	agent = NavigationAgent3D.new()
 	agent.path_desired_distance = 1.0
 	agent.target_desired_distance = 1.2
@@ -231,6 +278,10 @@ func _anim_update(delta: float, spd: float) -> void:
 	anim_lock_t = maxf(anim_lock_t - delta, 0.0)
 	if dead:
 		return
+	if exec_t > 0.0:
+		return # execution_victim() drives the clips until the killing cut
+	if special != "":
+		return # the second attack plays its own clips (_special_tick)
 	if transform_t > 0.0:
 		if anim_state != "transform":
 			_play("hit", 0.1, 0.7, 0.2) # writhing through the change
@@ -415,6 +466,8 @@ func _clear_combat_state() -> void:
 	staggered = false
 	stagger_t = 0.0
 	windup_t = 0.0
+	if special != "":
+		_cancel_special()
 	if marker != null:
 		marker.visible = false
 	main.release_attack_token(self)
@@ -425,6 +478,9 @@ func _physics_process(delta: float) -> void:
 		return
 	var player = main.player
 	attack_cd = maxf(attack_cd - delta, 0.0)
+	special_cd = maxf(special_cd - delta, 0.0)
+	exec_t = maxf(exec_t - delta, 0.0)
+	engaged_t = maxf(engaged_t - delta, 0.0)
 	flash_t = maxf(flash_t - delta, 0.0)
 	if not is_on_floor():
 		velocity.y -= 24.0 * delta
@@ -443,8 +499,17 @@ func _physics_process(delta: float) -> void:
 			return
 
 	var hvel := Vector3.ZERO
+	if special != "" and (transform_t > 0.0 or staggered or player == null or player.dead):
+		_cancel_special()
 	if transform_t > 0.0:
 		transform_t -= delta
+	elif special != "":
+		_special_tick(player, delta) # moves the body itself (no avoidance steering mid-leap)
+		visual.rotation.y = lerp_angle(visual.rotation.y, atan2(strike_dir.x, strike_dir.z), 14.0 * delta)
+		engaged_t = 4.0
+		_animate(delta, 0.0)
+		_update_bar(player)
+		return
 	elif staggered:
 		stagger_t -= delta
 		if stagger_t <= 0.0:
@@ -463,10 +528,18 @@ func _physics_process(delta: float) -> void:
 			if windup_t <= 0.0:
 				_resolve_strike(player)
 		else:
-			var token: bool = dist < attack_range + 4.0 and main.request_attack_token(self)
-			if not token and dist >= attack_range + 4.0:
+			var sp := _special_name()
+			var band: float = attack_range + 4.0
+			if sp != "":
+				band = maxf(band, float(SPECIALS[sp].max))
+			var token: bool = dist < band and main.request_attack_token(self)
+			if not token and dist >= band:
 				main.release_attack_token(self)
-			if token and dist <= attack_range:
+			if token and sp != "" and special_cd <= 0.0 and attack_cd <= 0.0 and speed > 0.0 \
+					and dist >= float(SPECIALS[sp].min) and dist <= float(SPECIALS[sp].max):
+				_start_special(sp, player, to, dist)
+				look = strike_dir
+			elif token and dist <= attack_range:
 				if attack_cd <= 0.0:
 					strike_dir = to / dist if dist > 0.01 else Vector3(sin(visual.rotation.y), 0, cos(visual.rotation.y))
 					windup_t = 0.38 if kind == VAMPIRE else 0.45
@@ -484,6 +557,215 @@ func _physics_process(delta: float) -> void:
 
 	_move(hvel, delta)
 	_animate(delta, hvel.length())
+	_update_bar(player)
+
+
+# ---------------------------------------------------------------- second attacks (SPECIALS)
+## This enemy's second attack: vampires lunge, changed wolves leap. "" for the rest (people by day).
+func _special_name() -> String:
+	if kind == VAMPIRE:
+		return "lunge"
+	if kind == WEREWOLF and transformed:
+		return "leap"
+	return ""
+
+
+func _start_special(sp: String, player, to: Vector3, dist: float) -> void:
+	var d: Dictionary = SPECIALS[sp]
+	special = sp + "_windup"
+	special_t = float(d.windup)
+	special_cd = float(d.cd) * randf_range(0.85, 1.25)
+	attack_cd = maxf(attack_cd, 0.8)
+	special_hit = false
+	strike_dir = to / maxf(dist, 0.01)
+	special_from = global_position
+	if telegraph != null and is_instance_valid(telegraph):
+		telegraph.queue_free()
+	if sp == "lunge":
+		var reach := minf(dist + 1.5, float(d.dist))
+		special_to = global_position + strike_dir * reach
+		telegraph = HFx.line_telegraph(main, global_position, strike_dir, reach + 0.6, float(d.width), special_t, d.color)
+		# rear back: the slash clip's own wind-up, slowed into a crouch
+		if anim != null:
+			_play("attack", 0.1, 0.45, maxf(strike_time - 0.9, 0.0))
+	else:
+		# onto where Sol is (a touch ahead of his run), never past the band
+		var tgt: Vector3 = player.global_position + Vector3(player.velocity.x, 0, player.velocity.z) * 0.25
+		var off := tgt - global_position
+		off.y = 0.0
+		if off.length() > float(d.max):
+			off = off.normalized() * float(d.max)
+		special_to = global_position + off
+		telegraph = HFx.circle_telegraph(main, special_to, float(d.radius), special_t + float(d.air), d.color)
+		# the crouch before the spring: the jump clip's take-off, slowed
+		if anim != null:
+			_play("jump", 0.1, 0.55, 0.0)
+	Audio.enemy_bark(self) # AUDIO HOOK
+	knockback = Vector3.ZERO
+
+
+func _cancel_special() -> void:
+	special = ""
+	special_t = 0.0
+	if telegraph != null and is_instance_valid(telegraph):
+		telegraph.queue_free()
+	telegraph = null
+	anim_state = "" # locomotion picks up again
+
+
+func _special_tick(player, delta: float) -> void:
+	special_t -= delta
+	var sp := special.get_slice("_", 0)
+	var d: Dictionary = SPECIALS[sp]
+	var to: Vector3 = player.global_position - global_position
+	to.y = 0.0
+	match special:
+		"lunge_windup", "leap_windup":
+			_apply_velocity(Vector3.ZERO, delta)
+			if special_t <= 0.0:
+				special = sp
+				special_t = (special_from.distance_to(special_to) / float(d.speed)) if sp == "lunge" else float(d.air)
+				special_from = global_position
+				if anim != null:
+					if sp == "lunge":
+						_play("sprint", 0.05, 1.7)
+					else:
+						_play("jump", 0.05, 1.3, 0.35)
+		"lunge":
+			_apply_velocity(strike_dir * float(d.speed), delta)
+			# the first contact strikes: Sol close and in front of the dash
+			if not special_hit and to.length() < 1.3 and (to.length() < 0.5 or strike_dir.dot(to.normalized()) > 0.2):
+				special_hit = true
+				player.take_damage(damage * float(d.dmg), self) # a dash through it is a perfect dodge
+				special_t = 0.0
+			if special_t <= 0.0:
+				if not special_hit and to.length() < 4.0 and player.dashed_recently(0.4):
+					main.perfect_dodge() # he dashed out of the lunge's line
+				_recover(0.45)
+		"leap":
+			var k := clampf(1.0 - special_t / float(d.air), 0.0, 1.0)
+			var want := special_from.lerp(special_to, k) + Vector3.UP * 4.0 * float(d.height) * k * (1.0 - k)
+			velocity = (want - global_position) / maxf(delta, 0.001)
+			move_and_slide()
+			if special_t <= 0.0:
+				_slam(player, d)
+				_recover(0.55)
+		_: # recover: the follow-through, then back to the fight
+			_apply_velocity(Vector3.ZERO, delta)
+			if special_t <= 0.0:
+				_cancel_special()
+
+
+func _recover(t: float) -> void:
+	special = special.get_slice("_", 0) + "_recover"
+	special_t = t
+	if telegraph != null and is_instance_valid(telegraph):
+		telegraph.queue_free()
+	telegraph = null
+	if anim != null:
+		_play("attack", 0.06, 1.5, maxf(strike_time - 0.12, 0.0)) # the swipe's follow-through
+
+
+## The leap lands: a ring on the ground, damage inside it, a shake for Sol nearby.
+func _slam(player, d: Dictionary) -> void:
+	HFx.shockwave(main, global_position, float(d.radius), d.color, 0.4)
+	var to: Vector3 = player.global_position - global_position
+	var flat := Vector2(to.x, to.z).length()
+	if flat < float(d.radius) and to.y < 1.4:
+		player.take_damage(damage * float(d.dmg), self)
+	elif flat < float(d.radius) + 2.5 and player.dashed_recently(0.4):
+		main.perfect_dodge()
+	if flat < 9.0:
+		player.shake = maxf(player.shake, 0.22)
+		main.rumble(0.3, 0.5, 0.15)
+	Audio.play_at("wolf_growl", global_position, 2.0) # AUDIO HOOK
+
+
+# ---------------------------------------------------------------- health bar
+## A thin bar over an engaged enemy: pale while he fights, red at or below STAGGER_FRAC (the next
+## heavy hit staggers him: bite or execute), pulsing while staggered.
+func _update_bar(player) -> void:
+	if dead:
+		if hp_bar != null:
+			hp_bar.visible = false
+		return
+	if player != null and not player.dead and speed > 0.0:
+		if windup_t > 0.0 or main.attack_tokens.has(self) or global_position.distance_squared_to(player.global_position) < 64.0:
+			engaged_t = maxf(engaged_t, 2.5)
+	var show := engaged_t > 0.0 or staggered
+	if not show:
+		if hp_bar != null:
+			hp_bar.visible = false
+		return
+	if hp_bar == null:
+		_build_bar()
+	hp_bar.visible = true
+	var frac := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
+	var low := frac <= STAGGER_FRAC + 0.001 or staggered
+	var col := Color(0.86, 0.82, 0.78)
+	if low:
+		col = Color(0.95, 0.06, 0.05)
+		if staggered:
+			col = col.lerp(Color(1.0, 0.55, 0.45), 0.5 + 0.5 * sin(phase * 2.0))
+	hp_bar_mat.set_shader_parameter("frac", frac)
+	hp_bar_mat.set_shader_parameter("fill_col", col)
+	var h := 2.95 if model_name == "werewolf" else 2.2
+	var s := visual.scale.y
+	if model != null:
+		s *= model.scale.y
+	hp_bar.position.y = h * s + 0.12
+
+
+func _build_bar() -> void:
+	if _bar_shader == null:
+		_bar_shader = Shader.new()
+		_bar_shader.code = BAR_SHADER
+		_bar_mesh = QuadMesh.new()
+		_bar_mesh.size = BAR_SIZE
+	hp_bar_mat = ShaderMaterial.new()
+	hp_bar_mat.shader = _bar_shader
+	hp_bar_mat.render_priority = 2
+	hp_bar = MeshInstance3D.new()
+	hp_bar.name = "HealthBar"
+	hp_bar.mesh = _bar_mesh
+	hp_bar.material_override = hp_bar_mat
+	hp_bar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	hp_bar.extra_cull_margin = 1.0
+	add_child(hp_bar)
+
+
+# ---------------------------------------------------------------- the execution (player.gd _finisher)
+## Sol starts Sword Judgment on this (staggered) enemy: face him, reel slowly on the wind-up, flinch
+## again halfway in, then execution_death() on the strike frame.
+func execution_victim(by: Node3D, strike_delay: float) -> void:
+	if dead:
+		return
+	_cancel_special()
+	exec_t = strike_delay + 0.6
+	knockback = Vector3.ZERO
+	var to := by.global_position - global_position
+	if Vector2(to.x, to.z).length() > 0.01:
+		visual.rotation.y = atan2(to.x, to.z)
+	if anim != null:
+		_play("hit", 0.06, 0.5, 0.0)
+		anim_state = "executed"
+	var tw := create_tween()
+	tw.tween_interval(strike_delay * 0.5)
+	tw.tween_callback(func():
+		if dead or anim == null:
+			return
+		_play("hit", 0.05, 0.9, 0.12)
+		anim_state = "executed"
+		flash_t = 0.12)
+
+
+## The killing cut: thrown back along Sol's swing with a blood burst (the death clip is already playing).
+func execution_death(fwd: Vector3) -> void:
+	exec_t = 0.0
+	var dir := Vector3(fwd.x, 0, fwd.z).normalized()
+	var tw := create_tween()
+	tw.tween_property(self, "global_position", global_position + dir * 1.3, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	HFx.puff(main, global_position + Vector3(0, 1.2, 0) + dir * 0.2, Color(0.55, 0.0, 0.03), 18, 0.2, 3.5)
 
 
 ## Path along the navmesh; straight in when close.
@@ -589,7 +871,7 @@ func _animate(delta: float, spd: float) -> void:
 			_anim_update(delta, spd)
 		else:
 			_pose(delta, spd)
-	eye_mat.emission_energy_multiplier = (9.0 if windup_t > 0.0 else 5.0) if (kind == VAMPIRE or transformed) else 0.0
+	eye_mat.emission_energy_multiplier = (9.0 if (windup_t > 0.0 or special.ends_with("_windup")) else 5.0) if (kind == VAMPIRE or transformed) else 0.0
 	if staggered:
 		marker.position.y = 2.7 + sin(phase * 0.6) * 0.12
 
@@ -603,9 +885,12 @@ func take_hit(amount: float, dir: Vector3) -> void:
 	hp -= amount
 	flash_t = 0.12
 	windup_t = 0.0
+	engaged_t = 5.0
+	if special != "":
+		_cancel_special() # a hit breaks the lunge / leap
 	main.release_attack_token(self)
 	knockback = dir * (6.0 if kind == VAMPIRE and not transformed else 3.0)
-	if hp <= max_hp * 0.25:
+	if hp <= max_hp * STAGGER_FRAC:
 		staggered = true
 		stagger_t = 3.0
 		marker.visible = true
@@ -625,6 +910,10 @@ func _die(_drained: bool) -> void:
 		return
 	dead = true
 	marker.visible = false
+	if hp_bar != null:
+		hp_bar.visible = false
+	if special != "":
+		_cancel_special()
 	main.release_attack_token(self)
 	if agent != null:
 		agent.avoidance_enabled = false

@@ -355,9 +355,10 @@ func update_lighting(d: float, night: float, full_moon: bool) -> void:
 	if cone_mat != null:
 		cone_mat.set_shader_parameter("strength", practical)
 	if rim != null:
-		rim.light_energy = lerpf(5.0, 0.8, d)
+		# halved in round 2: at full strength the leather coat read silver
+		rim.light_energy = lerpf(2.5, 0.4, d)
 		rim.light_color = Color(0.62, 0.74, 1.0).lerp(Color(1.0, 0.9, 0.8), d)
-		fill.light_energy = lerpf(1.6, 0.3, d)
+		fill.light_energy = lerpf(0.8, 0.15, d)
 		fill.light_color = Color(0.9, 0.85, 0.8)
 	rain.set_light(d)
 

@@ -41,6 +41,7 @@ func setup(model: Node) -> bool:
 		if not lib.has_animation(need):
 			return false
 	_has_stance = lib.has_animation("stance")
+	_tame_root_yaw()
 	ap.active = false
 	sim = model.get_node_or_null("CoatSim")
 	wrist = model.find_child("SwordWrist", true, false)
@@ -105,6 +106,44 @@ func setup(model: Node) -> bool:
 	tree.set("parameters/hit_speed/scale", 1.6)
 	tree.set("parameters/life/transition_request", "alive")
 	return true
+
+
+## Clips whose mocap spins the whole body (the hips' yaw): the light combo's second and third cuts turn
+## Sol up to ~140 deg off his gameplay facing (combo2 ends facing sideways, combo3 starts there and
+## swings back), so the cut reads off-target and he drifts sideways. Their hips yaw is pulled toward
+## the clip set's neutral facing, keeping only YAW_KEEP of the turn (at most YAW_MAX degrees).
+const YAW_TAME := ["combo2", "combo3"]
+const YAW_KEEP := 0.3
+const YAW_MAX := 30.0
+
+
+static func _hips_yaw(q: Quaternion) -> float:
+	var f := Basis(q) * Vector3.BACK
+	return atan2(f.x, f.z)
+
+
+## Runs once per clip library (it is shared by every Sol instance; a meta flag marks it done).
+func _tame_root_yaw() -> void:
+	var ref := lib.get_animation("stance" if _has_stance else "idle")
+	var rt := ref.find_track(NodePath("Skeleton3D:Hips"), Animation.TYPE_ROTATION_3D)
+	if rt < 0 or ref.track_get_key_count(rt) == 0:
+		return
+	var neutral := _hips_yaw(ref.track_get_key_value(rt, 0))
+	for cname in YAW_TAME:
+		if not lib.has_animation(cname):
+			continue
+		var a := lib.get_animation(cname)
+		if a.has_meta("yaw_tamed"):
+			continue
+		var t := a.find_track(NodePath("Skeleton3D:Hips"), Animation.TYPE_ROTATION_3D)
+		if t < 0:
+			continue
+		for k in a.track_get_key_count(t):
+			var q: Quaternion = a.track_get_key_value(t, k)
+			var dev := wrapf(_hips_yaw(q) - neutral, -PI, PI)
+			var keep := clampf(dev * YAW_KEEP, -deg_to_rad(YAW_MAX), deg_to_rad(YAW_MAX))
+			a.track_set_key_value(t, k, (Quaternion(Vector3.UP, keep - dev) * q).normalized())
+		a.set_meta("yaw_tamed", true)
 
 
 static func _clip(name: String) -> AnimationNodeAnimation:
