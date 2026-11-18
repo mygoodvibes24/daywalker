@@ -1,7 +1,9 @@
 extends "res://scripts/hunt/bosses/boss_base.gd"
-## Night 2 — MARCUS CRANE, THE VELVET FANG. Sol's mirror: a speed vampire duelist.
+## MARCUS CRANE, THE VELVET FANG. Sol's mirror: a speed vampire duelist.
 ## Chained dash slashes along telegraphed lines, a blink that lands behind you, and fans
 ## of blood bolts. Below half he gets faster and his fans wider.
+## Look: the vampire body at 1.22x, crimson veins, and a long velvet cape with a high collar
+## (a stand-in until a real Marcus model is affordable; see docs/DIALOGUE.md "Deferred").
 
 
 func _build() -> void:
@@ -9,11 +11,77 @@ func _build() -> void:
 	transformed = false
 	aura_color = Color(1.0, 0.04, 0.12)
 	base_overlay = Color(0.35, 0.0, 0.03, 0.18)
+	vein_color = Color(1.0, 0.02, 0.2)
+	vein_amount = 0.55
+	vein_scale = 8.0
 	body_radius = 0.6
 	body_height = 2.4
 	speed = 8.5
 	keep_dist = 3.0
-	add_rig("vampire", 1.25, null, Color(1.0, 0.05, 0.05))
+	var r := add_rig("vampire", 1.22, null, Color(1.0, 0.05, 0.05))
+	_add_cape(r)
+
+
+## The cape hangs from the shoulders; it flares back when he runs and snaps up on a dash
+## (boss_base._sway).
+func _add_cape(r: Dictionary) -> void:
+	var mount := bone_mount(r, "Spine")
+	if mount == null:
+		return
+	var pivot := Node3D.new()
+	mount.add_child(pivot)
+	pivot.position = Vector3(0, 0.12, -0.13)
+	var outer := StandardMaterial3D.new()
+	outer.albedo_color = Color(0.07, 0.015, 0.03)
+	outer.roughness = 0.75
+	outer.cull_mode = BaseMaterial3D.CULL_DISABLED
+	outer.rim_enabled = true
+	outer.rim = 0.4
+	outer.rim_tint = 0.8
+	var cape := MeshInstance3D.new()
+	cape.mesh = cape_mesh(0.42, 0.66, 1.25, 10, 6)
+	cape.material_override = outer
+	pivot.add_child(cape)
+	# a lining edge in the boss colour, glowing faintly at the hem
+	var hem := MeshInstance3D.new()
+	var hm := BoxMesh.new()
+	hm.size = Vector3(1.3, 0.035, 0.02)
+	hem.mesh = hm
+	hem.material_override = U.glow(Color(0.9, 0.0, 0.1), 2.5)
+	pivot.add_child(hem)
+	hem.position = Vector3(0, -1.24, -0.2)
+	# the high collar, standing up behind the head
+	var collar := MeshInstance3D.new()
+	collar.mesh = cape_mesh(0.2, 0.26, 0.26, 6, 2)
+	collar.material_override = outer
+	mount.add_child(collar)
+	collar.position = Vector3(0, 0.33, -0.1)
+	collar.rotation = Vector3(PI + 0.35, 0, 0)
+	silhouette.append({"node": pivot, "kind": "cape"})
+
+
+## A curved strip hanging down -Y from its top edge: `top`/`bottom` half-widths, bowed back.
+static func cape_mesh(top: float, bottom: float, length: float, cols: int, rows: int) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var pts := []
+	for j in rows + 1:
+		var v := float(j) / rows
+		var hw := lerpf(top, bottom, v)
+		var row := []
+		for i in cols + 1:
+			var u := float(i) / cols * 2.0 - 1.0
+			var z := -0.16 * (1.0 - u * u) - 0.1 * v + 0.04 * sin(u * 9.0) * v # wraps the back, folds
+			row.append(Vector3(u * hw, -v * length, z))
+		pts.append(row)
+	for j in rows:
+		for i in cols:
+			var quad := [[pts[j][i], 0.0, 0.0], [pts[j][i + 1], 1.0, 0.0], [pts[j + 1][i + 1], 1.0, 1.0], [pts[j][i], 0.0, 0.0], [pts[j + 1][i + 1], 1.0, 1.0], [pts[j + 1][i], 0.0, 1.0]]
+			for q in quad:
+				st.set_uv(Vector2(q[1], q[2]))
+				st.add_vertex(q[0])
+	st.generate_normals()
+	return st.commit()
 
 
 func _choose_attack(dist: float) -> Dictionary:

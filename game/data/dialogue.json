@@ -196,6 +196,36 @@
    "cooldown": 0
   },
   {
+   "id": "intro_brief_1",
+   "speaker": "nia",
+   "category": "story",
+   "text": "Somebody broke the Accord. Wren's husband, bitten. A Court duke, torn to pieces.",
+   "audio": "res://assets/audio/voice/intro_brief_1.ogg",
+   "duration": 8.0,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
+   "id": "intro_brief_2",
+   "speaker": "nia",
+   "category": "story",
+   "text": "Both sides smell you on it. Lucien's called the Red Curfew.",
+   "audio": "res://assets/audio/voice/intro_brief_2.ogg",
+   "duration": 4.9,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
+   "id": "intro_brief_3",
+   "speaker": "nia",
+   "category": "story",
+   "text": "Three nights, Sol. Stay alive, and find who's framing you.",
+   "audio": "res://assets/audio/voice/intro_brief_3.ogg",
+   "duration": 4.9,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
    "id": "hunt_start",
    "speaker": "nia",
    "category": "hunt",
@@ -219,9 +249,9 @@
    "id": "hunt_deploy_1",
    "speaker": "nia",
    "category": "hunt",
-   "text": "Dropping you in. Three marks on the map. Hit them before the Curfew closes.",
+   "text": "Dropping you in. Hit what you can before the Curfew closes.",
    "audio": "res://assets/audio/voice/hunt_deploy_1.ogg",
-   "duration": 5.33,
+   "duration": 4.1,
    "priority": 2,
    "cooldown": 0
   },
@@ -406,11 +436,11 @@
    "cooldown": 20
   },
   {
-   "id": "poi_cleared_1",
+   "id": "poi_cleared_nest",
    "speaker": "nia",
    "category": "comms",
    "text": "Nest's clear. Nice work. Grab what's shiny and go.",
-   "audio": "res://assets/audio/voice/poi_cleared_1.ogg",
+   "audio": "res://assets/audio/voice/poi_cleared_nest.ogg",
    "duration": 4.56,
    "priority": 2,
    "cooldown": 20
@@ -459,9 +489,9 @@
    "id": "hunt_extract",
    "speaker": "nia",
    "category": "comms",
-   "text": "Hunt's done. Get to extraction and I'll put the kettle on.",
+   "text": "Dawn's up. Hunt's done. Come home, Sol. I'll put the kettle on.",
    "audio": "res://assets/audio/voice/hunt_extract.ogg",
-   "duration": 4.15,
+   "duration": 5.0,
    "priority": 2,
    "cooldown": 20
   },
@@ -549,9 +579,9 @@
    "id": "boss_alpha_intro",
    "speaker": "nia",
    "category": "boss",
-   "text": "That howl is the Alpha. She's big, she's angry, and she brought family.",
+   "text": "That howl's the Alpha. Wren's firstborn. He's big, and he brought family.",
    "audio": "res://assets/audio/voice/boss_alpha_intro.ogg",
-   "duration": 6.57,
+   "duration": 6.3,
    "priority": 3,
    "cooldown": 0
   },
