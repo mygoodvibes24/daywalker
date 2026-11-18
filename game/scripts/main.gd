@@ -110,6 +110,7 @@ func start_game() -> void:
 	player.block_attack()
 	if hunt != null:
 		hunt.start() # HUNT HOOK: run-scoped reset, hub loadout, the Descent
+		print("Daywalker: HUNT_READY") # the CI web render check waits for this line
 	Dialogue.play("hunt_start") # AUDIO HOOK
 
 
