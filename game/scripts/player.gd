@@ -439,9 +439,9 @@ func _camera_obstruction() -> void:
 			var v = e.get("visual")
 			if v is Node3D:
 				var d := Vector2(cp.x - ep.x, cp.z - ep.z).length()
-				if d < 0.75 and cp.y > ep.y - 0.3 and cp.y < ep.y + 2.3:
-					v.visible = false
-					cam_hidden[e] = true
+				if d < 0.8 and cp.y > ep.y - 0.3 and cp.y < ep.y + 2.7:
+					_cam_hide(e, true)
+	want = minf(want, _cam_clear_length(o, dirv, want))
 	if want < spring.spring_length:
 		spring.spring_length = want
 	# give back the ones the lens has left
@@ -452,11 +452,58 @@ func _camera_obstruction() -> void:
 			continue
 		var ep: Vector3 = e.global_position
 		var d := Vector2(cp.x - ep.x, cp.z - ep.z).length()
-		if e.get("dead") == true or d >= 0.85 or cp.y <= ep.y - 0.4 or cp.y >= ep.y + 2.4:
-			var v = e.get("visual")
-			if v is Node3D:
-				v.visible = true
-			cam_hidden.erase(e)
+		if e.get("dead") == true or d >= 0.9 or cp.y <= ep.y - 0.4 or cp.y >= ep.y + 2.8:
+			_cam_hide(e, false)
+
+
+func _cam_hide(e, on: bool) -> void:
+	var v = e.get("visual")
+	if v is Node3D:
+		v.visible = not on
+	var bar = e.get("hp_bar") # its own visibility belongs to enemy.gd; fade it instead
+	if bar is GeometryInstance3D:
+		bar.transparency = 1.0 if on else 0.0
+	if on:
+		cam_hidden[e] = true
+	else:
+		cam_hidden.erase(e)
+
+
+## QA2 #8: how far out the camera can sit along the arm with CAM_CLEAR of open air round the lens
+## (the sphere cast only guards the line; posts, gallery columns and walls just beside it still
+## filled the frame). Binary search, only when the full length is crowded.
+const CAM_CLEAR := 0.6
+var _cam_probe: PhysicsShapeQueryParameters3D
+
+
+func _cam_crowded(pt: Vector3, space: PhysicsDirectSpaceState3D) -> bool:
+	var above: float = pt.y - main.ground_y(pt.x, pt.z)
+	var r := clampf(above - 0.15, 0.25, CAM_CLEAR) # never "crowded" by the street under it
+	(_cam_probe.shape as SphereShape3D).radius = r
+	_cam_probe.transform = Transform3D(Basis(), pt)
+	return not space.intersect_shape(_cam_probe, 1).is_empty()
+
+
+func _cam_clear_length(o: Vector3, dirv: Vector3, length: float) -> float:
+	if not is_inside_tree() or length <= 1.0:
+		return length
+	var space := get_world_3d().direct_space_state
+	if _cam_probe == null:
+		_cam_probe = PhysicsShapeQueryParameters3D.new()
+		_cam_probe.shape = SphereShape3D.new()
+		_cam_probe.collision_mask = 1 | 512
+		_cam_probe.exclude = [get_rid()]
+	if not _cam_crowded(o + dirv * length, space):
+		return length
+	var lo := 1.0
+	var hi := length
+	for i in 5:
+		var mid := (lo + hi) * 0.5
+		if _cam_crowded(o + dirv * mid, space):
+			hi = mid
+		else:
+			lo = mid
+	return lo
 
 
 ## Distance along the ray (o, unit dir) to where it enters an upright cylinder at base c, or -1.
