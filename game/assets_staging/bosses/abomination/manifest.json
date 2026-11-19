@@ -1,0 +1,20 @@
+{
+  "boss": "Seraphine's Abomination",
+  "about": "Vampire-werewolf hybrid horror (Act III hybrids): wolf skull muzzle splitting into a vampire jaw, matted black-grey fur over pale corpse skin, exposed ribs, elongated multi-jointed arms with long claws, digitigrade legs, bone spurs, crimson veins, red eyes.",
+  "height_m": 2.8,
+  "model": {
+    "file": "abomination.glb",
+    "notes": "Tripo text-to-3D (standard, 38.2k triangles, PBR: albedo, metallic-roughness, normal), turned -90 degrees about Y to face +Z, feet at y=0, scaled to 2.8 m tall (2.7 m wide in its A-pose). Texture imports must be Lossy (WebP), never VRAM. Add an emissive red term on the veins (mask from the albedo's red channel) for the 'crimson glow'."
+  },
+  "rigged": {
+    "file": "rigged/abomination_rigged.glb",
+    "notes": "Meshy auto-rig of the same mesh (24-bone humanoid skeleton), stripped with strip_rig_glb.gd 'mesh' mode (no textures; re-apply the PBR material from abomination.glb). In a .gdignore folder: read it with GLTFDocument. The digitigrade legs and long arms rig acceptably; the arms stretch at the extremes of the slam, which suits the creature.",
+    "rig_source_upload": "https://d2ol7oe51mr4n9.cloudfront.net/user_3M3cbVYOpQkCAbZXwwBloXVahos/b146ef2d-4dec-4431-a42c-348de9b9effc.glb"
+  },
+  "clips": [
+    {"role": "heavy slam", "file": "clips/abomination_anim_slam.glb", "library_name": "Charged_Ground_Slam", "library_id": 127, "length": 3.033, "loop": false, "strike_time": 1.67, "windup_peak": 0.37, "root_motion_m": [0.0, 0.0, 0.0], "notes": "rears up with an arm overhead (0.4-1.3 s), then smashes the ground at about 1.67 s: spawn the shockwave and the boss_slam SFX there."},
+    {"role": "grab / throw", "file": "clips/abomination_anim_grab_throw.glb", "library_name": "Grip_and_Throw_Down", "library_id": 389, "length": 4.7, "loop": false, "strike_time": 3.5, "grab_time": 0.9, "root_motion_m": [0.25, 0.0, 0.02], "notes": "reaches out and grabs (about 0.6-1.2 s), hoists the victim overhead (1.5-3.2 s) and hurls it down at about 3.5 s. Attach Sol to the right hand during the hold for a grab attack."},
+    {"role": "roar", "file": "clips/abomination_anim_roar.glb", "library_name": "Show_Both_Arm_Muscles", "library_id": 388, "length": 1.9, "loop": false, "strike_time": null, "roar_peak": 0.6, "root_motion_m": [0.0, 0.0, 0.0], "notes": "throws both arms up and flexes, a chest-out bellow. Short; good for the intro or phase change. Zombie_Scream (386, used by the werewolf) is a longer alternative on this skeleton too."}
+  ],
+  "previews": ["../previews_chosen.jpg (library previews, rows 4-6)", "rigged_frames_check.jpg", "model_views_check.jpg"]
+}

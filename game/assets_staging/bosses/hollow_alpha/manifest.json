@@ -1,0 +1,14 @@
+{
+  "boss": "The Hollow Alpha",
+  "about": "No new assets and no credits: the Alpha reuses the werewolf enemy (game/assets/characters/werewolf/) with the new werewolf clips from ../../creatures/werewolf/ at a larger scale.",
+  "scale": 1.35,
+  "height_m": 3.24,
+  "clips": {
+    "run": "../../creatures/werewolf/werewolf_anim_run_feral.glb",
+    "attack_heavy": "../../creatures/werewolf/werewolf_anim_heavy_swipe.glb (strike 1.57 s)",
+    "attack_leap": "../../creatures/werewolf/werewolf_anim_pounce.glb (lands/strikes 1.3 s, travels 4.7 m before scaling)",
+    "roar": "../../creatures/werewolf/werewolf_anim_roar.glb (intro and phase change; roar peak 0.97 s)",
+    "death": "../../creatures/werewolf/werewolf_anim_death_heavy.glb"
+  },
+  "notes": "Scale root motion by the same 1.35. Slow the playback to about 0.85x so the larger body reads heavier. Tint the fur darker and give the eyes a stronger glow to tell it apart from common werewolves. Audio: ../../audio/sfx_werewolf_roar.ogg pitched down about 3 semitones."
+}

@@ -1,0 +1,27 @@
+{
+  "about": "Shared photographic material library (asset round 3). Each material: <name>_albedo (sRGB), <name>_normal (tangent space, OpenGL / green-up, the Godot convention), <name>_roughness (linear grey). 1024 x 1024. Albedos generated with GPT Image 2.6 (low quality, 0.25 credits each) as top-down or frontal flat-lit photos; made seamless by offset-and-blend (half-tile offset copy blended in at the borders with a smoothstep mask, local contrast restored), then normal maps from a high-passed luminance height (Sobel) and roughness from a per-material base modulated by local luminance (crevices rougher, highlights smoother). Import as Lossy (WebP) with mipmaps, never VRAM; normals with compress/normal_map=1. Cards (pine_branch_card, moss_card) are not tiled: their albedo PNG has an alpha channel cut from the black background, for alpha-scissor foliage cards.",
+  "tools": "assets_r3/tools/texproc.py in the round-3 scratchpad (numpy, scipy, Pillow)",
+  "materials": [
+    {"name": "wet_cobblestone", "use": "Old Quarter plaza and crosswalk paving (concept 01, 12)", "tiling": "seamless", "roughness_base": 0.45, "suggested_uv_m": 2.0, "job": "5a675b24-0fe9-4f2b-a247-77a27b0f7479"},
+    {"name": "cracked_asphalt", "use": "streets, docks lots", "tiling": "seamless", "roughness_base": 0.7, "suggested_uv_m": 4.0, "job": "fbc787b8-8ec3-423f-8bb4-0c562d85ccb3"},
+    {"name": "brick", "use": "townhouses, alleys (concept 04, 12)", "tiling": "seamless", "roughness_base": 0.85, "suggested_uv_m": 2.0, "job": "457b2b16-ddf1-462d-a5f3-7e6a27236ccd"},
+    {"name": "limestone", "use": "cathedral, Undercroft arch, monuments", "tiling": "seamless", "roughness_base": 0.85, "suggested_uv_m": 3.0, "job": "c4132bab-666e-4aaf-9117-5e992eaf56e0"},
+    {"name": "stucco", "use": "French Quarter pastel facades (concept 02)", "tiling": "seamless", "roughness_base": 0.9, "suggested_uv_m": 3.0, "job": "e152e755-9e39-4ccc-9c7f-89f1a59be078"},
+    {"name": "rusted_metal", "use": "containers, cranes, fire escapes (concept 05)", "tiling": "seamless", "roughness_base": 0.8, "metallic_hint": 0.6, "suggested_uv_m": 2.0, "job": "c8b5f44f-2523-48d1-b095-d966205a1f48"},
+    {"name": "wood_planks", "use": "piers, porches, trailer decks", "tiling": "seamless", "roughness_base": 0.75, "suggested_uv_m": 2.0, "job": "1ff654b2-c37b-4b95-be49-1eaad399599e"},
+    {"name": "forest_floor", "use": "Hollow Pines ground (needles and leaves)", "tiling": "seamless", "roughness_base": 0.9, "suggested_uv_m": 3.0, "job": "4b13dc9e-e528-44cf-a017-f626d25aef55"},
+    {"name": "mud", "use": "bayou banks, tyre-rutted tracks", "tiling": "seamless", "roughness_base": 0.4, "suggested_uv_m": 3.0, "job": "97d1f655-4011-4450-8c3c-dfc32e9bad26"},
+    {"name": "mossy_rock", "use": "boulders, cemetery walls, bayou", "tiling": "seamless", "roughness_base": 0.85, "suggested_uv_m": 2.0, "job": "98362252-5aab-467c-9b15-6a127b2c95b6"},
+    {"name": "cliff_rock", "use": "cliffs, quarry, river banks", "tiling": "seamless", "roughness_base": 0.85, "suggested_uv_m": 4.0, "job": "6337718e-651e-4047-b03a-a70aa3d33f78"},
+    {"name": "bark_pine", "use": "pine trunks (Hollow Pines)", "tiling": "seamless", "roughness_base": 0.9, "suggested_uv_m": 1.0, "job": "549e4aa0-50c9-4dc9-a13c-83dfb5630ff4"},
+    {"name": "bark_cypress", "use": "bald cypress trunks (bayou)", "tiling": "seamless", "roughness_base": 0.9, "suggested_uv_m": 1.0, "job": "c435db9b-42ba-4ee6-9772-2de60c8e75c6"},
+    {"name": "cemetery_marble", "use": "tombs, mausoleum trim, statues", "tiling": "seamless", "roughness_base": 0.5, "suggested_uv_m": 1.5, "job": "5197c792-e30f-4b36-be78-72fd74431bbf"},
+    {"name": "wet_sand", "use": "river shore, bayou beaches", "tiling": "seamless", "roughness_base": 0.45, "suggested_uv_m": 3.0, "job": "221f987e-602e-4d43-8305-b49737045036"},
+    {"name": "weathered_concrete", "use": "docks, warehouses, kerbs", "tiling": "seamless", "roughness_base": 0.85, "suggested_uv_m": 3.0, "job": "1b9948f1-7786-46e7-bf97-aea72f6a141b"},
+    {"name": "slate_roof", "use": "pitched roofs, cathedral roof", "tiling": "seamless", "roughness_base": 0.55, "suggested_uv_m": 2.0, "job": "3b5be7b0-72e3-4d2f-b396-a21fe09de2e9"},
+    {"name": "tar_roof_gravel", "use": "flat rooftops (concept 11)", "tiling": "seamless", "roughness_base": 0.8, "suggested_uv_m": 3.0, "job": "b270a7a5-948a-4c28-b685-9e154a923d52"},
+    {"name": "pine_branch_card", "use": "pine foliage cards (alpha scissor ~0.4, double-sided)", "tiling": "card", "roughness_base": 0.7, "job": "a8b65ba3-bdc2-4980-82d8-acc1f5feb267"},
+    {"name": "moss_card", "use": "hanging Spanish moss cards for cypress and oak (alpha scissor ~0.35, double-sided)", "tiling": "card", "roughness_base": 0.85, "job": "07feac0c-5c66-4466-b4ed-6915aa624785"}
+  ],
+  "preview": "contact_sheet.jpg (each albedo tiled 2 x 2 to show the seams, next to its normal map)"
+}
