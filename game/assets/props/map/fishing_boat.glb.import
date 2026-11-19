@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://dad8pfqw6nt8n"
-path="res://.godot/imported/street_clock.glb-1dc8a8c3dd0cae8067fa4f75dea545e8.scn"
+uid="uid://dklnjqbyj27e6"
+path="res://.godot/imported/fishing_boat.glb-a4f166920cf4809bc64e4402c2f96e89.scn"
 
 [deps]
 
-source_file="res://assets_staging/props/street_clock.glb"
-dest_files=["res://.godot/imported/street_clock.glb-1dc8a8c3dd0cae8067fa4f75dea545e8.scn"]
+source_file="res://assets/props/map/fishing_boat.glb"
+dest_files=["res://.godot/imported/fishing_boat.glb-a4f166920cf4809bc64e4402c2f96e89.scn"]
 
 [params]
 

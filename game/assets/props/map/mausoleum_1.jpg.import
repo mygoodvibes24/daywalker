@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cniun423hp7j0"
-path="res://.godot/imported/fishing_boat_1.jpg-243ff1afdf506c15fb1bbec6d436393e.ctex"
+uid="uid://denobofxk3k5c"
+path="res://.godot/imported/mausoleum_1.jpg-bd661306bd9daf5eb7ddadd3ccd7752e.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "6e54a9fc9b1ce59344625820e30a1af4"
+"md5": "1c3637be9ac1a426e00c8d1896bf909d"
 }
 
 [deps]
 
-source_file="res://assets_staging/props/fishing_boat_1.jpg"
-dest_files=["res://.godot/imported/fishing_boat_1.jpg-243ff1afdf506c15fb1bbec6d436393e.ctex"]
+source_file="res://assets/props/map/mausoleum_1.jpg"
+dest_files=["res://.godot/imported/mausoleum_1.jpg-bd661306bd9daf5eb7ddadd3ccd7752e.ctex"]
 
 [params]
 
@@ -33,5 +33,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=0
+process/size_limit=512
 detect_3d/compress_to=0

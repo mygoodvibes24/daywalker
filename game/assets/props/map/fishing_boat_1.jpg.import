@@ -2,27 +2,27 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://chmcegn7esggx"
-path="res://.godot/imported/gazebo_2.jpg-0254dfc08bd2cd57ed9118575ec739ea.ctex"
+uid="uid://cniun423hp7j0"
+path="res://.godot/imported/fishing_boat_1.jpg-de0bebf47f017886ceba819467134d5d.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "fd1ebc85b43513afcf4f448192176634"
+"md5": "6e54a9fc9b1ce59344625820e30a1af4"
 }
 
 [deps]
 
-source_file="res://assets_staging/props/gazebo_2.jpg"
-dest_files=["res://.godot/imported/gazebo_2.jpg-0254dfc08bd2cd57ed9118575ec739ea.ctex"]
+source_file="res://assets/props/map/fishing_boat_1.jpg"
+dest_files=["res://.godot/imported/fishing_boat_1.jpg-de0bebf47f017886ceba819467134d5d.ctex"]
 
 [params]
 
 compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.9
+compress/lossy_quality=0.85
 compress/hdr_compression=1
-compress/normal_map=1
+compress/normal_map=0
 compress/channel_pack=0
 mipmaps/generate=true
 mipmaps/limit=-1
@@ -33,5 +33,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=0
+process/size_limit=512
 detect_3d/compress_to=0

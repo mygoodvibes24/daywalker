@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dd3wsgitodu56"
-path="res://.godot/imported/street_clock_0.jpg-ea9e7a7ea3f9a43e27fb78d4c1b212b2.ctex"
+uid="uid://du6i4avli783p"
+path="res://.godot/imported/street_clock_1.jpg-fbdb8b296719858ed645b35752f9cff1.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "de34a68e5f9b17f2b87c4d57d14cd8bb"
+"md5": "a4356316b3b8741e4135bdd0642bd7b5"
 }
 
 [deps]
 
-source_file="res://assets_staging/props/street_clock_0.jpg"
-dest_files=["res://.godot/imported/street_clock_0.jpg-ea9e7a7ea3f9a43e27fb78d4c1b212b2.ctex"]
+source_file="res://assets/props/map/street_clock_1.jpg"
+dest_files=["res://.godot/imported/street_clock_1.jpg-fbdb8b296719858ed645b35752f9cff1.ctex"]
 
 [params]
 
@@ -33,5 +33,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=0
+process/size_limit=512
 detect_3d/compress_to=0

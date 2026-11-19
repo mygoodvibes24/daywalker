@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://ba3sl5ugwnkg2"
-path="res://.godot/imported/gazebo.glb-e02cbb8aebe4ce8f9d7ba3f53aace9f5.scn"
+uid="uid://c7mxq7mk86gqv"
+path="res://.godot/imported/mausoleum.glb-9b6c243d7276cf89aaeae90c47807dd1.scn"
 
 [deps]
 
-source_file="res://assets_staging/props/gazebo.glb"
-dest_files=["res://.godot/imported/gazebo.glb-e02cbb8aebe4ce8f9d7ba3f53aace9f5.scn"]
+source_file="res://assets/props/map/mausoleum.glb"
+dest_files=["res://.godot/imported/mausoleum.glb-9b6c243d7276cf89aaeae90c47807dd1.scn"]
 
 [params]
 

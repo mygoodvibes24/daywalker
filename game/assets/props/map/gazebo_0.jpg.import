@@ -2,27 +2,27 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cdn0543ehfl3b"
-path="res://.godot/imported/street_clock_2.jpg-48798e5800705ffc0a5873e165198afe.ctex"
+uid="uid://wlahrpi5qvym"
+path="res://.godot/imported/gazebo_0.jpg-65801af440d1533997e9c5f17a8a1143.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "75d2a04adc7e1484ec68515d70b1e6e4"
+"md5": "46716130b8e55ed767b91d6e53185231"
 }
 
 [deps]
 
-source_file="res://assets_staging/props/street_clock_2.jpg"
-dest_files=["res://.godot/imported/street_clock_2.jpg-48798e5800705ffc0a5873e165198afe.ctex"]
+source_file="res://assets/props/map/gazebo_0.jpg"
+dest_files=["res://.godot/imported/gazebo_0.jpg-65801af440d1533997e9c5f17a8a1143.ctex"]
 
 [params]
 
 compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.9
+compress/lossy_quality=0.85
 compress/hdr_compression=1
-compress/normal_map=1
+compress/normal_map=0
 compress/channel_pack=0
 mipmaps/generate=true
 mipmaps/limit=-1

@@ -2,27 +2,27 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bxw0w07g1jml5"
-path="res://.godot/imported/mausoleum_2.jpg-b268d20a1396f3ba019bff0ea93d2a28.ctex"
+uid="uid://csrcxhskjcodp"
+path="res://.godot/imported/fishing_boat_0.jpg-058081f22e87baa8d5a9868231c44a44.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "992b5a820c04a8c99f97ad909418a248"
+"md5": "71d069abfb522ec01deb0aaa0e06c983"
 }
 
 [deps]
 
-source_file="res://assets_staging/props/mausoleum_2.jpg"
-dest_files=["res://.godot/imported/mausoleum_2.jpg-b268d20a1396f3ba019bff0ea93d2a28.ctex"]
+source_file="res://assets/props/map/fishing_boat_0.jpg"
+dest_files=["res://.godot/imported/fishing_boat_0.jpg-058081f22e87baa8d5a9868231c44a44.ctex"]
 
 [params]
 
 compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.9
+compress/lossy_quality=0.85
 compress/hdr_compression=1
-compress/normal_map=1
+compress/normal_map=0
 compress/channel_pack=0
 mipmaps/generate=true
 mipmaps/limit=-1
