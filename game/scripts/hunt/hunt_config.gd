@@ -55,7 +55,7 @@ const NIGHT_BOSS_POOL := [
 		"why": "The Court duke died on Marcus's doorstep, and Marcus sells whatever he hears. He knows who was really there.",
 		"epitaph": "Marcus told the whole Velvet Mile he was faster. For one night, he was."},
 	{"id": "knight", "script": "res://scripts/hunt/bosses/blood_knight.gd", "name": "CASSIUS VANE, LUCIEN'S BLOOD KNIGHT", "title": "The Count's Champion",
-		"hp": 1450.0, "tithe": 300, "full_moon": false, "intro": "court_taunt_3", "death": "", "intro_sfx": "vamp_hiss",
+		"hp": 1450.0, "tithe": 300, "full_moon": false, "intro": "boss_knight_intro", "death": "boss_knight_death", "intro_sfx": "vamp_hiss",
 		"why": "Lucien wants you brought before the Court, breathing. He has sent his champion to collect you.",
 		"epitaph": "Cassius Vane dragged what was left of you to the Count's table."},
 ]

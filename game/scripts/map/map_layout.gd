@@ -124,14 +124,16 @@ const PLATE_BLEND := 40.0
 # ---------------------------------------------------------------- the Hunt
 ## The Descent: around the map edge, across the districts. type: subway | manhole |
 ## rooftop | ladder (up a quay ladder out of the river) | trail (out of the trees) | boat.
+## "look" (optional): where Sol and the camera face once he has control, when "face" (the way
+## the dressing opens) leads into a wall (QA2 #15: the open street, measured by ray from the point).
 const DEPLOY_POINTS := [
 	{"name": "Pier Six Ladder", "type": "ladder", "pos": Vector3(-202, 0, -60), "face": Vector3(1, 0, 0)},
 	{"name": "Tank Farm Drain", "type": "manhole", "pos": Vector3(-130, 0, -200), "face": Vector3(0, 0, 1)},
 	{"name": "Hollow Pines Trail", "type": "trail", "pos": Vector3(-40, 0, -212), "face": Vector3(0, 0, 1)},
 	{"name": "Bayou Landing", "type": "boat", "pos": Vector3(210, 0, -112), "face": Vector3(-1, 0, 0)},
-	{"name": "Velvet Mile Station", "type": "subway", "pos": Vector3(150, 0, -50), "face": Vector3(0, 0, 1)},
+	{"name": "Velvet Mile Station", "type": "subway", "pos": Vector3(150, 0, -50), "face": Vector3(0, 0, 1), "look": Vector3(0.7071, 0, 0.7071)},
 	{"name": "Promenade Rooftops", "type": "rooftop", "pos": Vector3(120, 0, 210), "face": Vector3(0, 0, -1)},
-	{"name": "Riverside Drain", "type": "manhole", "pos": Vector3(-20, 0, 214), "face": Vector3(0, 0, -1)},
+	{"name": "Riverside Drain", "type": "manhole", "pos": Vector3(-20, 0, 214), "face": Vector3(0, 0, -1), "look": Vector3(1, 0, 0)},
 	{"name": "Cannery Station", "type": "subway", "pos": Vector3(-130, 0, 200), "face": Vector3(0, 0, -1)},
 ]
 

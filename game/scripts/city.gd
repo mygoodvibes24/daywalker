@@ -2264,6 +2264,8 @@ func _awning(bt: Batch, f: Facade, u0: float, u1: float, y: float, row: int) -> 
 	# side cheeks
 	bt.tri(f.p(u0, y, 0.0), a, f.p(u0, y - drop, 0.0), -f.r, Color.WHITE, Vector2(0, v0), Vector2(0.5, v0), Vector2(0, v1))
 	bt.tri(f.p(u1, y, 0.0), d, f.p(u1, y - drop, 0.0), f.r, Color.WHITE, Vector2(0, v0), Vector2(0.5, v0), Vector2(0, v1))
+	# the camera can't pass through it (camera-only, Sol walks under it): QA2 #8
+	cam_blocker(f.p((u0 + u1) * 0.5, y - (drop + 0.25) * 0.5, dep * 0.5), Vector3(absf(u1 - u0), drop + 0.25, dep), Basis(f.r, Vector3.UP, f.n))
 	# a couple of thin iron arms
 	var m := _b("metal")
 	beam(m, f.p(u0 + 0.1, y - 0.9, 0.0), f.p(u0 + 0.1, y - drop, dep - 0.05), 0.03, 0.03, Color(0.05, 0.05, 0.05))
@@ -3632,6 +3634,27 @@ func post_collider(p: Vector3, r: float, h: float) -> void:
 	cs.shape = sh
 	cs.position = p + Vector3(0, h * 0.5, 0)
 	_trees_body.add_child(cs)
+
+
+## Layer of camera-only colliders: awnings and other overhangs Sol walks under but the camera
+## arm must not pass through (player.gd's spring mask includes it; nothing else collides with it).
+const CAM_LAYER := 512
+var _cam_body: StaticBody3D
+
+
+func cam_blocker(c: Vector3, size: Vector3, basis := Basis()) -> void:
+	if _cam_body == null:
+		_cam_body = StaticBody3D.new()
+		_cam_body.name = "CameraBlockers"
+		_cam_body.collision_layer = CAM_LAYER
+		_cam_body.collision_mask = 0
+		collider_root.add_child(_cam_body)
+	var cs := CollisionShape3D.new()
+	var sh := BoxShape3D.new()
+	sh.size = size
+	cs.shape = sh
+	cs.transform = Transform3D(basis, c)
+	_cam_body.add_child(cs)
 
 
 ## An axis-aligned or yawed box collider on the shared static body.

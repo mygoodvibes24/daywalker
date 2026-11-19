@@ -469,6 +469,8 @@ func _execute(p) -> void:
 			_sfx("boss_swipe", global_position + fwd * 1.5, 0.0) # AUDIO HOOK
 			if dist < reach and (dist < 1.0 or fwd.dot(to / dist) > atk.get("arc", 0.2)):
 				_hurt(p, atk.dmg)
+				if atk.get("type", "") == "parried":
+					return # turned aside: on_parried() set the reel, no chain follows
 			else:
 				_maybe_perfect(p, dist, reach + 3.0)
 			p.shake = maxf(p.shake, 0.12)
@@ -534,6 +536,8 @@ func _act(delta: float, p) -> Vector3:
 			if not hit_done and p.global_position.distance_to(global_position) < 1.6 + body_radius * 0.5:
 				hit_done = true
 				_hurt(p, atk.dmg)
+				if state != "act":
+					return Vector3.ZERO # parried: on_parried() already broke the dash
 			if act.left <= 0.0:
 				if not hit_done:
 					_maybe_perfect(p, _to_player(p).length(), 4.0)
@@ -564,6 +568,46 @@ func _hurt(p, dmg: float) -> void:
 func _maybe_perfect(p, dist: float, window: float) -> void:
 	if dist < window and p.dashed_recently():
 		main.perfect_dodge()
+
+
+# ---------------------------------------------------------------- parry (player.gd asks these)
+## Bosses never stagger, but a melee strike can be turned aside: the last PARRY_OPEN seconds of a
+## swipe or dash wind-up, and the dash itself. Slams, bolts and howls can't be parried (dodge them).
+const PARRY_OPEN := 0.4
+const PARRY_PUNISH := 1.3 # seconds the boss reels after a parry (shorter when enraged)
+
+
+func parry_open() -> bool:
+	if dead or dormant or visual == null or not visual.visible:
+		return false
+	var t: String = atk.get("type", "")
+	if state == "windup":
+		return (t == "swipe" or t == "dash") and state_t <= PARRY_OPEN
+	return state == "act" and act.get("kind", "") == "dash"
+
+
+## Flat distance from the player at which a parry catches this boss's open attack.
+func parry_reach() -> float:
+	if state == "act":
+		return 2.4 + body_radius
+	return float(atk.get("range", 3.0)) + body_radius * 0.5 + 1.4
+
+
+## The parry landed: the attack is broken (no chain follows) and the boss reels, open to punishment.
+func on_parried(_t: float = 0.0) -> void:
+	if dead:
+		return
+	atk = {"type": "parried", "recover": PARRY_PUNISH * (0.7 if enraged else 1.0), "cd": 0.9}
+	act = {}
+	hit_done = true
+	state = "recover"
+	state_t = float(atk.recover)
+	velocity = Vector3.ZERO
+	flash_t = 0.12
+	if not _play_all("hit", 0.08, 0.9, 0.0):
+		_play_all("boss/stance", 0.1, 1.2)
+	anim_lock_t = state_t
+	main.release_attack_token(self)
 
 
 func _reappear(p) -> void:

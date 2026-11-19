@@ -267,10 +267,7 @@ func debug_view_camp() -> void:
 	# back off along the camp's street (streets run on the GRID lines), towards the map centre
 	var on_x_lane := absf(c.x - roundf(c.x / main.GRID) * main.GRID) < absf(c.z - roundf(c.z / main.GRID) * main.GRID)
 	var dir := Vector3(0, 0, -signf(c.z) if c.z != 0.0 else 1.0) if on_x_lane else Vector3(-signf(c.x) if c.x != 0.0 else 1.0, 0, 0)
-	var to := c + dir * 22.0
-	var nav_map: RID = get_world_3d().navigation_map
-	if NavigationServer3D.map_get_iteration_id(nav_map) > 0:
-		to = NavigationServer3D.map_get_closest_point(nav_map, to)
+	var to: Vector3 = main.safe_ground(c + dir * 22.0) # QA2 #5: not inside a tank
 	var look := Vector3(c.x - to.x, 0.0, c.z - to.z).normalized()
 	var yaw := atan2(-look.x, -look.z)
 	p.global_position = Vector3(to.x, main.city.height_at(to.x, to.z) + 0.2, to.z) # TERRAIN HOOK
@@ -813,11 +810,8 @@ func _revive() -> void:
 		away = ring.center - from
 	away.y = 0.0
 	away = away.normalized() if away.length() > 0.01 else Vector3(1, 0, 0)
-	var to := from + away * 8.0
-	var nav_map: RID = get_world_3d().navigation_map
-	if NavigationServer3D.map_get_iteration_id(nav_map) > 0:
-		to = NavigationServer3D.map_get_closest_point(nav_map, to)
-	p.global_position = Vector3(to.x, from.y + 0.2, to.z)
+	var to: Vector3 = main.safe_ground(from + away * 8.0) # never inside a solid the navmesh leaks into (QA2 #5)
+	p.global_position = to + Vector3(0, 0.2, 0)
 	var ma = p.get("mod_anim")
 	if ma != null:
 		ma.dead = false

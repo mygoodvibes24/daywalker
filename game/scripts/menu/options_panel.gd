@@ -41,16 +41,32 @@ func _init() -> void:
 	sb.shadow_color = Color(0, 0, 0, 0.6)
 	sb.shadow_size = 24
 	add_theme_stylebox_override("panel", sb)
-	custom_minimum_size = Vector2(620, 0)
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 2)
-	add_child(col)
+	custom_minimum_size = Vector2(1000, 0)
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 2)
+	add_child(outer)
 	var t := S.title("OPTIONS", 34, S.TEXT)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col.add_child(t)
-	col.add_child(S.rule())
+	outer.add_child(t)
+	outer.add_child(S.rule())
+	# two columns (QA2 #11): display + controls on the left, audio on the right, so the whole
+	# panel and its Back button fit at 720p
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 40)
+	outer.add_child(cols)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 2)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cols.add_child(col)
 	var prev: Control = null
 	for row in ROWS:
+		if row[0] == "vsync" and OS.has_feature("web"):
+			continue # browsers own the swap interval; settings.gd ignores it there
+		if row[0] == "#" and row[1] == "AUDIO":
+			col = VBoxContainer.new()
+			col.add_theme_constant_override("separation", 2)
+			col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			cols.add_child(col)
 		if row[0] == "#":
 			var h := S.label(row[1], 14, S.CRIMSON.lightened(0.25), 3)
 			h.add_theme_font_override("font", S.serif())
@@ -64,12 +80,12 @@ func _init() -> void:
 		prev = c
 	var sp := Control.new()
 	sp.custom_minimum_size = Vector2(0, 8)
-	col.add_child(sp)
+	outer.add_child(sp)
 	back_button = S.button("Back", 18)
 	back_button.custom_minimum_size = Vector2(180, 38)
 	back_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	back_button.pressed.connect(func(): back.emit())
-	col.add_child(back_button)
+	outer.add_child(back_button)
 	visibility_changed.connect(_on_shown)
 
 
@@ -226,3 +242,19 @@ func _on_shown() -> void:
 		r.call()
 	if first_focus != null:
 		first_focus.grab_focus.call_deferred()
+
+
+## Short screens (720p, phones with the UI scaled up): shrink the whole panel to fit, so Back is
+## always on screen (QA2 #11), like the hub panel does.
+func fit_scale(vs: Vector2) -> float:
+	var sz := size if size.y > 0.0 else get_combined_minimum_size()
+	return minf(1.0, minf(vs.y * 0.96 / maxf(sz.y, 1.0), vs.x * 0.96 / maxf(sz.x, 1.0)))
+
+
+func _process(_delta: float) -> void:
+	if not is_visible_in_tree() or size.y <= 0.0:
+		return
+	var k := fit_scale(get_viewport_rect().size)
+	pivot_offset = size * 0.5
+	if not is_equal_approx(scale.x, k):
+		scale = Vector2(k, k)

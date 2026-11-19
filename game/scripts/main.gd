@@ -249,7 +249,7 @@ func _bake_navigation() -> void:
 	var nm := NavigationMesh.new()
 	nm.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
 	nm.geometry_collision_mask = 1
-	nm.agent_radius = 0.5
+	nm.agent_radius = 0.6 # a whole number of 0.3 m cells (0.5 was ceiled, with a warning every load)
 	nm.agent_height = 1.75
 	nm.agent_max_climb = 0.25
 	var pr: Rect2 = city.play_rect # MAP HOOK: bake the whole large map
@@ -289,6 +289,7 @@ func clock_text() -> String:
 
 func _process(delta: float) -> void:
 	_update_slowmo()
+	_fall_sweep(delta)
 	if game_over:
 		if Input.is_action_just_pressed("restart") and hunt == null: # HUNT HOOK: the results screen decides
 			clear_slowmo()
@@ -382,6 +383,82 @@ func _road_point_near(center: Vector3) -> Vector3:
 			best_score = score
 			best = p
 	return best
+
+
+# ---------------------------------------------------------------- safe ground (QA2 #5)
+const KILL_DEPTH := 6.0 # this far below the ground under you: you fell out of the world
+const KILL_Y := -25.0 # and never lower than this, whatever the terrain says
+
+
+## True if `p` (feet height) is open ground: the first thing a ray from high above meets is the
+## ground at p, so p is not inside a closed collider (a Docks tank, a crate stack) or under one.
+func spot_clear(p: Vector3) -> bool:
+	var space := get_world_3d().direct_space_state if is_inside_tree() else null
+	if space == null:
+		return true
+	var q := PhysicsRayQueryParameters3D.create(p + Vector3(0, 30.0, 0), p - Vector3(0, 1.5, 0), 1)
+	var hit := space.intersect_ray(q)
+	if hit.is_empty():
+		return false # nothing under it at all: a hole
+	return absf(float(hit.position.y) - p.y) < 1.1
+
+
+## The nearest open ground to `near`: the navmesh point if it is clear, else the nearest clear road
+## point. Use for revives, deploy snaps and fall recovery (the navmesh is baked inside some solids).
+func safe_ground(near: Vector3) -> Vector3:
+	var to := near
+	var nav_map: RID = get_world_3d().navigation_map
+	if NavigationServer3D.map_get_iteration_id(nav_map) > 0:
+		to = NavigationServer3D.map_get_closest_point(nav_map, near)
+	var gy := ground_y(to.x, to.z)
+	if absf(to.y - gy) < 1.5:
+		to.y = gy # the navmesh floats a little over the ground
+	if spot_clear(to):
+		return to
+	if city != null and not city.road_points.is_empty():
+		var pts: Array = []
+		for r in city.road_points:
+			pts.append(r)
+		pts.sort_custom(func(a, b): return a.distance_squared_to(near) < b.distance_squared_to(near))
+		for i in mini(pts.size(), 40):
+			var r: Vector3 = pts[i]
+			if spot_clear(r):
+				return r
+		return pts[0]
+	return Vector3(to.x, maxf(to.y, 0.0), to.z)
+
+
+## Ground height under (x, z), for the kill plane: the terrain, or 0 on the flat test map.
+func ground_y(x: float, z: float) -> float:
+	if city != null and city.has_method("height_at"):
+		return city.height_at(x, z)
+	return 0.0
+
+
+## Is this body below the world? (fell through a seam, spawned inside a solid and squeezed out)
+func below_world(p: Vector3) -> bool:
+	return p.y < KILL_Y or p.y < ground_y(p.x, p.z) - KILL_DEPTH
+
+
+var _fall_sweep_t := 0.0
+
+
+## Enemies and bosses that fell out of the world come back on the nearest open ground.
+func _fall_sweep(delta: float) -> void:
+	_fall_sweep_t -= delta
+	if _fall_sweep_t > 0.0 or enemies_root == null:
+		return
+	_fall_sweep_t = 0.5
+	for e in enemies_root.get_children():
+		if not (e is Node3D) or e.get("dead") == true:
+			continue
+		if below_world(e.global_position):
+			var home = e.get("arena_center")
+			var aim: Vector3 = home if home is Vector3 and home != Vector3.ZERO else e.global_position
+			var to := safe_ground(Vector3(aim.x, ground_y(aim.x, aim.z), aim.z))
+			e.global_position = to + Vector3(0, 0.3, 0)
+			if e is CharacterBody3D:
+				e.velocity = Vector3.ZERO
 
 
 ## Attack tokens: only a couple of enemies may strike at once, the rest circle.
@@ -517,7 +594,8 @@ func open_pause() -> void:
 
 
 func menu_open() -> bool:
-	return inventory_ui.is_open() or levelup_ui.is_open() or Time.get_ticks_msec() < ui_block_until
+	return inventory_ui.is_open() or levelup_ui.is_open() or Time.get_ticks_msec() < ui_block_until \
+		or (hunt != null and hunt.story != null and hunt.story.playing) # the first-Hunt intro (QA2 #3)
 
 
 func open_levelup() -> void:

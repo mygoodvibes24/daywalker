@@ -12,10 +12,15 @@ enum { VAMPIRE, WEREWOLF }
 ## min / max: the distance band it is used from. cd: seconds before it can come again. dmg: x damage.
 const SPECIALS := {
 	"lunge": {"windup": 0.55, "dist": 7.5, "speed": 17.0, "width": 1.4, "dmg": 1.25,
-		"min": 3.5, "max": 8.0, "cd": 5.5, "color": Color(1.0, 0.05, 0.15)},
+		"min": 2.6, "max": 8.0, "cd": 4.5, "color": Color(1.0, 0.05, 0.15)},
 	"leap": {"windup": 0.5, "air": 0.6, "height": 2.4, "radius": 2.4, "dmg": 1.4,
-		"min": 4.0, "max": 10.0, "cd": 6.5, "color": Color(1.0, 0.35, 0.05)},
+		"min": 3.2, "max": 10.0, "cd": 5.5, "color": Color(1.0, 0.35, 0.05)},
 }
+## QA2 #7: pressed up against Sol with the special ready, an enemy often hops back out of reach
+## (BACKSTEP_CHANCE) and opens with it from there, so a player standing still sees it too.
+const BACKSTEP_CHANCE := 0.55
+const BACKSTEP_TIME := 0.4
+const BACKSTEP_SPEED := 8.0
 const STAGGER_FRAC := 0.25 # at or below this share of max hp a hit staggers (the bar turns red)
 const BAR_SIZE := Vector2(0.9, 0.09)
 const BAR_SHADER := """
@@ -138,7 +143,7 @@ func _ready() -> void:
 	hp = max_hp
 	human_stats = {"max_hp": max_hp, "speed": speed, "damage": damage, "range": attack_range, "body": body_color, "skin": skin_color, "eye": eye_color}
 	orbit_sign = 1.0 if randf() < 0.5 else -1.0
-	special_cd = randf_range(2.0, 4.5) # not the instant they arrive
+	special_cd = randf_range(0.6, 1.8) # not the instant they arrive, but early enough to open with
 	agent = NavigationAgent3D.new()
 	agent.path_desired_distance = 1.0
 	agent.target_desired_distance = 1.2
@@ -539,6 +544,13 @@ func _physics_process(delta: float) -> void:
 					and dist >= float(SPECIALS[sp].min) and dist <= float(SPECIALS[sp].max):
 				_start_special(sp, player, to, dist)
 				look = strike_dir
+			elif token and sp != "" and special_cd <= 0.0 and attack_cd <= 0.0 and speed > 0.0 \
+					and dist < float(SPECIALS[sp].min):
+				if randf() < BACKSTEP_CHANCE:
+					_start_backstep(sp, to, dist)
+					look = strike_dir
+				else:
+					special_cd = randf_range(1.0, 2.0) # swipe for now, think about it again soon
 			elif token and dist <= attack_range:
 				if attack_cd <= 0.0:
 					strike_dir = to / dist if dist > 0.01 else Vector3(sin(visual.rotation.y), 0, cos(visual.rotation.y))
@@ -604,6 +616,18 @@ func _start_special(sp: String, player, to: Vector3, dist: float) -> void:
 	knockback = Vector3.ZERO
 
 
+## Too close for the special: hop back (facing Sol) to open it from range (_special_tick).
+func _start_backstep(sp: String, to: Vector3, dist: float) -> void:
+	special = sp + "_back"
+	special_t = BACKSTEP_TIME
+	strike_dir = to / maxf(dist, 0.01) if dist > 0.01 else Vector3(sin(visual.rotation.y), 0, cos(visual.rotation.y))
+	attack_cd = maxf(attack_cd, 0.4)
+	if anim != null and anim.has_animation("run"):
+		anim.play_backwards("run", 0.1)
+		anim.speed_scale = 1.3
+		anim_state = "run_back"
+
+
 func _cancel_special() -> void:
 	special = ""
 	special_t = 0.0
@@ -650,6 +674,12 @@ func _special_tick(player, delta: float) -> void:
 			if special_t <= 0.0:
 				_slam(player, d)
 				_recover(0.55)
+		"lunge_back", "leap_back":
+			_apply_velocity(-strike_dir * BACKSTEP_SPEED, delta)
+			if special_t <= 0.0:
+				special = ""
+				var dist := to.length()
+				_start_special(sp, player, to if dist > 0.01 else strike_dir, maxf(dist, 0.01))
 		_: # recover: the follow-through, then back to the fight
 			_apply_velocity(Vector3.ZERO, delta)
 			if special_t <= 0.0:

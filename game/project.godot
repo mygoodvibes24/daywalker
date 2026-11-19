@@ -30,3 +30,7 @@ renderer/rendering_method.web="gl_compatibility"
 limits/spatial_indexer/threaded_cull_minimum_instances.web=65536
 anti_aliasing/quality/msaa_3d=1
 textures/vram_compression/import_etc2_astc=true
+
+[navigation]
+
+3d/merge_rasterizer_cell_scale=0.001

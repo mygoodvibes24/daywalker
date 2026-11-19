@@ -80,7 +80,7 @@ func _in_play() -> bool:
 	if _main == null or not _main.started or _main.game_over or get_tree().paused or _main.menu_open():
 		return false
 	var h = _main.get("hunt")
-	if h != null and h.state in ["idle", "over"]:
+	if h != null and h.state in ["idle", "over", "intro"]: # the intro: a tap skips it (QA2 #13)
 		return false
 	return true
 

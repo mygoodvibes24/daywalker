@@ -357,7 +357,7 @@ func enemy_bark(e: Node3D) -> void:
 		return
 	if randf() < 0.3:
 		play_at("vamp_hiss", e.global_position, -4.0)
-	if randf() < 0.1:
+	if randf() < 0.1 and context != "boss": # no street taunts over a boss fight's adds (QA2 #17)
 		get_node("/root/Dialogue").play_group("court_taunt_" if randf() < 0.4 else "vamp_taunt_")
 
 
