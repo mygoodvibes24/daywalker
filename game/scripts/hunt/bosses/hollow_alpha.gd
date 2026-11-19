@@ -1,9 +1,11 @@
 extends "res://scripts/hunt/bosses/boss_base.gd"
 ## THE HOLLOW ALPHA, Mother Wren's firstborn. A giant of the Hollow Pack: leap slams across
 ## the arena, raking swipes, a howl that brings two wolves, and a frenzy below half health.
-## Look: the werewolf body at 1.75x, amber veins, a shaggy black mane of quills.
+## Look: the werewolf body at 1.35x (3.2 m) on the round-3 werewolf mocap (feral run, heavy
+## overhead swipe, pounce, heavy fall, and the roar for its howl), amber veins, a mane of quills.
 
 var howl_cd := 6.0
+const MODEL_SCALE := 1.35 # the round-3 manifest: 2.4 m * 1.35 = 3.24 m
 
 
 func _build() -> void:
@@ -14,11 +16,11 @@ func _build() -> void:
 	vein_color = Color(1.0, 0.55, 0.08)
 	vein_amount = 0.7
 	vein_scale = 5.0
-	body_radius = 1.0
-	body_height = 3.8
+	body_radius = 0.85
+	body_height = 3.3
 	speed = 7.0
 	keep_dist = 2.4
-	var r := add_rig("werewolf", 1.75, null, Color(1.0, 0.7, 0.1))
+	var r := add_rig("werewolf", MODEL_SCALE, null, Color(1.0, 0.7, 0.1))
 	# silhouette: a mane of black quills round the neck and down the spine
 	var fur := U.mat(Color(0.05, 0.04, 0.035), 0.95)
 	add_spikes(bone_mount(r, "neck"), 7, 0.42, Vector3(0, 0.55, -1.0), 2.6, fur, 0.07)

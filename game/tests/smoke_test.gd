@@ -96,6 +96,7 @@ func _initialize() -> void:
 	ok = await _fall_checks(main) and ok
 	ok = await _special_checks(main) and ok
 	ok = await _audio_checks(main) and ok
+	ok = await _asset_r3_checks(main) and ok
 	ok = await _menu_checks(main) and ok
 	ok = await _hunt_checks() and ok
 	if FileAccess.file_exists(SMOKE_SAVE):
@@ -753,6 +754,96 @@ func _move_checks(main) -> bool:
 
 
 # ---------------------------------------------------------------- audio, dialogue, subtitles
+## Asset round 3: the creature clips, the bosses' own bodies, their themes.
+func _asset_r3_checks(main) -> bool:
+	var ok := true
+	# creature clips (tools/build_r3_anims.gd): baked in place, strike times from the manifest
+	var want := {"werewolf": ["roar", "attack", "jump", "death", "sprint"], "vampire": ["claw_combo", "lunge", "backflip", "attack"], "civilian": ["death"]}
+	for n in want:
+		var inst: Node3D = (load("res://assets/characters/%s/%s_anim.scn" % [n, n]) as PackedScene).instantiate()
+		var ap: AnimationPlayer = inst.get_node("AnimationPlayer")
+		var r3: Array = inst.get_meta("r3_clips", [])
+		var has_all := true
+		for c in want[n]:
+			has_all = has_all and ap.has_animation(c) and r3.has(c)
+		# in place: the hips never travel over the ground
+		var drift := 0.0
+		for c in want[n]:
+			var a: Animation = ap.get_animation(c)
+			for t in a.get_track_count():
+				if a.track_get_type(t) == Animation.TYPE_POSITION_3D:
+					var p0: Vector3 = a.track_get_key_value(t, 0)
+					for k in a.track_get_key_count(t):
+						var pk: Vector3 = a.track_get_key_value(t, k)
+						drift = maxf(drift, Vector2(pk.x - p0.x, pk.z - p0.z).length())
+		ok = _check("%s has the round-3 clips %s, in place (drift %.3f m)" % [n, want[n], drift], has_all and drift < 0.01) and ok
+		inst.free()
+	var ww: Node3D = (load("res://assets/characters/werewolf/werewolf_anim.scn") as PackedScene).instantiate()
+	ok = _check("werewolf strike time from the manifest (heavy swipe 1.57 s)", is_equal_approx(float(ww.get_meta("strike_time")), 1.57)) and ok
+	ww.free()
+	var e = _spawn(main, 0, main.player.global_position + Vector3(40, 0, 40))
+	await process_frame
+	ok = _check("a live vampire plays the new clips (lunge, claw combo)", e.anim != null and e.anim.has_animation("lunge") and e.anim.has_animation("claw_combo") and is_equal_approx(e.strike_time, 0.57)) and ok
+	_clear_enemies(main)
+	# bosses: Marcus Crane and the Abomination wear their own models
+	var models := {"marcus": "res://scripts/hunt/bosses/velvet_fang.gd", "abomination": "res://scripts/hunt/bosses/abomination.gd"}
+	for id in models:
+		var b = load(models[id]).new()
+		b.main = main
+		b.boss_id = id
+		b.position = main.player.global_position + Vector3(30, 0.5, 30)
+		main.enemies_root.add_child(b)
+		for i in 5: await physics_frame
+		var r: Dictionary = b.rigs[0] if b.rigs.size() > 0 else {}
+		var model_ok: bool = r.get("name", "") == id and r.get("skel") != null and b.rigs.size() == 1
+		var anim_ok: bool = r.get("anim") != null and r.anim.has_animation("boss/heavy") and r.anim.has_animation("attack") and r.anim.current_animation != ""
+		ok = _check("%s wears its own model and clips (%s, playing %s)" % [id, r.get("name", "?"), r.anim.current_animation if anim_ok else "none"], model_ok and anim_ok) and ok
+		# grounded and to scale: feet on the floor, as tall as its stand-in
+		var aabb: AABB = (r.skel.get_node("Body") as MeshInstance3D).get_aabb() if model_ok else AABB()
+		var h: float = aabb.size.y * r.model.scale.y if model_ok else 0.0
+		ok = _check("%s stands on the ground at boss size (%.2f m, feet at %.2f)" % [id, h, aabb.position.y], model_ok and absf(aabb.position.y) < 0.02 and h > 2.0 and h < 4.8) and ok
+		if id == "marcus" and model_ok:
+			var mat: StandardMaterial3D = (r.skel.get_node("Body") as MeshInstance3D).mesh.surface_get_material(0)
+			ok = _check("Marcus's coat is matte (metallic %.2f, roughness %.2f)" % [mat.metallic, mat.roughness], mat.metallic == 0.0 and mat.metallic_texture == null and mat.roughness >= 0.55) and ok
+			ok = _check("Marcus reads clean: no vein overlay, no aura shell", float(b.overlay.get_shader_parameter("vein_amount")) == 0.0 and not b.aura.visible) and ok
+		if model_ok:
+			var tris: int = (r.skel.get_node("Body") as MeshInstance3D).mesh.surface_get_array_index_len(0) / 3
+			ok = _check("%s is inside the web budget (%d triangles <= 22k)" % [id, tris], tris <= 22000) and ok
+		if id == "marcus":
+			ok = _check("Marcus's own clips: the lunge on dashes, the slash combo on swipes", model_ok and r.anim.has_animation("boss/thrust") and is_equal_approx(float(r.strikes.get("boss/thrust", 0.0)), 0.9) and is_equal_approx(float(r.strikes.get("attack", 0.0)), 0.83)) and ok
+		else:
+			ok = _check("the Abomination's own clips: the slam and the roar", model_ok and r.anim.has_animation("boss/roar") and is_equal_approx(float(r.strikes.get("boss/heavy", 0.0)), 1.67)) and ok
+		main.enemies_root.remove_child(b)
+		b.free()
+	# the Hollow Alpha: the werewolf at 1.35x on the new clips, its howl the roar mocap
+	var al = load("res://scripts/hunt/bosses/hollow_alpha.gd").new()
+	al.main = main
+	al.position = main.player.global_position + Vector3(30, 0.5, 30)
+	main.enemies_root.add_child(al)
+	await physics_frame
+	var ar: Dictionary = al.rigs[0]
+	ok = _check("the Hollow Alpha is the werewolf at 1.35x with the roar", ar.name == "werewolf" and is_equal_approx(ar.model.scale.x, 1.35) and ar.anim != null and ar.anim.has_animation("boss/roar") and ar.anim.has_animation("roar")) and ok
+	main.enemies_root.remove_child(al)
+	al.free()
+	# boss themes: each plays in its own fight, the others keep the shared boss track
+	var audio = root.get_node("Audio")
+	var was_over: bool = main.game_over
+	main.game_over = false
+	audio.attach_world(main)
+	for id in ["marcus", "abomination"]:
+		audio.set_boss(true, id)
+		var s: AudioStream = audio._music[audio._music_cur].stream
+		ok = _check("boss music: %s's theme plays in its fight (%s)" % [id, audio.context], audio.context == "boss_" + id and s != null and s.resource_path.ends_with("boss_%s.ogg" % id) and (s as AudioStreamOggVorbis).loop) and ok
+	audio.set_boss(true, "knight")
+	ok = _check("boss music: a boss without a theme keeps the boss track", audio.context == "boss") and ok
+	audio.set_boss(false)
+	audio.set_music("explore", 0.1)
+	main.game_over = was_over
+	for n in ["wolf_roar", "claw_swipe", "pounce_whoosh", "lunge_whoosh", "body_fall", "boss_slam_impact"]:
+		ok = _check("creature SFX loads: " + n, audio._pick(n) != null) and ok
+	return ok
+
+
 func _audio_checks(main) -> bool:
 	var ok := true
 	var audio = root.get_node("Audio")
@@ -1520,7 +1611,9 @@ func _hunt_checks() -> bool:
 		if r.anim != null and r.anim.has_animation("boss/heavy") and r.anim.current_animation != "":
 			clip_ok = true
 	ok = _check("the boss is clip-driven (*_anim body + boss clip library, playing %s)" % (boss.rigs[0].anim.current_animation if boss.rigs[0].anim != null else "none"), clip_ok) and ok
-	ok = _check("the boss has its silhouette and veins", boss.overlay is ShaderMaterial and float(boss.overlay.get_shader_parameter("vein_amount")) > 0.0) and ok
+	# Marcus on his own model shows it clean (no veins, critic round 2); the others glow
+	var clean: bool = boss.get("own_model") == true
+	ok = _check("the boss has its silhouette and veins (or Marcus clean on his own model)", boss.overlay is ShaderMaterial and (clean or float(boss.overlay.get_shader_parameter("vein_amount")) > 0.0)) and ok
 	ok = _check("tonight's framing card names the boss", h.story != null and h.story.card_text().contains(night1.name)) and ok
 	# QA2 #12: the card sits top centre (clear of the phone stick) and hides under the map
 	h.map_screen.open()

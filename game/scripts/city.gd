@@ -1125,13 +1125,34 @@ func _flat_mat(rough: float, metal := 0.0) -> StandardMaterial3D:
 	return m
 
 
+## The photographic material library (asset round 3, assets/textures/library: seamless 1024 px
+## albedo / normal / roughness, imported Lossy). [albedo, roughness, normal], or [] if missing.
+const LIB_DIR := "res://assets/textures/library/"
+static func lib_textures(name: String) -> Array:
+	var out := []
+	for k in ["albedo", "roughness", "normal"]:
+		var p := LIB_DIR + "%s_%s.jpg" % [name, k]
+		if not ResourceLoader.exists(p):
+			return []
+		out.append(load(p))
+	return out
+
+
+## A surface material from the library, or from the procedural generator if it is missing.
+func _lib_mat(name: String, tile_m: float, fallback: Callable, fallback_tile: float, rough_scale := 1.0) -> StandardMaterial3D:
+	var t := lib_textures(name)
+	if t.is_empty():
+		return _surface_mat(fallback.call(), fallback_tile, rough_scale)
+	return _surface_mat(t, tile_m, rough_scale)
+
+
 func _make_materials() -> void:
-	M["brick"] = _surface_mat(_brick_textures(), 1.0)
-	M["stone"] = _surface_mat(_stone_textures(), 2.0)
-	M["stucco"] = _surface_mat(_stucco_textures(), 3.0)
-	var conc := _concrete_textures()
-	M["concrete"] = _surface_mat(conc, 4.0)
-	M["trim"] = _surface_mat(conc, 6.0, 0.7)
+	# walls and paving: the photographic library where it beats the procedural textures
+	M["brick"] = _lib_mat("brick", 2.0, _brick_textures, 1.0)
+	M["stone"] = _lib_mat("limestone", 3.0, _stone_textures, 2.0)
+	M["stucco"] = _lib_mat("stucco", 3.0, _stucco_textures, 3.0)
+	M["concrete"] = _lib_mat("weathered_concrete", 3.5, _concrete_textures, 4.0)
+	M["trim"] = _lib_mat("weathered_concrete", 5.0, _concrete_textures, 6.0, 0.7)
 	M["sidewalk"] = _surface_mat(_sidewalk_textures(), 1.5)
 	M["asphalt"] = preload("res://scripts/wet_materials.gd").asphalt() # shared wet-street shader (puddles, rain ripples)
 	M["metal"] = _flat_mat(0.45, 0.5)
@@ -1206,7 +1227,7 @@ func _make_materials() -> void:
 	stained_mat.roughness = 0.2
 	M["stained"] = stained_mat
 
-	M["cobble_fan"] = _surface_mat(_fan_cobble_textures(), 1.5, 0.8)
+	M["cobble_fan"] = _lib_mat("wet_cobblestone", 2.0, _fan_cobble_textures, 1.5, 0.8)
 
 	var lace := StandardMaterial3D.new()
 	lace.albedo_texture = _lace_texture()
@@ -2527,6 +2548,14 @@ func _build_plaza() -> void:
 		l.light_color = Color(1, 0.75, 0.45)
 		add_child(l)
 		lamps.append(l)
+	# a Victorian post clock on the south-east corner (asset round 3 prop), outside the arena ring
+	street_clock(Vector3(14.0, y, 15.0), -PI * 0.75)
+
+
+## A cast-iron Victorian post clock (asset round 3 prop, 4 m, dials on both faces) at ground p.
+func street_clock(p: Vector3, yaw: float) -> void:
+	if place_glb("street_clock", 4.0, Transform3D(Basis(Vector3.UP, yaw), p), true, 110.0) != Vector3.ZERO:
+		post_collider(p, 0.3, 3.0)
 
 
 func _ornate_lamp(p: Vector3) -> void:
@@ -3396,7 +3425,7 @@ func _make_map_materials() -> void:
 	M["water"] = Terrain.river_mat # the river: the terrain's water shader (moving normals, fresnel)
 	M["swamp"] = Terrain.water_mat
 	M["corrugated"] = _surface_mat(_corrugated_textures(), 2.0, 0.9)
-	M["wood"] = _surface_mat(_plank_textures(), 2.0)
+	M["wood"] = _lib_mat("wood_planks", 2.0, _plank_textures, 2.0) # piers, boardwalks, porches
 	M["pine"] = _surface_mat(_needle_textures(), 2.0)
 	for k in ["corrugated", "wood", "pine"]:
 		CASTS[k] = true

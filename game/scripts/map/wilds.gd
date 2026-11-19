@@ -95,6 +95,7 @@ static func build_pines(c) -> void:
 	_trailer_park(c, r)
 	_logging_yard(c, r)
 	_water_tower(c, _g(c, Vector3(25, -0.1, -192)))
+	_lake_shore(c)
 	# lamps along the roads into the woods (sodium, on wooden poles)
 	for road in PINE_ROADS:
 		for k in road.size() - 1:
@@ -127,6 +128,38 @@ static func _pine_ok(p: Vector3) -> bool:
 	if Vector2(p.x - lp.x, p.z - lp.z).length() < Layout.LAKE.radius * 1.2 + 3.0:
 		return false # the lake (its ring of pines stands just back from the shore)
 	return true
+
+
+## The lake's east shore (asset round 3 props): a cast-iron gazebo on the bank looking over the
+## water, and a wrecked fishing skiff run aground on the wading shelf, tilted, its keel in the mud.
+static func _lake_shore(c) -> void:
+	var lp: Vector3 = Layout.LAKE.pos
+	var lv: float = Layout.LAKE.level
+	# the gazebo: just inside the ring of pines, its plinth sunk to the lowest point under it
+	var dir := Vector3(1, 0, 0.35).normalized()
+	var gp := lp + dir * (Terrain._lake_r(lp.x + dir.x * 25.0, lp.z + dir.z * 25.0) + 5.5)
+	var gy := INF
+	for k in 8:
+		var o := Vector3(cos(TAU * k / 8.0), 0, sin(TAU * k / 8.0)) * 2.9
+		gy = minf(gy, c.height_at(gp.x + o.x, gp.z + o.z))
+	gp.y = maxf(gy, lv + 0.3) - 0.1
+	var gsize: Vector3 = c.place_glb("gazebo", 5.6, Transform3D(Basis(Vector3.UP, atan2(-dir.x, -dir.z)), gp), true, 140.0)
+	if gsize != Vector3.ZERO:
+		var gr := minf(gsize.x, gsize.z) * 0.5
+		for k in 8: # the eight cast-iron columns; walk in between them
+			var a := TAU * (k + 0.5) / 8.0
+			c.post_collider(gp + Vector3(cos(a), 0, sin(a)) * (gr - 0.45), 0.14, 3.2)
+		c.lots.append(Rect2(gp.x - gr, gp.z - gr, gr * 2.0, gr * 2.0))
+	# the skiff: bow up the bank, listing to port, keel 0.4 m into the shelf
+	var bdir := Vector3(-0.55, 0, 1).normalized()
+	var br := Terrain._lake_r(lp.x + bdir.x * 25.0, lp.z + bdir.z * 25.0)
+	var bp := lp + bdir * (br * 0.93)
+	bp.y = c.height_at(bp.x, bp.z) - 0.4
+	var yaw := atan2(bdir.x, bdir.z) # bow (+Z) toward the shore
+	var basis := Basis(Vector3.UP, yaw) * Basis(Vector3.FORWARD, 0.28) * Basis(Vector3.RIGHT, -0.12)
+	var bsize: Vector3 = c.place_glb("fishing_boat", 3.6, Transform3D(basis, bp), true, 120.0)
+	if bsize != Vector3.ZERO:
+		c.box_collider(bp + Vector3(0, 1.0, 0), Vector3(2.4, 2.0, 5.6), yaw)
 
 
 static func c_dist(p: Vector3, pts: Array) -> float:

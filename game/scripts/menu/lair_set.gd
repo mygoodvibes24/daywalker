@@ -16,6 +16,12 @@ const BenchPose = preload("res://scripts/menu/sol_bench_pose.gd")
 const NiaIdle = preload("res://scripts/menu/nia_idle.gd")
 const SOL_SCENES := ["res://assets/characters/sol/sol_modular.scn"]
 const NIA_SCENE := "res://assets/characters/nia/nia.scn"
+## Nia's face scan (asset round 3: captures in docs/face_scans/nia, the raw reconstruction in
+## assets/characters/nia/scan/) is ON HOLD: the projection pipeline leaves the same visible seams
+## as Sol's scanned head (critic round 2), so it stays off until that is fixed. When true, a baked
+## head would be expected at NIA_SCAN_HEAD; nothing is built or shipped for it yet.
+const NIA_FACE_SCAN := false
+const NIA_SCAN_HEAD := "res://assets/characters/nia/nia_scan_head.glb"
 const PROP_DIR := "res://assets/props/lair/"
 const SWORD_SCENE := "res://assets/characters/sol/sol_sword_silver.scn"
 

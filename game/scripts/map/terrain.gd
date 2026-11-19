@@ -775,6 +775,12 @@ void fragment() {
 }
 """
 
+## Splat layers drawn from the photographic material library (asset round 3) instead of the
+## older 512 px terrain set (kept as sources in assets/textures/terrain_src, not shipped); a layer
+## not listed here reads assets/textures/terrain.
+const LIBRARY_LAYERS := {"forest": "forest_floor", "mud": "mud", "rock": "cliff_rock"}
+
+
 static func _tex(name: String) -> Texture2D:
 	var path := "res://assets/textures/terrain/%s.jpg" % name
 	if not ResourceLoader.exists(path):
@@ -790,8 +796,14 @@ static func _materials() -> void:
 	terrain_mat = ShaderMaterial.new()
 	terrain_mat.shader = sh
 	for layer in ["forest", "mud", "dirt", "rock"]:
-		terrain_mat.set_shader_parameter(layer + "_alb", _tex(layer + "_albedo"))
-		terrain_mat.set_shader_parameter(layer + "_nrm", _tex(layer + "_normal"))
+		var lib: String = LIBRARY_LAYERS.get(layer, "")
+		var la := "res://assets/textures/library/%s_albedo.jpg" % lib
+		if lib != "" and ResourceLoader.exists(la):
+			terrain_mat.set_shader_parameter(layer + "_alb", load(la))
+			terrain_mat.set_shader_parameter(layer + "_nrm", load("res://assets/textures/library/%s_normal.jpg" % lib))
+		else:
+			terrain_mat.set_shader_parameter(layer + "_alb", _tex(layer + "_albedo"))
+			terrain_mat.set_shader_parameter(layer + "_nrm", _tex(layer + "_normal"))
 	var mn := FastNoiseLite.new()
 	mn.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	mn.frequency = 0.02

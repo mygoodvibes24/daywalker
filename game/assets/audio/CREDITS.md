@@ -36,3 +36,8 @@ Generated on Higgsfield (7.4 credits), processed as above.
 - **Voice (Nia, Naomi):** re-recorded `hunt_deploy_1`, `boss_alpha_intro` and `hunt_extract` so they match the game (no "three marks", the Alpha is male, no extraction); new `intro_brief_1`, `intro_brief_2`, `intro_brief_3` (the first-Hunt briefing). `poi_cleared_1` was re-keyed as `poi_cleared_nest` (same audio).
 - **SFX (Mirelo):** boss_slam (decay envelope and low boost added), boss_swipe, blood_bolt, boss_blink, curfew_drone (crossfaded into a 3 s loop), manhole_clank (+19 dB, it came back very quiet).
 - **Made with ffmpeg:** the Mirelo `parry_clang` and `land_thud` generations came back near silent (peaks at -30 and -35 dB), so `parry_clang` is `sword_hit_1` pitched up 25% with three decaying steel partials (2.35, 3.72, 5.23 kHz), and `land_thud` is the low end (below 260 Hz) of `boss_slam`, cut to 0.6 s.
+
+## Round 3 additions (2026-11-18/19)
+Generated on Higgsfield (9.9 credits; job ids in `docs/assets_r3/LEDGER.md`, prompts in `docs/assets_r3/audio_manifest.json`).
+- **Boss themes (ElevenLabs Music v2):** `music/boss_marcus.ogg` (velvet jazz menace, 48.6 s) and `music/boss_abomination.ogg` (taiko, anvils, wordless choir, 43.5 s), crossfaded into seamless loops, imported with loop=true. They play during the matching boss fights (`Audio.set_boss(true, id)`).
+- **Creature SFX (Mirelo):** `werewolf_roar`, `claw_swipe` (+16 dB), `pounce_whoosh`, `vampire_hiss` (a second `vamp_hiss` variant), `vampire_lunge_whoosh`, `boss_slam_impact`, `body_fall`; timed to the round-3 creature clips in `audio.gd`.

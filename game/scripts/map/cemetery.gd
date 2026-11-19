@@ -12,6 +12,7 @@ const Z1 := 200.0
 const AVENUES_X := [-40.0, 0.0, 40.0]
 const AVENUE_Z := 150.0
 const CHAPEL := Vector3(0, 0, 178)
+const MAUSOLEUM_H := 4.2
 
 
 static func build(c) -> void:
@@ -24,12 +25,26 @@ static func build(c) -> void:
 	_walls(c)
 	# tomb rows in the four bands between the avenues, north and south of the cross avenue
 	var bands := [[X0 + 2.0, -43.5], [-36.5, -3.5], [3.5, 36.5], [43.5, X1 - 2.0]]
-	for b in bands:
+	var mxfs: Array = [] # the mausoleums (one MultiMesh)
+	for bi in bands.size():
+		var b: Array = bands[bi]
 		for zr in [[Z0 + 4.0, AVENUE_Z - 5.0], [AVENUE_Z + 5.0, Z1 - 4.0]]:
 			var z: float = zr[0]
 			while z + 3.0 <= zr[1]:
-				_tomb_row(c, r, b[0], b[1], z)
+				# the inner bands' rows either side of the cross avenue: grand family mausoleums
+				# facing the avenue, with ordinary tombs in between
+				var face := 0.0
+				if bi == 1 or bi == 2:
+					if zr[0] < AVENUE_Z and z + 10.0 > zr[1]:
+						face = 1.0
+					elif zr[0] > AVENUE_Z and z == zr[0]:
+						face = -1.0
+				if face != 0.0:
+					_mausoleum_row(c, r, b[0], b[1], z, face, mxfs)
+				else:
+					_tomb_row(c, r, b[0], b[1], z)
 				z += 7.0
+	c.glb_multimesh("mausoleum", MAUSOLEUM_H, mxfs, 80.0, 170.0, true)
 	_chapel(c)
 	# weeping angels on plinths round the crossing of the main avenues
 	for p in [Vector3(-44.5, 0, 145.5), Vector3(44.5, 0, 145.5), Vector3(-44.5, 0, 154.5), Vector3(44.5, 0, 154.5)]:
@@ -95,6 +110,26 @@ static func _walls(c) -> void:
 				c.ck = c._chunk_of(p.x, p.z)
 				c.box(c._b("stucco"), p + Vector3(0, 1.7, 0), Vector3(0.9, 3.4, 0.9), col)
 				c.cyl(c._b("stone"), p + Vector3(0, 3.4, 0), 0.35, 0.2, 0.6, 8, Color(0.55, 0.53, 0.5))
+
+
+## A tomb row with two mausoleums (asset round 3 prop, gothic stone, 4.2 m) facing the cross
+## avenue (face +1: south, -1: north); family tombs fill the gaps either side.
+static func _mausoleum_row(c, r: RandomNumberGenerator, x0: float, x1: float, z: float, face: float, xfs: Array) -> void:
+	var w := x1 - x0
+	var mx := [x0 + w * 0.25, x0 + w * 0.75]
+	var hw := 2.0 # half the footprint's width plus a gap
+	var segs := [[x0, mx[0] - hw], [mx[0] + hw, mx[1] - hw], [mx[1] + hw, x1]]
+	for s in segs:
+		if s[1] - s[0] >= 2.2:
+			_tomb_row(c, r, s[0], s[1], z)
+	var depth := 4.2 # the model scaled to MAUSOLEUM_H is about 3.3 x 4.2 m
+	var cz := z + 3.0 - depth * 0.5 + 0.2 if face > 0.0 else z + depth * 0.5 - 0.1
+	for x: float in mx:
+		var p := Vector3(x, -0.05, cz)
+		xfs.append(Transform3D(Basis(Vector3.UP, 0.0 if face > 0.0 else PI), p))
+		c.box_collider(p + Vector3(0, 1.7, 0), Vector3(3.2, 3.4, depth - 0.2))
+		c.lots.append(Rect2(x - 1.7, cz - depth * 0.5, 3.4, depth))
+		c.hlod_box(Rect2(x - 1.6, cz - depth * 0.5, 3.2, depth), MAUSOLEUM_H * 0.8, Color(0.6, 0.58, 0.55))
 
 
 ## One row of family tombs between x0 and x1, their doors facing south (+z).

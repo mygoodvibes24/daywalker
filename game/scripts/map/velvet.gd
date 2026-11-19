@@ -106,6 +106,8 @@ static func _square(c, r: RandomNumberGenerator) -> void:
 	c._statue(c._b("metal"), sp + Vector3(0, 1.8, 0), 2.4, Color(0.25, 0.2, 0.12))
 	c.box_collider(sp + Vector3(0, 1.5, 0), Vector3(2.0, 3.0, 2.0))
 	c.add_road(ctr + Vector3(0, 0, 8))
+	# a post clock at the west entrance, off the arena (asset round 3 prop)
+	c.street_clock(ctr + Vector3(-23.0, 0, 0), PI * 0.5)
 
 
 ## Le Velours: a Beaux-Arts opera house with a colonnade, a fan marquee, a dome and a
