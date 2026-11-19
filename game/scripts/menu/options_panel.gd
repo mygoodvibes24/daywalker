@@ -41,16 +41,32 @@ func _init() -> void:
 	sb.shadow_color = Color(0, 0, 0, 0.6)
 	sb.shadow_size = 24
 	add_theme_stylebox_override("panel", sb)
-	custom_minimum_size = Vector2(620, 0)
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 2)
-	add_child(col)
+	custom_minimum_size = Vector2(1000, 0)
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 2)
+	add_child(outer)
 	var t := S.title("OPTIONS", 34, S.TEXT)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col.add_child(t)
-	col.add_child(S.rule())
+	outer.add_child(t)
+	outer.add_child(S.rule())
+	# two columns (QA2 #11): display + controls on the left, audio on the right, so the whole
+	# panel and its Back button fit at 720p
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 40)
+	outer.add_child(cols)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 2)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cols.add_child(col)
 	var prev: Control = null
 	for row in ROWS:
+		if row[0] == "vsync" and OS.has_feature("web"):
+			continue # browsers own the swap interval; settings.gd ignores it there
+		if row[0] == "#" and row[1] == "AUDIO":
+			col = VBoxContainer.new()
+			col.add_theme_constant_override("separation", 2)
+			col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			cols.add_child(col)
 		if row[0] == "#":
 			var h := S.label(row[1], 14, S.CRIMSON.lightened(0.25), 3)
 			h.add_theme_font_override("font", S.serif())
@@ -64,12 +80,12 @@ func _init() -> void:
 		prev = c
 	var sp := Control.new()
 	sp.custom_minimum_size = Vector2(0, 8)
-	col.add_child(sp)
+	outer.add_child(sp)
 	back_button = S.button("Back", 18)
 	back_button.custom_minimum_size = Vector2(180, 38)
 	back_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	back_button.pressed.connect(func(): back.emit())
-	col.add_child(back_button)
+	outer.add_child(back_button)
 	visibility_changed.connect(_on_shown)
 
 

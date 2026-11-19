@@ -93,6 +93,7 @@ func _initialize() -> void:
 	ok = await _progression_checks(main) and ok
 	ok = await _coat_checks(main) and ok
 	ok = await _move_checks(main) and ok
+	ok = await _fall_checks(main) and ok
 	ok = await _audio_checks(main) and ok
 	ok = await _menu_checks(main) and ok
 	ok = await _hunt_checks() and ok
@@ -968,6 +969,19 @@ func _menu_checks(main) -> bool:
 	await process_frame
 	var hub_panel = menu.hub.get_child(0)
 	ok = _check("Start opens the hub with Begin the Hunt focused", menu.hub.visible and hub_panel.begin_button.has_focus()) and ok
+	# QA2 #6: every unowned contact is listed (the column scrolls), and the panel fits on screen
+	var Meta0 = load("res://scripts/hunt/hunt_meta.gd")
+	var want_shop := 0
+	for se in load("res://scripts/hunt/hunt_config.gd").ARMOURY_SHOP:
+		if not Meta0.owns(se.id):
+			want_shop += 1
+	var shop_rows := 0
+	for c in hub_panel.shop_box.get_children():
+		if c is Button and not c.is_queued_for_deletion():
+			shop_rows += 1
+	var vp_h: float = hub_panel.get_viewport_rect().size.y
+	ok = _check("the hub lists all %d contacts and fits (%d rows, %.0f px of %.0f)" % [want_shop, shop_rows, hub_panel.size.y * hub_panel.scale.y, vp_h],
+		shop_rows == want_shop and want_shop >= 1 and hub_panel.size.y * hub_panel.scale.y <= vp_h + 1.0) and ok
 	menu._back()
 	menu.queue_free()
 	await process_frame
@@ -988,6 +1002,91 @@ func _menu_checks(main) -> bool:
 func _wait_physics(n: int) -> void:
 	for i in n:
 		await physics_frame
+
+
+## QA2 #5: nothing is lost below the world. Sol is pulled back onto open ground for a little blood,
+## enemies are put back by main's sweep, and safe_ground never answers inside a solid (the tanks).
+func _fall_checks(main) -> bool:
+	var ok := true
+	var p = main.player
+	_clear_enemies(main)
+	p.dead = false
+	p.max_hp = 100.0
+	p.hp = 100.0
+	await _wait_physics(30)
+	var base: Vector3 = p.global_position
+	p.global_position = Vector3(base.x, -40.0, base.z)
+	await _wait_physics(3)
+	var gy: float = main.ground_y(p.global_position.x, p.global_position.z)
+	ok = _check("a fall out of the world puts Sol back on open ground (y %.1f, ground %.1f, hp %.0f)" % [p.global_position.y, gy, p.hp],
+		p.global_position.y > gy - 1.0 and p.hp == 90.0 and p.falls == 1 and main.spot_clear(p.global_position - Vector3(0, 0.3, 0))) and ok
+	var tank := Vector3(-100, 0, 150) # QA2: the navmesh leaks inside this Docks tank
+	var sg: Vector3 = main.safe_ground(tank)
+	ok = _check("safe_ground never answers inside a solid (tank clear %s -> %s)" % [main.spot_clear(tank), sg], main.spot_clear(sg)) and ok
+	var e = _spawn(main, 1, base + Vector3(3, 0.4, 0)) # a wolf: a vampire could burn in the sun
+	await _wait_physics(3)
+	e.global_position = Vector3(e.global_position.x, -40.0, e.global_position.z)
+	await _wait_physics(45)
+	ok = _check("an enemy that fell out is put back (y %.1f)" % e.global_position.y, not main.below_world(e.global_position)) and ok
+	_clear_enemies(main)
+	p.hp = p.max_hp
+	# QA2 #8: the lens never sits inside an enemy, and awnings block the camera arm
+	await _wait_physics(10)
+	var cam: Vector3 = p.camera.global_position
+	var g = _spawn(main, 1, Vector3(cam.x, cam.y - 1.2, cam.z))
+	await process_frame
+	g.global_position = Vector3(cam.x, p.camera.global_position.y - 1.2, cam.z)
+	p._camera_obstruction()
+	var hid: bool = not g.visual.visible
+	g.global_position += Vector3(6, 0, 0)
+	p._camera_obstruction()
+	ok = _check("an enemy the camera is inside is hidden, then shown again", hid and g.visual.visible) and ok
+	ok = _check("the camera arm collides with camera-only blockers (awnings)", p.spring.collision_mask & 512 != 0 and main.city._cam_body != null and main.city._cam_body.get_child_count() > 10) and ok
+	_clear_enemies(main)
+	return ok
+
+
+## QA2 #1: the parry works in a boss fight. A boss swipe in its last wind-up is turned aside (the
+## boss reels, no chain), and an add standing after the boss in enemies_root is still parried.
+func _boss_parry_checks(m, boss) -> bool:
+	var ok := true
+	var p = m.player
+	var hp0: float = p.hp
+	p.invuln_t = 0.0
+	p.dash_t = 0.0
+	p.parry_t = 0.0
+	p.parry_cd = 0.0
+	boss.global_position = p.global_position + Vector3(0, 0, 2.5)
+	boss.atk = {"type": "swipe", "windup": 0.3, "range": 3.0, "dmg": 15.0, "recover": 0.6, "cd": 1.2,
+		"chain": [{"type": "swipe", "windup": 0.3, "range": 3.0, "dmg": 15.0, "recover": 0.6}]}
+	boss.state = "windup"
+	boss.state_t = 0.3
+	ok = _check("a boss swipe near its strike is parryable", p._parryable(boss) and boss.parry_open()) and ok
+	p._parry()
+	await _wait_physics(3)
+	m.clear_slowmo()
+	ok = _check("parry turns the boss swipe aside (state %s, %s, hp %.0f)" % [boss.state, boss.atk.get("type", "?"), p.hp], boss.state == "recover" and boss.atk.get("type", "") == "parried" and p.hp == hp0) and ok
+	# an add after the boss in the tree: the parry loop must reach it
+	boss.state = "chase"
+	boss.cooldown = 99.0
+	boss.atk = {}
+	var add = _spawn(m, 0, p.global_position + Vector3(1.2, 0.4, 0))
+	await _wait_physics(3)
+	add.attack_cd = 9.0
+	add.strike_dir = Vector3(-1, 0, 0)
+	add.windup_t = 0.25
+	p.parry_t = 0.0
+	p.parry_cd = 0.0
+	p._parry()
+	await _wait_physics(4)
+	m.clear_slowmo()
+	ok = _check("an add is parried during a boss fight (staggered %s)" % add.staggered, add.staggered and p.hp == hp0) and ok
+	if is_instance_valid(add):
+		m.enemies_root.remove_child(add)
+		add.free()
+	m.attack_tokens.clear()
+	boss.cooldown = 1.0
+	return ok
 
 
 func _start_hunt():
@@ -1054,6 +1153,20 @@ func _hunt_checks() -> bool:
 		ok = _check("a straggler turns up out of sight (%.0f m) and holds its ground" % d0, d0 > Cfg.ROAM_MIN_DIST - 1.0 and Vector2(r.global_position.x - r0.x, r.global_position.z - r0.z).length() < 1.0 and r.speed == 0.0) and ok
 	else:
 		ok = _check("a straggler spawns once the grace period is over", false) and ok
+	# QA2 #3: during the first-Hunt intro, Tab opens nothing and Esc skips it (no pause menu)
+	h0.story.play_intro(Callable())
+	await _wait_physics(50)
+	_key(KEY_TAB, true)
+	await process_frame
+	_key(KEY_TAB, false)
+	var coat_opened: bool = m0.inventory_ui.is_open()
+	_key(KEY_ESCAPE, true)
+	await process_frame
+	_key(KEY_ESCAPE, false)
+	await process_frame
+	ok = _check("intro: Tab opens no Coat, Esc skips it without pausing (coat %s, playing %s, paused %s)" % [coat_opened, h0.story.playing, m0.pause_menu.visible],
+		not coat_opened and not h0.story.playing and not m0.pause_menu.visible) and ok
+	paused = false
 	m0.queue_free()
 	await process_frame
 	HD.requested = true
@@ -1172,6 +1285,14 @@ func _hunt_checks() -> bool:
 	ok = _check("the boss is clip-driven (*_anim body + boss clip library, playing %s)" % (boss.rigs[0].anim.current_animation if boss.rigs[0].anim != null else "none"), clip_ok) and ok
 	ok = _check("the boss has its silhouette and veins", boss.overlay is ShaderMaterial and float(boss.overlay.get_shader_parameter("vein_amount")) > 0.0) and ok
 	ok = _check("tonight's framing card names the boss", h.story != null and h.story.card_text().contains(night1.name)) and ok
+	# QA2 #12: the card sits top centre (clear of the phone stick) and hides under the map
+	h.map_screen.open()
+	await process_frame
+	var card_hid: bool = not h.story._card.visible
+	h.map_screen.close()
+	await process_frame
+	ok = _check("the night card is top centre and hides while the map is open", card_hid and h.story._card.visible and is_equal_approx(h.story._card.anchor_left, 0.5)) and ok
+	ok = await _boss_parry_checks(m, boss) and ok
 	boss.take_hit(boss.max_hp * 0.6, Vector3.FORWARD)
 	ok = _check("the boss enrages below half", boss.enraged) and ok
 	boss.take_hit(1e6, Vector3.FORWARD)

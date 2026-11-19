@@ -2,7 +2,7 @@ extends CanvasLayer
 ## The Hunt's story framing (critic R1, S1): why Sol is out there and who he's hunting.
 ##  - the INTRO, before the first Hunt only: a title card, then Nia's briefing from the
 ##    Undercroft over a slow night flyover of Port Vesper (voiced, subtitled by Dialogue, with
-##    a case-file caption per beat). Skippable with attack / jump / interact / Esc.
+##    a case-file caption per beat). Skippable with attack / jump / interact / Esc / a tap.
 ##  - a NIGHT CARD at the start of each day (and at the Final Night's dusk): tonight's boss,
 ##    and why. Non-blocking; fades by itself.
 ##  - the results EPILOGUE line (epilogue(), read by ui/results_screen.gd).
@@ -185,6 +185,8 @@ func _build_intro() -> void:
 
 
 func _process(delta: float) -> void:
+	if _card != null and is_instance_valid(_card):
+		_card.visible = not _card_hidden() # never through the map or a menu (QA2 #12)
 	if not playing:
 		return
 	var dt := delta / maxf(Engine.time_scale, 0.01)
@@ -239,11 +241,18 @@ func _fly(t: float) -> void:
 	_cam.look_at(Vector3(0, 6, 0), Vector3.UP)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if not playing or _t < 0.6:
+## _input, not _unhandled_input (QA2 #3): the intro owns every press while it plays, so Esc skips
+## it instead of opening the pause menu, and Tab / M can't open the Coat or the map underneath.
+func _input(event: InputEvent) -> void:
+	if not playing:
 		return
-	if event.is_action_pressed("attack") or event.is_action_pressed("jump") or event.is_action_pressed("interact") or event.is_action_pressed("ui_cancel") or event.is_action_pressed("ui_accept"):
-		get_viewport().set_input_as_handled()
+	var press: bool = (event is InputEventKey or event is InputEventMouseButton or event is InputEventJoypadButton 			or event is InputEventScreenTouch or event is InputEventAction) and event.is_pressed() and not event.is_echo()
+	if not press:
+		return
+	get_viewport().set_input_as_handled()
+	if _t < 0.6:
+		return
+	if event.is_action_pressed("attack") or event.is_action_pressed("jump") or event.is_action_pressed("interact") or event.is_action_pressed("ui_cancel") or event.is_action_pressed("ui_accept") 			or (event is InputEventKey and (event as InputEventKey).physical_keycode == KEY_ESCAPE) or event is InputEventScreenTouch:
 		finish_intro()
 
 
@@ -278,16 +287,21 @@ func _hud_visible(on: bool) -> void:
 
 
 # ---------------------------------------------------------------- the night card
-## "NIGHT 1 · THE HOLLOW ALPHA" and why, for a few seconds (top left, under the compass).
+## "NIGHT 1 · THE HOLLOW ALPHA" and why, for a few seconds: top centre under the compass and the
+## phase line (QA2 #12: clear of the phone stick bottom-left and the touch buttons top-right). It
+## waits for a HUD announcement ("DAY 1") to clear first, and hides while the map is open.
 func night_card(heading: String, def: Dictionary) -> void:
 	if _card != null and is_instance_valid(_card):
 		_card.queue_free()
-	_card = S.panel(16)
-	_card.anchor_left = 0.0
+	_card = S.panel(14)
+	_card.anchor_left = 0.5
+	_card.anchor_right = 0.5
 	_card.anchor_top = 0.0
-	_card.offset_left = 36
-	_card.offset_top = 230 # under the HUD's blood / hunger / dash column
-	_card.custom_minimum_size = Vector2(520, 0)
+	_card.offset_left = -250
+	_card.offset_right = 250
+	_card.offset_top = 104 # under the compass (8-52) and the phase line (70)
+	_card.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_card.custom_minimum_size = Vector2(500, 0)
 	_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_card)
 	var v := VBoxContainer.new()
@@ -301,17 +315,28 @@ func night_card(heading: String, def: Dictionary) -> void:
 	r.custom_minimum_size = Vector2(160, 1)
 	r.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	v.add_child(r)
-	var why := S.label(def.get("why", ""), 17, MS.BONE)
+	var why := S.label(def.get("why", ""), 16, MS.BONE)
 	why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	why.custom_minimum_size = Vector2(500, 0)
+	why.custom_minimum_size = Vector2(470, 0)
 	v.add_child(why)
 	_card.modulate.a = 0.0
 	if _card_tw != null and _card_tw.is_valid():
 		_card_tw.kill()
 	_card_tw = create_tween()
+	var wait := 0.0
+	if main != null and main.hud != null and main.hud.get("announce_t") != null:
+		wait = float(main.hud.announce_t) # the centre announcement goes first
+	if wait > 0.0:
+		_card_tw.tween_interval(wait + 0.2)
 	_card_tw.tween_property(_card, "modulate:a", 1.0, 0.6)
 	_card_tw.tween_interval(7.5)
 	_card_tw.tween_property(_card, "modulate:a", 0.0, 1.2)
+
+
+func _card_hidden() -> bool:
+	if director != null and director.get("map_screen") != null and director.map_screen.is_open():
+		return true
+	return main != null and (main.menu_open() or (main.pause_menu != null and main.pause_menu.visible))
 
 
 func card_text() -> String:

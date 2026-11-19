@@ -15,7 +15,7 @@ const COMBAT_RANGE := 10.0 # enemies this close put Sol in his combat stance
 const ATTACK_BUFFER := 0.2 # an attack pressed this long before Sol can swing again still comes out
 const ACCEL_TIME := 0.08 # seconds from standing to full speed
 const STOP_TIME := 0.12 # seconds from full run to a stop
-const CAM_RADIUS := 0.3 # the camera's collision sphere (keeps the lens out of trunks, posts and walls)
+const CAM_RADIUS := 0.42 # the camera's collision sphere (keeps the lens out of trunks, posts and walls)
 ## The coat at runtime: matte black leather (the generated texture's metal map made it read silver).
 const COAT_DARKEN := 0.35
 const COAT_ROUGHNESS := 0.62
@@ -87,6 +87,11 @@ var parry_t := 0.0
 var parry_cd := 0.0
 var finisher_t := 0.0
 var attack_buffer_t := 0.0 # > 0: an attack press is waiting for the cooldown to end
+var last_safe := Vector3.ZERO # the last open ground Sol stood on (fall recovery)
+var has_safe := false
+var safe_check_t := 0.0
+var falls := 0 # times he was pulled back out of the world
+const FALL_COST := 0.1 # share of max blood a fall-out recovery costs
 var walk_vel := Vector3.ZERO # the ramped run velocity (acceleration / stop), before dash and lunge
 
 var pivot: Node3D
@@ -119,7 +124,7 @@ func _ready() -> void:
 	# layer 1 is every static collider in the world: buildings, props, tree trunks and posts
 	# (city.gd post_collider / box_collider). A sphere cast instead of a ray keeps the near plane
 	# out of a trunk the ray only grazes.
-	spring.collision_mask = 1
+	spring.collision_mask = 1 | 512 # + city.gd CAM_LAYER: camera-only blockers (awnings, overhangs)
 	var cam_shape := SphereShape3D.new()
 	cam_shape.radius = CAM_RADIUS
 	spring.shape = cam_shape
@@ -339,6 +344,7 @@ func _physics_process(delta: float) -> void:
 	velocity.x = hv.x
 	velocity.z = hv.z
 	move_and_slide()
+	_track_safe_ground(delta)
 
 	if dash_t > 0.0:
 		facing = atan2(dash_dir.x, dash_dir.z)
@@ -377,6 +383,103 @@ func _physics_process(delta: float) -> void:
 			prompt_text = ("[LB]" if main.hud.using_pad else "[F]") + "  DRINK BAGGED BLOOD  (%d left)" % main.lair_stock
 		else:
 			prompt_text = "BLOOD BANK EMPTY  —  restocks at sunrise"
+
+
+## QA2 #5: remember the last open ground Sol stood on; if he ever drops out of the world (a seam,
+## a spawn inside a solid), put him back there (or on the nearest road) for a small blood cost.
+func _track_safe_ground(delta: float) -> void:
+	if main.below_world(global_position):
+		recover_from_fall()
+		return
+	safe_check_t -= delta
+	if safe_check_t <= 0.0 and is_on_floor():
+		safe_check_t = 0.5
+		if main.spot_clear(global_position):
+			last_safe = global_position
+			has_safe = true
+
+
+func recover_from_fall() -> void:
+	var to: Vector3 = main.safe_ground(last_safe if has_safe else global_position)
+	global_position = to + Vector3(0, 0.3, 0)
+	velocity = Vector3.ZERO
+	walk_vel = Vector3.ZERO
+	dash_t = 0.0
+	collision_mask = 1 | 4
+	hp = maxf(hp - max_hp * FALL_COST, 1.0)
+	invuln_t = maxf(invuln_t, 1.0)
+	shake = maxf(shake, 0.3)
+	falls += 1
+	main.hud.popup("You claw back out of the dark")
+
+
+## QA2 #8: the lens never sits inside a body. A street enemy the camera is inside is hidden for
+## those frames; a boss (too big to hide) pulls the camera arm in short of its body instead.
+var cam_hidden := {} # enemy -> true while its visual is hidden from the lens
+
+
+func _camera_obstruction() -> void:
+	if main == null or main.enemies_root == null:
+		return
+	var o: Vector3 = spring.global_position
+	var dirv: Vector3 = spring.global_transform.basis.z.normalized()
+	var want: float = spring.spring_length
+	var cp: Vector3 = camera.global_position
+	for e in main.enemies_root.get_children():
+		if not (e is Node3D) or e.get("dead") == true:
+			continue
+		var ep: Vector3 = e.global_position
+		if ep.distance_squared_to(o) > 81.0:
+			continue
+		if e.has_method("parry_open"): # a boss
+			var t := _ray_cylinder(o, dirv, ep, float(e.get("body_radius")) + 0.4, float(e.get("body_height")) + 0.3, want)
+			if t >= 0.0:
+				want = minf(want, maxf(t - 0.15, 0.9))
+		else:
+			var v = e.get("visual")
+			if v is Node3D:
+				var d := Vector2(cp.x - ep.x, cp.z - ep.z).length()
+				if d < 0.75 and cp.y > ep.y - 0.3 and cp.y < ep.y + 2.3:
+					v.visible = false
+					cam_hidden[e] = true
+	if want < spring.spring_length:
+		spring.spring_length = want
+	# give back the ones the lens has left
+	cp = o + dirv * minf(spring.spring_length, spring.get_hit_length())
+	for e in cam_hidden.keys():
+		if not is_instance_valid(e):
+			cam_hidden.erase(e)
+			continue
+		var ep: Vector3 = e.global_position
+		var d := Vector2(cp.x - ep.x, cp.z - ep.z).length()
+		if e.get("dead") == true or d >= 0.85 or cp.y <= ep.y - 0.4 or cp.y >= ep.y + 2.4:
+			var v = e.get("visual")
+			if v is Node3D:
+				v.visible = true
+			cam_hidden.erase(e)
+
+
+## Distance along the ray (o, unit dir) to where it enters an upright cylinder at base c, or -1.
+static func _ray_cylinder(o: Vector3, dir: Vector3, c: Vector3, r: float, h: float, max_t: float) -> float:
+	var f := Vector2(o.x - c.x, o.z - c.z)
+	var d := Vector2(dir.x, dir.z)
+	var a := d.dot(d)
+	var cc := f.dot(f) - r * r
+	if cc <= 0.0:
+		return 0.0 # the pivot itself is inside (pressed against it)
+	if a < 1e-5:
+		return -1.0
+	var b := 2.0 * f.dot(d)
+	var disc := b * b - 4.0 * a * cc
+	if disc < 0.0:
+		return -1.0
+	var t := (-b - sqrt(disc)) / (2.0 * a)
+	if t < 0.0 or t > max_t:
+		return -1.0
+	var y := o.y + dir.y * t
+	if y < c.y - 0.2 or y > c.y + h:
+		return -1.0
+	return t
 
 
 ## Ignore attack input briefly (the click that starts the game or grabs the mouse).
@@ -786,6 +889,11 @@ func _parry_success(e) -> void:
 func _stagger_enemy(e, t: float) -> void:
 	if e.dead:
 		return
+	if e.has_method("on_parried"):
+		e.on_parried(t) # bosses never stagger: the parry breaks the attack and opens a punish window
+		return
+	if e.get("windup_t") == null:
+		return
 	e.windup_t = 0.0
 	main.release_attack_token(e)
 	e.staggered = true
@@ -816,13 +924,37 @@ func _combat_tick(delta: float) -> void:
 	if parry_t > 0.0:
 		parry_t -= delta
 		for e in main.enemies_root.get_children():
-			if e.dead or e.windup_t <= 0.0:
+			if not _parryable(e):
 				continue
 			var to: Vector3 = e.global_position - global_position
 			to.y = 0.0
-			if to.length() < e.attack_range + 1.4:
+			if to.length() < _parry_reach(e):
 				_parry_success(e)
 				break
+
+
+## Is this enemy (street enemy or boss) in an attack the parry can turn aside right now?
+func _parryable(e) -> bool:
+	if e == null or not is_instance_valid(e) or e.get("dead") != false:
+		return false
+	if e.has_method("parry_open"):
+		return e.parry_open() # bosses: the last part of a swipe or dash wind-up, or the dash itself
+	var w = e.get("windup_t")
+	if w != null and float(w) > 0.0:
+		return true
+	var sp = e.get("special") # the lunge / leap wind-up and the lunge itself
+	return sp is String and (sp.ends_with("_windup") or sp == "lunge")
+
+
+## How close (flat metres) an enemy in a parryable attack must be for the parry to catch it.
+func _parry_reach(e) -> float:
+	if e.has_method("parry_reach"):
+		return e.parry_reach()
+	var sp = e.get("special")
+	if sp is String and sp != "" and not sp.ends_with("_recover"):
+		return 3.0 # the lunge / leap closes the gap itself
+	var r = e.get("attack_range")
+	return (float(r) if r != null else 1.5) + 1.4
 
 
 func _bite(target) -> void:
@@ -874,7 +1006,7 @@ func take_damage(amount: float, _src) -> void:
 		return
 	if invuln_t > 0.0:
 		return
-	if parry_t > 0.0 and _src != null and is_instance_valid(_src) and _src.get("windup_t") != null:
+	if parry_t > 0.0 and _src != null and is_instance_valid(_src) and (_src.get("windup_t") != null or (_src.has_method("parry_open") and _src.parry_open())):
 		_parry_success(_src) # the strike landed inside the parry window: turned aside
 		return
 	if frenzy_t > 0.0:
@@ -933,6 +1065,7 @@ func _process(delta: float) -> void:
 	if finisher_t > 0.0:
 		camera.fov = lerpf(camera.fov, 55.0, 8.0 * delta)
 	spring.spring_length = lerpf(spring.spring_length, 2.7 if finisher_t > 0.0 else 4.8, (7.0 if finisher_t > 0.0 else 3.0) * delta)
+	_camera_obstruction()
 	if dead:
 		return
 

@@ -56,10 +56,17 @@ func _init() -> void:
 	var note := S.label("Rank, Tithe, Vows, blades and vials start\nfresh every Hunt. Charms and %s stay.\nCharms you carry home join the armoury." % Cfg.META_NAME, 13, S.TEXT_DIM)
 	left.add_child(note)
 	# right: armoury + shop
+	# the right column scrolls (QA2 #6): all 10 contacts reachable by wheel, drag or focus
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(480, 400)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	row.add_child(scroll)
 	var right := VBoxContainer.new()
 	right.custom_minimum_size = Vector2(460, 0)
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right.add_theme_constant_override("separation", 4)
-	row.add_child(right)
+	scroll.add_child(right)
 	right.add_child(_head("THE ARMOURY  ·  click to wear / take off"))
 	armoury_box = VBoxContainer.new()
 	right.add_child(armoury_box)
@@ -117,7 +124,7 @@ func refresh() -> void:
 		armoury_box.add_child(b)
 	var shown := 0
 	for e in Cfg.ARMOURY_SHOP:
-		if Meta.owns(e.id) or shown >= 5:
+		if Meta.owns(e.id):
 			continue
 		shown += 1
 		var inst := ItemDB.make(e.id)
