@@ -22,10 +22,15 @@ const ANIM_PATHS := {
 	"vampire": "res://assets/characters/vampire/vampire_anim.scn",
 	"werewolf": "res://assets/characters/werewolf/werewolf_anim.scn",
 	"civilian": "res://assets/characters/civilian/civilian_anim.scn",
+	# bodies of their own (asset round 3, tools/build_r3_anims.gd)
+	"marcus": "res://assets/characters/marcus/marcus_anim.scn",
+	"abomination": "res://assets/characters/abomination/abomination_anim.scn",
 }
 const BOSS_CLIPS := {
 	"vampire": "res://assets/characters/vampire/vampire_boss_clips.res",
 	"werewolf": "res://assets/characters/werewolf/werewolf_boss_clips.res",
+	"marcus": "res://assets/characters/marcus/marcus_boss_clips.res",
+	"abomination": "res://assets/characters/abomination/abomination_boss_clips.res",
 }
 ## The older hand-rigged bodies, only if an *_anim.scn is missing (posed by nothing: a statue).
 const MODEL_PATHS := {
@@ -724,13 +729,14 @@ func _anim_windup(type: String, total: float) -> void:
 	var clip: String = w[0]
 	if type == "swipe" and enraged:
 		clip = "boss/quick"
-	if type == "howl" and kind == 1:
-		clip = "hit" # wolves throw their head back and writhe
+	var wolf_howl: bool = type == "howl" and kind == 1
+	if wolf_howl:
+		clip = "boss/roar" # the round-3 roar mocap; bodies without one throw their head back (hit)
 	for r in rigs:
 		var ap: AnimationPlayer = r.anim
 		if ap == null:
 			continue
-		var c := clip if ap.has_animation(clip) else "attack"
+		var c := clip if ap.has_animation(clip) else ("hit" if wolf_howl else "attack")
 		if not ap.has_animation(c):
 			continue
 		var strike: float = r.strikes.get(c, 0.6) if c != "hit" else 0.5

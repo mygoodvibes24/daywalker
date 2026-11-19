@@ -1,6 +1,8 @@
 extends "res://scripts/hunt/bosses/boss_base.gd"
-## The Final Night — SERAPHINE'S ABOMINATION. A Pack giant with a Velvet Court body fused
-## to its shoulders (the wolf and vampire rigs combined). Phase 1 fights like a wolf: leap
+## The Final Night — SERAPHINE'S ABOMINATION. A Pack giant with Velvet Court flesh fused into
+## it: its own body since asset round 3 (a wolf skull splitting into a vampire jaw, exposed ribs,
+## long multi-jointed arms; its own slam, grab-and-throw and roar mocap). Without that model it
+## falls back to the older stand-in, the wolf and vampire rigs combined. Phase 1 fights like a wolf: leap
 ## slams, swipes, a howl that calls one of each. Phase 2 (below half) the vampire half wakes:
 ## rings of blood bolts, blinks and dash slashes, faster and angrier.
 
@@ -9,6 +11,7 @@ var rider: Dictionary
 const RIDER_OFFSET := Vector3(0, -0.42, -0.12) # in the wolf's model metres, from its upper spine
 const RIDER_PITCH := 0.25
 const RIDER_SCALE := 0.62
+const MODEL_SCALE := 1.55 # 2.8 m * 1.55 = 4.3 m, the stand-in's height
 
 
 func _build() -> void:
@@ -24,6 +27,9 @@ func _build() -> void:
 	vein_amount = 0.8
 	vein_scale = 4.5
 	vein_width = 0.055
+	if ResourceLoader.exists(ANIM_PATHS.abomination):
+		add_rig("abomination", MODEL_SCALE, null, Color(1.0, 0.1, 0.1))
+		return
 	var wolf := add_rig("werewolf", 1.9, null, Color(1.0, 0.1, 0.1))
 	# the fused rider: a Velvet Court torso growing out of the wolf's back (its legs are
 	# scaled away in boss_base._process); it plays the same clips as the wolf, a beat apart
@@ -49,6 +55,18 @@ func _build() -> void:
 	add_spikes(bone_mount(wolf, "Spine01"), 5, 0.6, Vector3(0, 0.7, -1.0), 2.0, bone_mat, 0.08)
 	add_spikes(bone_mount(wolf, "LeftArm"), 3, 0.45, Vector3(-0.6, 1.0, -0.4), 1.2, bone_mat, 0.06)
 	add_spikes(bone_mount(wolf, "RightArm"), 3, 0.45, Vector3(0.6, 1.0, -0.4), 1.2, bone_mat, 0.06)
+
+
+## Its own sounds: the heavy slam impact and a werewolf roar for the howl.
+func _sfx(name: String, pos: Vector3, db := 0.0) -> void:
+	match name:
+		"boss_slam":
+			name = "boss_slam_impact"
+		"wolf_howl":
+			name = "wolf_roar"
+		"boss_swipe":
+			name = "claw_swipe" if state != "act" else name
+	super(name, pos, db)
 
 
 func _physics_process(delta: float) -> void:
@@ -93,9 +111,12 @@ func _on_half() -> void:
 	aura.material_override = HFx.aura_mat(Color(1.0, 0.0, 0.15), 2.2)
 	aura.scale *= 1.25
 	light.light_energy = 3.0
-	if rider.model != null:
+	if rider.get("model") != null:
 		var tw := create_tween()
 		tw.tween_property(rider.model, "scale", rider.model.scale * 1.35, 1.2).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	else: # its own body: it swells as the Court half wakes
+		var tw := create_tween()
+		tw.tween_property(visual, "scale", Vector3.ONE * 1.12, 1.2).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 	HFx.shockwave(main, global_position, 12.0, aura_color, 0.8)
 	if director != null:
 		director.boss_phase_text(self, "THE COURT HALF AWAKENS")

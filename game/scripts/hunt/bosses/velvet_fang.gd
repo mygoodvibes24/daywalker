@@ -2,8 +2,12 @@ extends "res://scripts/hunt/bosses/boss_base.gd"
 ## MARCUS CRANE, THE VELVET FANG. Sol's mirror: a speed vampire duelist.
 ## Chained dash slashes along telegraphed lines, a blink that lands behind you, and fans
 ## of blood bolts. Below half he gets faster and his fans wider.
-## Look: the vampire body at 1.22x, crimson veins, and a long velvet cape with a high collar
-## (a stand-in until a real Marcus model is affordable; see docs/DIALOGUE.md "Deferred").
+## Look: his own body (asset round 3: a 1.88 m scan-style mesh in a black velvet frock coat with
+## crimson lining, rigged, with his own slash combo, lunge and death mocap), at 1.2x for boss
+## presence, crimson veins. The coat material is forced matte in tools/build_r3_anims.gd.
+## If his model is missing, the older stand-in returns: the vampire body with a velvet cape.
+
+const MODEL_SCALE := 1.2 # 1.88 m * 1.2 = 2.26 m, the stand-in's height
 
 
 func _build() -> void:
@@ -18,8 +22,17 @@ func _build() -> void:
 	body_height = 2.4
 	speed = 8.5
 	keep_dist = 3.0
-	var r := add_rig("vampire", 1.22, null, Color(1.0, 0.05, 0.05))
-	_add_cape(r)
+	if ResourceLoader.exists(ANIM_PATHS.marcus):
+		add_rig("marcus", MODEL_SCALE, null, Color(1.0, 0.05, 0.05))
+	else:
+		_add_cape(add_rig("vampire", 1.22, null, Color(1.0, 0.05, 0.05)))
+
+
+## Marcus's own sounds: claw swipes instead of the blade, a coat-flutter whoosh on his dashes.
+func _sfx(name: String, pos: Vector3, db := 0.0) -> void:
+	if name == "boss_swipe":
+		name = "lunge_whoosh" if state == "act" else "claw_swipe"
+	super(name, pos, db)
 
 
 ## The cape hangs from the shoulders; it flares back when he runs and snaps up on a dash

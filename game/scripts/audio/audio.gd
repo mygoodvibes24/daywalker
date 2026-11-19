@@ -22,7 +22,7 @@ const SFX := {
 	"wolf_transform": ["sfx/wolf_transform"],
 	"wolf_growl": ["sfx/wolf_growl"],
 	"wolf_howl": ["sfx/wolf_howl"],
-	"vamp_hiss": ["sfx/vamp_hiss"],
+	"vamp_hiss": ["sfx/vamp_hiss", "sfx/vampire_hiss"],
 	"vamp_burn": ["sfx/vamp_burn"],
 	"death": ["sfx/death"],
 	"rain_loop": ["sfx/rain_loop"],
@@ -32,6 +32,7 @@ const SFX := {
 	"ui_click": ["sfx/ui_click"],
 	# bosses (hunt/bosses/boss_base.gd)
 	"boss_slam": ["sfx/boss_slam"],
+	"boss_slam_impact": ["sfx/boss_slam_impact"], # the Abomination's slam and throw
 	"boss_swipe": ["sfx/boss_swipe"],
 	"blood_bolt": ["sfx/blood_bolt"],
 	"boss_blink": ["sfx/boss_blink"],
@@ -42,14 +43,28 @@ const SFX := {
 	"land_thud": ["sfx/land_thud"],
 	# a successful parry (player.parried, connected in attach_world)
 	"parry_clang": ["sfx/parry_clang"],
+	# creatures (asset round 3), timed to the creature clips from enemy_bark / on_enemy_died
+	"wolf_roar": ["sfx/werewolf_roar"],
+	"claw_swipe": ["sfx/claw_swipe"],
+	"pounce_whoosh": ["sfx/pounce_whoosh"],
+	"lunge_whoosh": ["sfx/vampire_lunge_whoosh"],
+	"body_fall": ["sfx/body_fall"],
 }
 const MUSIC := {
 	"menu": "music/menu_lair",
 	"explore": "music/explore",
 	"combat": "music/combat",
 	"boss": "music/combat",
+	# boss themes (asset round 3): "boss_<boss id>" plays in that fight, else "boss"
+	"boss_marcus": "music/boss_marcus",
+	"boss_abomination": "music/boss_abomination",
 }
-const MUSIC_DB := {"menu": -4.0, "explore": -6.0, "combat": -5.0, "boss": -2.0}
+const MUSIC_DB := {"menu": -4.0, "explore": -6.0, "combat": -5.0, "boss": -2.0, "boss_marcus": -4.0, "boss_abomination": -3.0}
+## Creature SFX timing (seconds into the move), from the clip manifest and enemy.gd's SPECIALS.
+const POUNCE_DELAY := 0.5 # the leap's wind-up: the spring
+const LUNGE_DELAY := 0.55 # the lunge's wind-up: the dash
+const WOLF_FALL_DELAY := 1.3 # werewolf_anim_death_heavy lands at 1.6 s, played at 1.25x
+const CIVILIAN_FALL_DELAY := 1.0
 const POOL_2D := 12
 const POOL_3D := 10
 const COMBAT_RADIUS := 16.0
@@ -58,6 +73,7 @@ const COMBAT_HOLD := 5.0 # seconds of calm before the music drops back to explor
 var unlocked := not OS.has_feature("web")
 var context := "" # the music context playing (or waiting for the unlock)
 var boss_active := false
+var boss_id := "" # the boss fight playing (its theme, if it has one)
 var world: Node = null # main.gd while a game is running
 var _streams := {}
 var _pool: Array[AudioStreamPlayer] = []
@@ -208,9 +224,15 @@ func set_music(ctx: String, fade := 2.0) -> void:
 	_music_tween.tween_property(nxt, "volume_db", MUSIC_DB[ctx], fade * 0.8)
 
 
-func set_boss(on: bool) -> void:
+func set_boss(on: bool, id := "") -> void:
 	boss_active = on
+	boss_id = id if on else ""
 	_update_context()
+
+
+## The music context for the boss fight playing: its own theme if it has one.
+func boss_context() -> String:
+	return "boss_" + boss_id if MUSIC.has("boss_" + boss_id) else "boss"
 
 
 # ---------------------------------------------------------------- the world
@@ -218,6 +240,7 @@ func set_boss(on: bool) -> void:
 func attach_world(w: Node) -> void:
 	world = w
 	boss_active = false
+	boss_id = ""
 	_calm_t = 99.0
 	var p = w.get("player")
 	if p != null and p.has_signal("dashed") and not p.dashed.is_connected(_on_dashed):
@@ -233,6 +256,7 @@ func _on_world_exit(w: Node) -> void:
 	if world == w:
 		world = null
 		boss_active = false
+		boss_id = ""
 
 
 func _on_dashed(_dir: Vector3) -> void:
@@ -271,7 +295,7 @@ func _update_context() -> void:
 	if not _world_ok():
 		return
 	if boss_active:
-		set_music("boss", 1.2)
+		set_music(boss_context(), 1.2)
 	elif _calm_t < COMBAT_HOLD:
 		set_music("combat", 1.2)
 	else:
@@ -287,14 +311,17 @@ func on_player_died() -> void:
 ## An enemy changed into a wolf.
 func on_wolf_transform(pos: Vector3) -> void:
 	play_at("wolf_transform", pos, 2.0)
-	if randf() < 0.5:
-		get_tree().create_timer(1.3, true, false, true).timeout.connect(func(): play_at("wolf_howl", pos, 0.0))
+	if randf() < 0.6:
+		var cry := "wolf_roar" if randf() < 0.6 else "wolf_howl"
+		get_tree().create_timer(1.3, true, false, true).timeout.connect(func(): play_at(cry, pos, 0.0))
 
 
 ## Enemy died: vampires in the sun burn, the rest fall; Sol sometimes says something.
 func on_enemy_died(e: Node3D) -> void:
 	var burning: bool = e.get("burning") == true
 	play_at("vamp_burn" if burning else "death", e.global_position, -4.0 if not burning else 0.0)
+	if not burning and e.get("kind") == 1: # wolves and people hit the ground (the heavy fall clip)
+		_later(WOLF_FALL_DELAY if e.get("transformed") == true else CIVILIAN_FALL_DELAY, e.global_position, "body_fall", -2.0)
 	if randf() < 0.22:
 		get_node("/root/Dialogue").play_group("bark_kill_")
 
@@ -315,6 +342,15 @@ func on_loot_picked(rarity: int) -> void:
 ## An enemy winds up a strike: hisses, growls, and now and then a taunt.
 func enemy_bark(e: Node3D) -> void:
 	var wolf: bool = e.get("kind") == 1
+	var sp: String = str(e.get("special")) if e.get("special") != null else ""
+	if sp.begins_with("leap"):
+		_later_on(POUNCE_DELAY, e, "pounce_whoosh", 0.0)
+	elif sp.begins_with("lunge"):
+		play_at("vamp_hiss", e.global_position, -3.0)
+		_later_on(LUNGE_DELAY, e, "lunge_whoosh", 0.0)
+		return
+	elif e.get("windup_t") != null and float(e.get("windup_t")) > 0.0:
+		_later_on(float(e.get("windup_t")), e, "claw_swipe", -1.0 if wolf else -4.0) # the strike frame
 	if wolf:
 		if e.get("transformed") == true and randf() < 0.35:
 			play_at("wolf_growl", e.global_position, -2.0)
@@ -323,6 +359,24 @@ func enemy_bark(e: Node3D) -> void:
 		play_at("vamp_hiss", e.global_position, -4.0)
 	if randf() < 0.1:
 		get_node("/root/Dialogue").play_group("court_taunt_" if randf() < 0.4 else "vamp_taunt_")
+
+
+## A positional one-shot `delay` seconds from now, following a node if it is still around.
+func _later_on(delay: float, n: Node3D, name: String, db: float) -> void:
+	get_tree().create_timer(delay, false).timeout.connect(func():
+		if is_instance_valid(n) and n.is_inside_tree():
+			play_at(name, n.global_position, db))
+
+
+func _later(delay: float, pos: Vector3, name: String, db: float) -> void:
+	get_tree().create_timer(delay, false).timeout.connect(func(): play_at(name, pos, db))
+
+
+## A boss went down: the heavy bodies hit the ground on their fall clip's impact frame.
+func on_boss_died(id: String, pos: Vector3) -> void:
+	var t := {"marcus": 2.9 / 0.9, "abomination": 1.6, "alpha": 2.0, "knight": 1.6}
+	if t.has(id):
+		_later(float(t[id]), pos, "body_fall", 4.0)
 
 
 func _process(delta: float) -> void:

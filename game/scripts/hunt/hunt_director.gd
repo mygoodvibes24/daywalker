@@ -574,7 +574,7 @@ func _spawn_boss() -> void:
 	b.died.connect(_on_boss_died)
 	boss = b
 	ring.set_radius(arena.radius)
-	Audio.set_boss(true) # AUDIO HOOK
+	Audio.set_boss(true, def.id) # AUDIO HOOK: the boss theme (Audio.boss_context)
 	if def.intro != "":
 		Dialogue.play(def.intro)
 	Audio.play_at(def.intro_sfx, b.position, 3.0) # AUDIO HOOK
@@ -628,6 +628,7 @@ func _on_boss_died(b) -> void:
 	bosses_killed += 1
 	var def: Dictionary = boss_def(day)
 	Audio.set_boss(false) # AUDIO HOOK
+	Audio.on_boss_died(def.id, b.global_position) # AUDIO HOOK: the body hits the ground
 	if def.death != "":
 		Dialogue.play(def.death)
 	main.loot.spawn_motes(b.global_position + Vector3(0, 1.5, 0), int(round(def.tithe * (1.0 + main.progression.stat("tithe_mult")))))
