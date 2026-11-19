@@ -2525,6 +2525,14 @@ func _build_plaza() -> void:
 		l.light_color = Color(1, 0.75, 0.45)
 		add_child(l)
 		lamps.append(l)
+	# a Victorian post clock on the south-east corner (asset round 3 prop), outside the arena ring
+	street_clock(Vector3(14.0, y, 15.0), -PI * 0.75)
+
+
+## A cast-iron Victorian post clock (asset round 3 prop, 4 m, dials on both faces) at ground p.
+func street_clock(p: Vector3, yaw: float) -> void:
+	if place_glb("street_clock", 4.0, Transform3D(Basis(Vector3.UP, yaw), p), true, 110.0) != Vector3.ZERO:
+		post_collider(p, 0.3, 3.0)
 
 
 func _ornate_lamp(p: Vector3) -> void:
