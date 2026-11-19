@@ -260,8 +260,9 @@ func _bake_navigation() -> void:
 	var src := NavigationMeshSourceGeometryData3D.new()
 	var t0 := Time.get_ticks_msec()
 	NavigationServer3D.parse_source_geometry_data(nm, src, self)
+	var t1 := Time.get_ticks_msec()
 	NavigationServer3D.bake_from_source_geometry_data(nm, src)
-	print("navmesh: %d polys in %d ms" % [nm.get_polygon_count(), Time.get_ticks_msec() - t0]) # TERRAIN HOOK
+	print("navmesh: %d polys in %d ms (parse %d, bake %d)" % [nm.get_polygon_count(), Time.get_ticks_msec() - t0, t1 - t0, Time.get_ticks_msec() - t1]) # TERRAIN HOOK
 	nav_region = NavigationRegion3D.new()
 	nav_region.navigation_mesh = nm
 	add_child(nav_region)

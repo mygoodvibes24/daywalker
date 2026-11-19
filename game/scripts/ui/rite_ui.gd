@@ -11,7 +11,7 @@ const S = preload("res://scripts/ui/ui_style.gd")
 const Rites = preload("res://scripts/hunt/blood_rite.gd")
 const ARM_DELAY := 0.7 # seconds before the cards take input
 
-var main
+var main: Main
 var root: Control
 var flash: ColorRect
 var title_lbl: Label

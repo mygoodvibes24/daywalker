@@ -7,7 +7,7 @@ const MS = preload("res://scripts/menu/menu_style.gd")
 const Cfg = preload("res://scripts/hunt/hunt_config.gd")
 const Meta = preload("res://scripts/hunt/hunt_meta.gd")
 
-var director
+var director: HuntDirector
 var root: Control
 var title: Label
 var sub: Label

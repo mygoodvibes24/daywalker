@@ -24,8 +24,8 @@ const BRIEFING := [
 static var force_intro := false
 static var never_intro := false
 
-var director
-var main
+var director: HuntDirector
+var main: Main
 var playing := false
 var _done: Callable
 var _root: Control

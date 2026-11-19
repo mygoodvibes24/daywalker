@@ -99,10 +99,29 @@ func _initialize() -> void:
 	ok = await _asset_r3_checks(main) and ok
 	ok = await _menu_checks(main) and ok
 	ok = await _hunt_checks() and ok
+	ok = _download_checks() and ok
 	if FileAccess.file_exists(SMOKE_SAVE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SMOKE_SAVE))
 	print("SMOKE TEST: ", "PASS" if ok else "FAIL")
 	quit(0 if ok else 1)
+
+## W2 / K4: the web export leaves staging, tools and tests out, and the retired Sol and *_rig.scn
+## bodies stay deleted (about 6 MB of the old pck).
+func _download_checks() -> bool:
+	var ok := true
+	var cf := ConfigFile.new()
+	var loaded := cf.load("res://export_presets.cfg") == OK
+	var ex: String = str(cf.get_value("preset.0", "exclude_filter", "")) if loaded else ""
+	ok = _check("the web export excludes assets_staging, tools and tests (%s)" % ex, loaded and ex.contains("assets_staging/*") and ex.contains("tools/*") and ex.contains("tests/*")) and ok
+	var dead := ["res://assets/characters/sol/sol.scn", "res://assets/characters/vampire/vampire_rig.scn", "res://assets/characters/werewolf/werewolf_rig.scn",
+		"res://assets/characters/civilian/civilian_rig.scn", "res://scripts/sol_anim.gd"]
+	var gone := true
+	for d in dead:
+		if FileAccess.file_exists(d):
+			gone = false
+	ok = _check("the retired Sol body and *_rig.scn fallbacks stay deleted", gone) and ok
+	return ok
+
 
 func _check(name: String, cond: bool) -> bool:
 	print(("  ok   " if cond else "  FAIL ") + name)

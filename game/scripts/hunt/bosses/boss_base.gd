@@ -33,12 +33,6 @@ const BOSS_CLIPS := {
 	"marcus": "res://assets/characters/marcus/marcus_boss_clips.res",
 	"abomination": "res://assets/characters/abomination/abomination_boss_clips.res",
 }
-## The older hand-rigged bodies, only if an *_anim.scn is missing (posed by nothing: a statue).
-const MODEL_PATHS := {
-	"vampire": "res://assets/characters/vampire/vampire_rig.scn",
-	"werewolf": "res://assets/characters/werewolf/werewolf_rig.scn",
-	"civilian": "res://assets/characters/civilian/civilian_rig.scn",
-}
 const GRAVITY := 24.0
 ## Wind-up clip per attack type: [clip, follow-through seconds after the strike].
 const WINDUP_CLIP := {
@@ -207,7 +201,7 @@ func _ready() -> void:
 static func _model_scene(n: String) -> PackedScene:
 	if not _scene_cache.has(n):
 		var ps: PackedScene = null
-		for path in [ANIM_PATHS.get(n, ""), MODEL_PATHS.get(n, "")]:
+		for path in [ANIM_PATHS.get(n, "")]:
 			if path != "" and ResourceLoader.exists(path):
 				ps = load(path) as PackedScene
 				if ps != null:

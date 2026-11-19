@@ -10,8 +10,8 @@ const CityScript = preload("res://scripts/city.gd")
 const MapLayout = preload("res://scripts/map/map_layout.gd")
 const WORLD := MapLayout.HALF # half-extent shown (MAP HOOK: the large map's bounds)
 
-var director
-var main
+var director: HuntDirector
+var main: Main
 var panel: Control
 var frame: Control # clips the map drawing to its square
 var canvas: Control # the map itself

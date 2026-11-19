@@ -20,8 +20,8 @@ const REACH := 2.6 # flat metres for the [E] prompt
 const DRAW_RANGE := 90.0 # meshes fade out beyond this
 const LABEL_RANGE := 26.0
 
-var director
-var main
+var director: HuntDirector
+var main: Main
 var type := ""
 var def: Dictionary
 var used := false

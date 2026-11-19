@@ -13,8 +13,8 @@ const HFx = preload("res://scripts/hunt/hunt_fx.gd")
 
 signal cleared_now(poi)
 
-var director
-var main
+var director: HuntDirector
+var main: Main
 var type := ""
 var def: Dictionary
 var display_name := ""
