@@ -49,6 +49,8 @@ extends Node
 @export var cloth_margin := 0.025
 ## How much of a capsule penetration is resolved per pass (soft collision: < 1 lets the cloth give).
 @export var collision_softness := 0.6
+## share of a touching joint's sliding speed lost per step against a leg or the hips (cloth friction)
+@export var contact_friction := 0.35
 ## Simulation on/off (off = the coat holds its rest shape).
 @export var enabled := true
 
@@ -157,6 +159,7 @@ func _physics_process(delta: float) -> void:
 		var q := prev[c]
 		var rh := rest_hips[c]
 		var ph := phase[c]
+		var was := p.duplicate() # where each joint really was last step (the motion measure)
 		p[0] = hips_g * rh[0]
 		q[0] = p[0]
 		for k in range(1, links + 1):
@@ -198,11 +201,19 @@ func _physics_process(delta: float) -> void:
 					p[k] = p[0] + nd * ll
 				# legs and hips: soft push out of each capsule, sideways and back, never up
 				for ci in caps.size():
+					var before := p[k]
 					p[k] = _push_out(p[k], caps[ci][0], caps[ci][1], cap_r[ci] + cloth_margin, collision_softness)
+					# inelastic contact: the push-out moves the cloth but adds no velocity, otherwise the
+					# spring pulls it back in, the capsule pushes it out, and it buzzes against the legs forever
+					var push := p[k] - before
+					if push.length_squared() > 1e-12:
+						q[k] += push
+						# contact friction: cloth lying on a leg drags on it instead of skating around it
+						q[k] = q[k].lerp(p[k], contact_friction)
 		pos[c] = p
 		prev[c] = q
 		for k in range(1, links + 1):
-			msum += p[k].distance_to(q[k]) / dt
+			msum += p[k].distance_to(was[k]) / dt
 	_motion = msum / maxf(pos.size() * links, 1)
 	_write(sx)
 
