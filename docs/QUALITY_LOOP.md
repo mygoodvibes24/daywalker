@@ -33,3 +33,4 @@ The owner's bar: **compete with Elden Ring** in look, animation, action and game
 |---|---|---|---|---|---|---|---|---|---|---|
 | R0 (prototype) | 3 | – | 4 | – | 0 | – | 7 | 5 | 6 | 4 |
 | R1 | 5 | 5 | 5 | 6 | 6 | 4 | 5 | 6 | 3 | 5 |
+| R2 | 5.5 | 5.5 | 6 | 6.5 | 6.5 | 6 | 6 | 6 | 5 | 6 |
