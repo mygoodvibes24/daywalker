@@ -32,6 +32,10 @@
   "court": {
    "name": "VELVET COURT",
    "color": "#d77fb0"
+  },
+  "cassius": {
+   "name": "CASSIUS VANE",
+   "color": "#d0463c"
   }
  },
  "lines": [
@@ -632,6 +636,26 @@
    "text": "You killed my child. I'll make another... from you.",
    "audio": "res://assets/audio/voice/boss_seraphine_death.ogg",
    "duration": 4.93,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
+   "id": "boss_knight_intro",
+   "speaker": "cassius",
+   "category": "boss",
+   "text": "Kneel, and Lucien might let you keep your head.",
+   "audio": "res://assets/audio/voice/court_taunt_3.ogg",
+   "duration": 3.75,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
+   "id": "boss_knight_death",
+   "speaker": "sol",
+   "category": "boss",
+   "text": "Stay down.",
+   "audio": "res://assets/audio/voice/bark_kill_1.ogg",
+   "duration": 1.51,
    "priority": 3,
    "cooldown": 0
   }

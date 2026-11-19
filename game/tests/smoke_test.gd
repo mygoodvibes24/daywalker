@@ -94,6 +94,7 @@ func _initialize() -> void:
 	ok = await _coat_checks(main) and ok
 	ok = await _move_checks(main) and ok
 	ok = await _fall_checks(main) and ok
+	ok = await _special_checks(main) and ok
 	ok = await _audio_checks(main) and ok
 	ok = await _menu_checks(main) and ok
 	ok = await _hunt_checks() and ok
@@ -562,7 +563,8 @@ func _move_checks(main) -> bool:
 			break
 	Input.action_release("attack")
 	main.clear_slowmo()
-	ok = _check("holding attack does the charged slash (hits %s, staggered %s)" % [str(hits), e.staggered], charged and hits.size() >= 2 and hits[hits.size() - 1] > hits[0] * 2.0 and e.staggered) and ok
+	# QA2 #10: one heavy hit; the light strike of the press that became the charge never lands
+	ok = _check("holding attack does the charged slash, one heavy hit (hits %s, staggered %s)" % [str(hits), e.staggered], charged and hits.size() == 1 and hits[0] > 30.0 and e.staggered) and ok
 	_clear_enemies(main)
 
 	# 2. attacking just after a Blood Dash is the thrust, and it lands
@@ -792,6 +794,15 @@ func _audio_checks(main) -> bool:
 	ok = _check("subtitles off hides the label", dlg.is_speaking() and dlg.subtitle_text() == "") and ok
 	St.subtitles = true
 	dlg.stop_all()
+	# QA2 #9: every boss has a voiced intro and death line that cuts in (priority 3)
+	var Cfg9 = load("res://scripts/hunt/hunt_config.gd")
+	var mute := []
+	for bd in Cfg9.NIGHT_BOSS_POOL + [Cfg9.FINAL_BOSS]:
+		for k in ["intro", "death"]:
+			var lid: String = bd.get(k, "")
+			if lid == "" or not dlg.has_line(lid) or int(dlg.lines[lid].get("priority", 0)) < 3:
+				mute.append("%s.%s" % [bd.id, k])
+	ok = _check("every boss has a voiced intro and death line %s" % [mute], mute.is_empty()) and ok
 	ok = _check("hunt line ids exist for the run hooks", dlg.has_line("hunt_deploy_1") and dlg.has_line("curfew_warning") and dlg.has_line("boss_alpha_intro")) and ok
 	# music follows the fight: enemies near -> combat, boss -> boss, calm -> explore
 	_clear_enemies(main)
@@ -958,6 +969,10 @@ func _menu_checks(main) -> bool:
 	menu.debug_show("options")
 	await process_frame
 	ok = _check("Options screen opens", menu.options.visible and not menu.menu_box.visible) and ok
+	var opt_panel = menu.options.get_child(0)
+	var opt_h: float = opt_panel.get_combined_minimum_size().y
+	var opt_k: float = opt_panel.fit_scale(Vector2(1280, 720))
+	ok = _check("the Options panel fits 720p with Back on screen (%.0f px x %.2f)" % [opt_h, opt_k], opt_h * opt_k <= 720.0 and opt_k >= 0.85 and opt_panel.back_button.get_parent() == opt_panel.get_child(0)) and ok
 	menu._back()
 	menu.debug_show("controls")
 	await process_frame
@@ -1043,6 +1058,38 @@ func _fall_checks(main) -> bool:
 	ok = _check("an enemy the camera is inside is hidden, then shown again", hid and g.visual.visible) and ok
 	ok = _check("the camera arm collides with camera-only blockers (awnings)", p.spring.collision_mask & 512 != 0 and main.city._cam_body != null and main.city._cam_body.get_child_count() > 10) and ok
 	_clear_enemies(main)
+	return ok
+
+
+## QA2 #7: a vampire next to an idle Sol still lunges (it hops back out of reach to open with it).
+func _special_checks(main) -> bool:
+	var ok := true
+	var p = main.player
+	_clear_enemies(main)
+	var tod: float = main.time_of_day
+	main.time_of_day = 0.9
+	p.max_hp = 1e9
+	p.hp = 1e9
+	seed(4242)
+	var v = _spawn(main, 0, p.global_position + Vector3(0, 0.4, 1.4))
+	var backed := false
+	var lunged := false
+	for i in 540:
+		await physics_frame
+		if not is_instance_valid(v) or v.dead:
+			break
+		if v.special.ends_with("_back"):
+			backed = true
+		if v.special == "lunge_windup" or v.special == "lunge":
+			lunged = true
+		if backed and lunged:
+			break
+	main.clear_slowmo()
+	ok = _check("a vampire beside an idle Sol hops back and lunges (back %s, lunge %s)" % [backed, lunged], backed and lunged) and ok
+	_clear_enemies(main)
+	main.time_of_day = tod
+	p.max_hp = 100.0
+	p.hp = 100.0
 	return ok
 
 
@@ -1288,10 +1335,13 @@ func _hunt_checks() -> bool:
 	# QA2 #12: the card sits top centre (clear of the phone stick) and hides under the map
 	h.map_screen.open()
 	await process_frame
+	await process_frame
 	var card_hid: bool = not h.story._card.visible
 	h.map_screen.close()
 	await process_frame
-	ok = _check("the night card is top centre and hides while the map is open", card_hid and h.story._card.visible and is_equal_approx(h.story._card.anchor_left, 0.5)) and ok
+	await process_frame
+	ok = _check("the night card is top centre and hides while the map is open (hid %s, back %s, anchor %.1f)" % [card_hid, h.story._card.visible, h.story._card.anchor_left],
+		card_hid and h.story._card.visible and is_equal_approx(h.story._card.anchor_left, 0.5)) and ok
 	ok = await _boss_parry_checks(m, boss) and ok
 	boss.take_hit(boss.max_hp * 0.6, Vector3.FORWARD)
 	ok = _check("the boss enrages below half", boss.enraged) and ok

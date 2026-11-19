@@ -117,7 +117,7 @@ func _build_ui() -> void:
 		buttons[i].focus_neighbor_left = buttons[i].get_path()
 		buttons[i].focus_neighbor_right = buttons[i].get_path()
 
-	hint = S.label(MS.hint(false), 14, MS.BONE_DIM, 3)
+	hint = S.label(_hint_text(false), 14, MS.BONE_DIM, 3)
 	hint.anchor_top = 1.0
 	hint.anchor_bottom = 1.0
 	hint.offset_left = 98
@@ -210,11 +210,19 @@ func debug_show(which: String) -> void:
 		_show(which)
 
 
+## The footer hint: keys / pad buttons, or a tap on a phone (QA2 #14: "Esc back" means nothing there).
+func _hint_text(pad: bool) -> String:
+	var t := get_node_or_null("/root/Touch")
+	if not pad and t != null and t.enabled:
+		return "Tap to select"
+	return MS.hint(pad)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	var pad := event is InputEventJoypadButton or (event is InputEventJoypadMotion and absf((event as InputEventJoypadMotion).axis_value) > 0.5)
 	if pad != using_pad and (pad or event is InputEventKey or event is InputEventMouseButton):
 		using_pad = pad
-		hint.text = MS.hint(pad)
+		hint.text = _hint_text(pad)
 	if state == "loading":
 		return
 	if event.is_action_pressed("ui_cancel"):

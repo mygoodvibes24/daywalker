@@ -24,7 +24,7 @@ var click_label: Label
 var announce_t := 0.0
 var popup_t := 0.0
 var damage_t := 0.0
-var help_t := 30.0 # the basic controls show for the first 30 s of play, then only context tips
+var help_t := 20.0 # the basic controls show for the first 20 s of play, then only context tips
 var tip_t := 0.0
 var tips_seen := {}
 var lock_label: Label # desktop web: "Click to take the hunt" while the pointer isn't locked
@@ -320,7 +320,7 @@ func _refresh_help() -> void:
 		help_label.text = KEYS_HELP + (ROAM_KEYS if roam else "")
 
 
-## Context hints: the basic controls for the first 30 s of play (and for 8 s when the device
+## Context hints: the basic controls for the first 20 s of play (and for 8 s when the device
 ## changes), then one tip the first time something becomes possible (a bite, a rank), else nothing.
 func _update_hints(dt: float) -> void:
 	if _touch() and not using_pad:

@@ -249,7 +249,7 @@ func _bake_navigation() -> void:
 	var nm := NavigationMesh.new()
 	nm.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
 	nm.geometry_collision_mask = 1
-	nm.agent_radius = 0.5
+	nm.agent_radius = 0.6 # a whole number of 0.3 m cells (0.5 was ceiled, with a warning every load)
 	nm.agent_height = 1.75
 	nm.agent_max_climb = 0.25
 	var pr: Rect2 = city.play_rect # MAP HOOK: bake the whole large map
@@ -594,7 +594,8 @@ func open_pause() -> void:
 
 
 func menu_open() -> bool:
-	return inventory_ui.is_open() or levelup_ui.is_open() or Time.get_ticks_msec() < ui_block_until 		or (hunt != null and hunt.story != null and hunt.story.playing) # the first-Hunt intro (QA2 #3)
+	return inventory_ui.is_open() or levelup_ui.is_open() or Time.get_ticks_msec() < ui_block_until \
+		or (hunt != null and hunt.story != null and hunt.story.playing) # the first-Hunt intro (QA2 #3)
 
 
 func open_levelup() -> void:

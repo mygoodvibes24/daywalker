@@ -160,6 +160,11 @@ func finish() -> void:
 	var pl = main.player
 	pl.global_position = Vector3(pl.global_position.x, float(point.get("pos", Vector3.ZERO).y) + 0.15, pl.global_position.z) # TERRAIN HOOK: the point's ground
 	pl.set_physics_process(true)
+	if point.has("look"): # QA2 #15: face the open street, not the wall the dressing opens onto
+		var lk: Vector3 = point.look
+		pl.facing = atan2(lk.x, lk.z)
+		pl.visual.rotation.y = pl.facing
+		pl.cam_yaw = atan2(-lk.x, -lk.z)
 	pl.camera.current = true
 	pl.block_attack()
 	if cam != null:

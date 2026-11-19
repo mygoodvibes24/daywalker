@@ -242,3 +242,19 @@ func _on_shown() -> void:
 		r.call()
 	if first_focus != null:
 		first_focus.grab_focus.call_deferred()
+
+
+## Short screens (720p, phones with the UI scaled up): shrink the whole panel to fit, so Back is
+## always on screen (QA2 #11), like the hub panel does.
+func fit_scale(vs: Vector2) -> float:
+	var sz := size if size.y > 0.0 else get_combined_minimum_size()
+	return minf(1.0, minf(vs.y * 0.96 / maxf(sz.y, 1.0), vs.x * 0.96 / maxf(sz.x, 1.0)))
+
+
+func _process(_delta: float) -> void:
+	if not is_visible_in_tree() or size.y <= 0.0:
+		return
+	var k := fit_scale(get_viewport_rect().size)
+	pivot_offset = size * 0.5
+	if not is_equal_approx(scale.x, k):
+		scale = Vector2(k, k)

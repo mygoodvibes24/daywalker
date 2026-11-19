@@ -246,13 +246,15 @@ func _fly(t: float) -> void:
 func _input(event: InputEvent) -> void:
 	if not playing:
 		return
-	var press: bool = (event is InputEventKey or event is InputEventMouseButton or event is InputEventJoypadButton 			or event is InputEventScreenTouch or event is InputEventAction) and event.is_pressed() and not event.is_echo()
+	var press: bool = (event is InputEventKey or event is InputEventMouseButton or event is InputEventJoypadButton \
+			or event is InputEventScreenTouch or event is InputEventAction) and event.is_pressed() and not event.is_echo()
 	if not press:
 		return
 	get_viewport().set_input_as_handled()
 	if _t < 0.6:
 		return
-	if event.is_action_pressed("attack") or event.is_action_pressed("jump") or event.is_action_pressed("interact") or event.is_action_pressed("ui_cancel") or event.is_action_pressed("ui_accept") 			or (event is InputEventKey and (event as InputEventKey).physical_keycode == KEY_ESCAPE) or event is InputEventScreenTouch:
+	if event.is_action_pressed("attack") or event.is_action_pressed("jump") or event.is_action_pressed("interact") or event.is_action_pressed("ui_cancel") or event.is_action_pressed("ui_accept") \
+			or (event is InputEventKey and (event as InputEventKey).physical_keycode == KEY_ESCAPE) or event is InputEventScreenTouch:
 		finish_intro()
 
 

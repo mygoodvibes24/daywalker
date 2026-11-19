@@ -765,6 +765,8 @@ func _special(name: String) -> void:
 	if mod_anim != null:
 		delay = mod_anim.play_move(m, w.spd)
 	_lunge(float(m.lunge), maxf(delay, 0.1))
+	if name == "charged" and pending.has("combo"):
+		pending = {} # the held press's light strike became this charge: one heavy hit (QA2 #10)
 	_flush_pending()
 	pending = {"t": delay, "move": name, "target": target}
 	attacked.emit(3 if name == "charged" else 1, _forward())
@@ -917,7 +919,10 @@ func _combat_tick(delta: float) -> void:
 			hold_t = -1.0
 	if not pending.is_empty():
 		pending.t -= delta
-		if pending.t <= 0.0:
+		# QA2 #10: while the press that swung it is still held, the light strike waits: it may yet
+		# become the charged slash (which drops it), else it lands on release
+		var held: bool = pending.has("combo") and hold_t >= 0.0 and Input.is_action_pressed("attack")
+		if pending.t <= 0.0 and not held:
 			var p := pending
 			pending = {}
 			_resolve_pending(p)

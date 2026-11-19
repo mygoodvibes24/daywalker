@@ -38,9 +38,20 @@ func setup(director_, type_: String, seed_: int, boss_def := {}) -> void:
 	def = Cfg.POI_TYPES[type]
 	rng.seed = seed_
 	field_boss_def = boss_def
-	display_name = def.label if boss_def.is_empty() else boss_def.name.capitalize()
+	display_name = def.label if boss_def.is_empty() else title_case(boss_def.name)
 	if type == "fieldboss":
-		display_name = boss_def.name.split(",")[0].capitalize()
+		display_name = title_case(boss_def.name.split(",")[0])
+
+
+## "OLD GRISTLE OF THE PINES" -> "Old Gristle of the Pines" (QA2 #16: not capitalize()'s "Of The").
+static func title_case(s: String) -> String:
+	var out: Array = []
+	for w in s.strip_edges().to_lower().split(" ", false):
+		if out.size() > 0 and w in ["of", "the", "and", "a", "in"]:
+			out.append(w)
+		else:
+			out.append(w.substr(0, 1).to_upper() + w.substr(1))
+	return " ".join(out)
 
 
 func _ready() -> void:
