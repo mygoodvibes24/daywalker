@@ -1,0 +1,17 @@
+{
+  "about": "Boss music and creature SFX (asset round 3). Downloaded as MP3, converted to OGG Vorbis (q5, 44.1 kHz stereo). Music was made loopable by cutting before any fade and cross-fading the last 1.5 s into the first 1.5 s (equal power), so the end runs straight into the start: import with loop=true (the .import files here set it). Not yet checked by ear: listen before shipping, especially whether the Abomination choir sings real words (it was asked for vowels only).",
+  "music": [
+    {"file": "music_boss_marcus.ogg", "boss": "Marcus Crane", "length_s": 48.55, "loop": true, "model": "elevenlabs_music_v2 (instrumental, 50 s)", "credits": 3.2, "job": "642267bc-a803-421c-bb4e-c8e8cb6c63f4", "prompt_summary": "velvet menace: walking upright bass, brushed jazz drums 132 bpm, muted trumpet and tenor sax hook, staccato string ostinatos, orchestral stabs, harpsichord"},
+    {"file": "music_boss_abomination.ogg", "boss": "Seraphine's Abomination", "length_s": 43.5, "loop": true, "model": "elevenlabs_music_v2 (50 s; the last 5 s faded out and were cut)", "credits": 3.2, "job": "b217adc4-e6ff-4b24-b7cc-df10baa65a97", "prompt_summary": "brutal percussion: taiko, anvils, low toms 100 bpm, distorted sub booms, dissonant brass, wordless gregorian choir, horror string clusters"}
+  ],
+  "sfx": [
+    {"file": "sfx_werewolf_roar.ogg", "use": "werewolf roar / Hollow Alpha (pitch down ~3 semitones); sync with werewolf_anim_roar at ~0.9 s", "length_s": 2.0, "job": "d7889d32-28bf-4b5b-9585-c1de0cb40fc0"},
+    {"file": "sfx_claw_swipe.ogg", "use": "werewolf and vampire claw hits (heavy swipe 1.57 s, claw combo hits); boosted +16 dB, it came out quiet", "length_s": 2.0, "job": "8dc71b0d-337f-485c-a1ec-b5d9cbded9af"},
+    {"file": "sfx_pounce_whoosh.ogg", "use": "werewolf pounce: whoosh then landing thud; start at takeoff (0.6 s)", "length_s": 2.0, "job": "26de6c49-482e-4ddc-9bd1-afde6b918f78"},
+    {"file": "sfx_vampire_hiss.ogg", "use": "vampire aggro / taunt / before a lunge", "length_s": 2.0, "job": "ed6d5cce-19b0-4105-8cb9-ea404ddd4ed4"},
+    {"file": "sfx_vampire_lunge_whoosh.ogg", "use": "vampire lunge and Marcus dash (coat flutter)", "length_s": 2.0, "job": "136face8-72c0-4f63-a0a9-07f0b960f8f2"},
+    {"file": "sfx_boss_slam_impact.ogg", "use": "Abomination slam at 1.67 s, grab-throw landing at 3.5 s", "length_s": 2.0, "job": "f16f8f14-9422-4d2e-be60-44296da57664"},
+    {"file": "sfx_body_fall.ogg", "use": "heavy deaths (werewolf death ~1.6 s, Marcus death ~2.9 s), knockdowns", "length_s": 2.0, "job": "0afb7ae3-0f6e-468c-8d04-f8d242e01f4a"}
+  ],
+  "sfx_model": "mirelo_text_to_audio, 2 s, 0.5 credits each"
+}

@@ -1,0 +1,24 @@
+{
+ "_note": "DRAFT for game/tools/project_face_texture.py, modelled on docs/face_scans/sol/scan.json. Move the jpgs to docs/face_scans/nia/ and the raw mesh to game/assets/characters/nia/ before running; eyes_px, crop_y and placement still need checking against the front capture and Nia's body rig.",
+ "raw_mesh": "game/assets/characters/nia/nia_scan_head_raw.glb",
+ "scan_yaw": -90.0,
+ "target_tris": 36000,
+ "out_dir": "game/assets/characters/nia",
+ "out_prefix": "nia_scan_head",
+ "cam_dist": 4.0,
+ "albedo_size": 2048,
+ "map_size": 1024,
+ "face_strip": 0.45,
+ "view_sharpness": 0.06,
+ "albedo_gain": [0.38, 0.42, 0.47],
+ "views": [
+  {"img": "n01_front.jpg", "az": 0, "weight": 1.5, "crop_y": 0.78, "yaw_tol": 4, "priority": 0.42},
+  {"img": "n02_l30.jpg", "az": 30, "weight": 1.0, "crop_y": 0.74, "yaw_tol": 10, "priority": 0.08},
+  {"img": "n03_r30.jpg", "az": -30, "weight": 1.0, "crop_y": 0.74, "yaw_tol": 10, "priority": 0.08},
+  {"img": "n06_l90.jpg", "az": 90, "weight": 0.9, "crop_y": 0.74, "yaw_tol": 4, "priority": 0.05},
+  {"img": "n07_r90.jpg", "az": -90, "weight": 0.9, "crop_y": 0.74, "yaw_tol": 4, "priority": 0.05},
+  {"img": "n08_back.jpg", "az": 180, "weight": 1.0, "crop_y": 0.72, "yaw_tol": 4}
+ ],
+ "eyes_px": [[333, 404], [483, 404]],
+ "placement": {"ipd_m": 0.062, "eye_mid": [0.0, 1.62, 0.1], "cut_y": 1.45}
+}

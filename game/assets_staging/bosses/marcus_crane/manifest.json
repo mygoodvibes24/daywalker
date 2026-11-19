@@ -1,0 +1,21 @@
+{
+  "boss": "Marcus Crane, 'the Velvet Fang'",
+  "about": "Speed-vampire duelist and nightclub owner who mirrors Sol. Original design: long black velvet frock coat with crimson silk lining, open black silk shirt, ruby rings, slicked black hair, pale skin, red eyes, long dark nails (fights with his claws, no weapon).",
+  "height_m": 1.88,
+  "model": {
+    "file": "marcus_crane.glb",
+    "notes": "Tripo H3.1 multiview mesh (48.7k triangles, PBR: albedo, metallic-roughness, normal), turned -90 degrees about Y to face +Z, feet at y=0, scaled to 1.88 m, textures downscaled to 2048 px. Texture imports must be Lossy (WebP), never VRAM. The coat renders a little glossy with the metallic-roughness map as delivered; consider forcing metallic 0 and roughness ~0.75 on the velvet."
+  },
+  "rigged": {
+    "file": "rigged/marcus_rigged.glb",
+    "notes": "Meshy auto-rig of the same mesh (24-bone humanoid skeleton, same bone names as Sol and the enemies), stripped with strip_rig_glb.gd 'mesh' mode (skinned mesh + skeleton, no textures; re-apply the PBR material from marcus_crane.glb). In a .gdignore folder: read it with GLTFDocument, as build_enemy_anims.gd does for the enemies.",
+    "rig_source_upload": "https://d2ol7oe51mr4n9.cloudfront.net/user_3M3cbVYOpQkCAbZXwwBloXVahos/832d19e8-d9e5-4a3f-80e1-bf74dc4b535a.glb"
+  },
+  "clips": [
+    {"role": "fast slash combo (claws)", "file": "clips/marcus_anim_slash_combo.glb", "library_name": "Weapon_Combo_1", "library_id": 202, "length": 3.533, "loop": false, "strike_time": 0.83, "hit_times": [0.83, 1.13, 1.63, 2.5], "root_motion_m": [0.01, 0.01, 2.49], "notes": "flashy advancing string: two raking swipes, a spinning high kick, then a low sweeping finisher in a deep crouch (2.5 s). Advances 2.5 m."},
+    {"role": "dash / lunge", "file": "clips/marcus_anim_dash_lunge.glb", "library_name": "Lunge_Spin_Kick", "library_id": 216, "length": 1.667, "loop": false, "strike_time": 0.9, "root_motion_m": [1.36, 0.0, 1.36], "notes": "explosive diagonal lunge into a spinning strike, coat flaring. Travels about 1.9 m diagonally: re-aim the root motion onto the facing when wiring, and stretch it for a gap-closing dash."},
+    {"role": "death", "file": "clips/marcus_anim_death.glb", "library_name": "Shot_and_Slow_Fall_Backward", "library_id": 185, "length": 4.433, "loop": false, "strike_time": null, "ground_impact": 2.9, "root_motion_m": [-0.21, -0.9, -1.18], "notes": "staggers, head thrown back, slow theatrical fall onto his back."}
+  ],
+  "reference_views": ["reference/marcus_front.jpg", "reference/marcus_left.jpg", "reference/marcus_back.jpg", "reference/marcus_right.jpg"],
+  "previews": ["../previews_chosen.jpg (library previews, rows 1-3)", "rigged_frames_check.jpg", "model_views_check.jpg"]
+}
