@@ -444,6 +444,9 @@ func _process(delta: float) -> void:
 		step = 3 if d2 > 2025.0 else (2 if d2 > 625.0 else 1)
 	if step > 1 and (Engine.get_process_frames() + anim_slot) % step != 0:
 		return
+	if hitstop_t > 0.0:
+		anim_accum = 0.0 # the victim's hit-stop: the pose holds
+		return
 	anim.advance(anim_accum)
 	anim_accum = 0.0
 
@@ -647,7 +650,7 @@ func _physics_process(delta: float) -> void:
 			staggered = false
 			marker.visible = false
 			hp = max_hp * 0.45
-			flash_t = 0.12 # "recovered" flash: the bite window is gone
+			flash_t = RIM_TIME # "recovered" flash: the bite window is gone
 	elif player != null and not player.dead:
 		var to: Vector3 = player.global_position - global_position
 		to.y = 0.0
@@ -1099,7 +1102,7 @@ func execution_victim(by: Node3D, strike_delay: float) -> void:
 			return
 		_play("hit", 0.05, 0.9, 0.12)
 		anim_state = "executed"
-		flash_t = 0.12)
+		flash_t = RIM_TIME)
 
 
 ## The killing cut: thrown back along Sol's swing with a blood burst (the death clip is already playing).
@@ -1193,13 +1196,16 @@ func _animate(delta: float, spd: float) -> void:
 			lean = -0.25 # rear back before the strike
 		elif transformed:
 			lean = 0.3
-	visual.rotation.x = lerpf(visual.rotation.x, lean, 10.0 * delta)
+	visual.rotation.x = lerpf(visual.rotation.x, lean, 10.0 * delta) + recoil.x * minf(60.0 * delta, 1.0)
+	if not burning:
+		visual.rotation.z = recoil.y
+	var rim := clampf(flash_t / RIM_TIME, 0.0, 1.0)
 	if transform_t <= 0.0:
 		var c := body_color
 		if burning:
 			c = c.lerp(Color(1.0, 0.35, 0.05), 0.5 + 0.5 * sin(phase * 3.0))
-		if flash_t > 0.0:
-			c = c.lerp(Color.WHITE, flash_t / 0.12)
+		if rim > 0.0:
+			c = c.lerp(HIT_RIM, rim * 0.35)
 		body_mat.albedo_color = c
 	if model != null:
 		var o := Color(1, 1, 1, 0)
@@ -1207,9 +1213,7 @@ func _animate(delta: float, spd: float) -> void:
 			o = Color(body_color.r, body_color.g, body_color.b, clampf(transform_t, 0.0, 1.0) * 0.7)
 		if burning:
 			o = Color(1.0, 0.35, 0.05, 0.4 + 0.3 * sin(phase * 3.0))
-		if flash_t > 0.0:
-			o = o.lerp(Color(1, 1, 1, 0.9), flash_t / 0.12)
-		_set_overlay(o)
+		_set_overlay(o, rim)
 		if anim != null:
 			_anim_update(delta, spd)
 		else:
@@ -1219,14 +1223,39 @@ func _animate(delta: float, spd: float) -> void:
 		marker.position.y = 2.7 + sin(phase * 0.6) * 0.12
 
 
+## The directional stagger: a kick of the whole body away from the blade that springs back (~0.25 s).
+func _recoil_tick(delta: float) -> void:
+	if recoil == Vector2.ZERO and recoil_v == Vector2.ZERO:
+		return
+	recoil_v += (-recoil * 260.0 - recoil_v * 22.0) * delta
+	recoil += recoil_v * delta
+	if recoil.length() < 0.002 and recoil_v.length() < 0.02:
+		recoil = Vector2.ZERO
+		recoil_v = Vector2.ZERO
+
+
+func _hit_feedback(amount: float, dir: Vector3) -> void:
+	flash_t = RIM_TIME
+	hitstop_t = HITSTOP
+	var d := Vector3(dir.x, 0, dir.z)
+	if d.length() < 0.01:
+		d = -Vector3(sin(visual.rotation.y), 0, cos(visual.rotation.y))
+	d = d.normalized()
+	var local := visual.global_transform.basis.inverse() * d
+	var k := clampf(amount / 20.0, 0.5, 1.4)
+	recoil_v += Vector2(local.z, -local.x) * 5.5 * k
+	var h := 2.0 if model_name == "werewolf" else 1.25
+	HFx.blood_spray(main, global_position + Vector3(0, h, 0) - d * 0.15, d, 12 if amount < 25.0 else 18, k)
+
+
 func take_hit(amount: float, dir: Vector3) -> void:
-	if dead:
+	if dead or evading():
 		return
 	if staggered:
 		_die(false)
 		return
 	hp -= amount
-	flash_t = 0.12
+	_hit_feedback(amount, dir)
 	windup_t = 0.0
 	engaged_t = 5.0
 	if special != "":
@@ -1268,14 +1297,16 @@ func _die(_drained: bool) -> void:
 	if anim != null:
 		visual.rotation.z = 0.0
 		_play("death", 0.1, 2.0 if kind == VAMPIRE else 1.25, 0.0)
+	if body_mesh != null:
+		body_mesh.material_overlay = null
 	if kind == VAMPIRE:
 		if anim != null: # crumple into the fall while greying, then collapse to ash
 			overlay_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-			_set_overlay(Color(0.3, 0.3, 0.3, 0.05))
+			_ash_overlay()
 			tw.tween_property(overlay_mat, "albedo_color", Color(0.3, 0.3, 0.3, 0.92), 0.7)
 		elif model != null: # turn to ash: grey, shaded overlay
 			overlay_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-			_set_overlay(Color(0.3, 0.3, 0.3, 0.05))
+			_ash_overlay()
 			tw.tween_property(overlay_mat, "albedo_color", Color(0.3, 0.3, 0.3, 0.92), 0.25)
 			tw.parallel()
 		tw.tween_property(body_mat, "albedo_color", Color(0.25, 0.25, 0.25), 0.25)
@@ -1290,3 +1321,12 @@ func _die(_drained: bool) -> void:
 			tw.tween_interval(1.2)
 		tw.tween_property(visual, "scale", Vector3.ZERO, 0.4)
 	tw.tween_callback(queue_free)
+
+
+
+## The vampire's ash death: a shaded grey overlay faded in by _die's tween.
+func _ash_overlay() -> void:
+	if body_mesh == null:
+		return
+	overlay_mat.albedo_color = Color(0.3, 0.3, 0.3, 0.05)
+	body_mesh.material_overlay = overlay_mat
