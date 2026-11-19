@@ -135,22 +135,17 @@ func build_world() -> void:
 	for e in Spawner.generate(seed, main.city):
 		var poi = POIScript.new()
 		poi.setup(self, e.type, e.seed, e.get("boss", {}))
-		poi.name = "POI_%s_%d" % [e.type, pois.size()]
 		poi.position = e.pos
-		poi_root.add_child(poi)
-		poi.cleared_now.connect(on_poi_cleared)
-		pois.append(poi)
+		register_poi(poi)
 	var avoid: Array = []
 	for poi in pois:
 		avoid.append(poi.position)
 	for e in MicroScript.generate(seed, main.city, avoid):
 		var mp = MicroScript.new()
 		mp.setup(self, e.type, e.seed)
-		mp.name = "Micro_%s_%d" % [e.type, micros.size()]
 		mp.position = e.pos
 		mp.rotation.y = e.yaw
-		poi_root.add_child(mp)
-		micros.append(mp)
+		register_site(mp)
 	deploy_dressing = DeployScript.build_points(self)
 	ring = RingScript.new()
 	ring.name = "RedCurfew"
@@ -745,6 +740,33 @@ func _final_night() -> void:
 			e.queue_free()
 	ring.set_radius(arena.radius)
 	_enter("boss")
+
+
+# ---------------------------------------------------------------- the site API
+## Add a point of interest to the Hunt (poi.gd or anything with the same shape): it is parented
+## under HuntPOIs, ticked every frame (tick(delta, ppos, budget) -> spawned), told about dusk and
+## dawn (on_light_changed), recalled at the boss wall (recall), drawn on the map and compass
+## (type, def.color, cleared), offered for [E] (interaction(ppos) -> {text, act, ...}) and paid
+## out through on_poi_cleared when it emits cleared_now(poi). Call before the navmesh bake
+## (build_world) if it has colliders.
+func register_poi(poi: Node3D) -> void:
+	if poi.name == "" or poi.name.begins_with("@"):
+		poi.name = "POI_%s_%d" % [poi.type, pois.size()]
+	if poi.get_parent() == null:
+		poi_root.add_child(poi)
+	if poi.has_signal("cleared_now") and not poi.cleared_now.is_connected(on_poi_cleared):
+		poi.cleared_now.connect(on_poi_cleared)
+	pois.append(poi)
+
+
+## Add a small interactive site with no camp (micro_poi.gd shape): distance_to(p),
+## interaction(ppos) -> {text, act: "micro"} and use(). Shown on the map as a diamond.
+func register_site(site: Node3D) -> void:
+	if site.name == "" or site.name.begins_with("@"):
+		site.name = "Micro_%s_%d" % [site.type, micros.size()]
+	if site.get_parent() == null:
+		poi_root.add_child(site)
+	micros.append(site)
 
 
 # ---------------------------------------------------------------- night modifiers
