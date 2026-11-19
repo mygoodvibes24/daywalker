@@ -229,6 +229,55 @@ func _hero_boss_clips() -> Dictionary:
 	return hero
 
 
+## Web budget for the boss bodies (critic round 2): about 20k triangles each.
+const BOSS_TRIS := 20000
+
+
+## Decimate a skinned surface to about `target` triangles: Godot's LOD simplifier (meshoptimizer)
+## picks the index buffer, then unreferenced vertices are dropped so the file shrinks too.
+func _decimate(arrays: Array, flags: int, target: int) -> Array:
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	if idx.size() / 3 <= target:
+		return arrays
+	var im := ImporterMesh.new()
+	im.add_surface(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, null, "", flags)
+	# a finer LOD chain than the default so one lands near the target
+	im.generate_lods(60.0, 25.0, [])
+	var best := idx
+	for l in im.get_surface_lod_count(0):
+		var li: PackedInt32Array = im.get_surface_lod_indices(0, l)
+		if li.size() / 3 >= target * 0.8 and li.size() < best.size():
+			best = li
+	# compact
+	var remap := {}
+	var order := PackedInt32Array()
+	var nidx := PackedInt32Array()
+	nidx.resize(best.size())
+	for i in best.size():
+		var v := best[i]
+		if not remap.has(v):
+			remap[v] = order.size()
+			order.append(v)
+		nidx[i] = remap[v]
+	var out := []
+	out.resize(Mesh.ARRAY_MAX)
+	var nv: int = (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	for a in Mesh.ARRAY_MAX:
+		var src = arrays[a]
+		if src == null or a == Mesh.ARRAY_INDEX:
+			continue
+		var per: int = src.size() / nv # components per vertex (tangents 4, bones/weights 4 or 8)
+		var dst = src.duplicate()
+		dst.resize(order.size() * per)
+		for k in order.size():
+			for c in per:
+				dst[k * per + c] = src[order[k] * per + c]
+		out[a] = dst
+	out[Mesh.ARRAY_INDEX] = nidx
+	print("decimated %d -> %d triangles, %d -> %d vertices" % [idx.size() / 3, nidx.size() / 3, nv, order.size()])
+	return out
+
+
 func _boss_body(n: String) -> void:
 	var cfg: Dictionary = BOSSES[n]
 	var r := _load_glb(CR + cfg.rigged)
@@ -267,8 +316,10 @@ func _boss_body(n: String) -> void:
 		mat.roughness = float(cfg.roughness)
 		mat.roughness_texture = null
 	mat.resource_name = n
+	var flags: int = fmt & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS
+	arrays = _decimate(arrays, flags, BOSS_TRIS)
 	var im := ImporterMesh.new()
-	im.add_surface(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, mat, "body", fmt & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS)
+	im.add_surface(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, mat, "body", flags)
 	im.generate_lods(60.0, 25.0, [])
 	var mesh := im.get_mesh()
 	mesh.resource_name = n

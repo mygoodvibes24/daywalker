@@ -4,10 +4,12 @@ extends "res://scripts/hunt/bosses/boss_base.gd"
 ## of blood bolts. Below half he gets faster and his fans wider.
 ## Look: his own body (asset round 3: a 1.88 m scan-style mesh in a black velvet frock coat with
 ## crimson lining, rigged, with his own slash combo, lunge and death mocap), at 1.2x for boss
-## presence, crimson veins. The coat material is forced matte in tools/build_r3_anims.gd.
+## presence. With his own model the glowing vein overlay and the fresnel aura shell are left off
+## (critic round 2: they hid the new model); the stand-in keeps them. The coat material is forced matte in tools/build_r3_anims.gd.
 ## If his model is missing, the older stand-in returns: the vampire body with a velvet cape.
 
 const MODEL_SCALE := 1.2 # 1.88 m * 1.2 = 2.26 m, the stand-in's height
+var own_model := false
 
 
 func _build() -> void:
@@ -22,10 +24,19 @@ func _build() -> void:
 	body_height = 2.4
 	speed = 8.5
 	keep_dist = 3.0
-	if ResourceLoader.exists(ANIM_PATHS.marcus):
+	own_model = ResourceLoader.exists(ANIM_PATHS.marcus)
+	if own_model:
 		add_rig("marcus", MODEL_SCALE, null, Color(1.0, 0.05, 0.05))
+		vein_amount = 0.0 # no lava veins over the velvet
+		base_overlay = Color(0, 0, 0, 0)
 	else:
 		_add_cape(add_rig("vampire", 1.22, null, Color(1.0, 0.05, 0.05)))
+
+
+func _ready() -> void:
+	super()
+	if own_model:
+		aura.visible = false # no shield bubble round him
 
 
 ## Marcus's own sounds: claw swipes instead of the blade, a coat-flutter whoosh on his dashes.
@@ -120,7 +131,8 @@ func _choose_attack(dist: float) -> Dictionary:
 func _on_half() -> void:
 	speed = 10.5
 	windup_mult = 0.78
-	base_overlay = Color(0.6, 0.0, 0.05, 0.3)
+	if not own_model:
+		base_overlay = Color(0.6, 0.0, 0.05, 0.3)
 	aura.material_override = HFx.aura_mat(Color(1.0, 0.0, 0.1), 1.8)
 	if director != null:
 		director.boss_phase_text(self, "\"You and I were made the same, Marrow.\"")
