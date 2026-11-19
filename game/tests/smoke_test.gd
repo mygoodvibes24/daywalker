@@ -805,12 +805,26 @@ func _asset_r3_checks(main) -> bool:
 		if id == "marcus" and model_ok:
 			var mat: StandardMaterial3D = (r.skel.get_node("Body") as MeshInstance3D).mesh.surface_get_material(0)
 			ok = _check("Marcus's coat is matte (metallic %.2f, roughness %.2f)" % [mat.metallic, mat.roughness], mat.metallic == 0.0 and mat.metallic_texture == null and mat.roughness >= 0.55) and ok
+			ok = _check("Marcus reads clean: no vein overlay, no aura shell", float(b.overlay.get_shader_parameter("vein_amount")) == 0.0 and not b.aura.visible) and ok
+		if model_ok:
+			var tris: int = (r.skel.get_node("Body") as MeshInstance3D).mesh.surface_get_array_index_len(0) / 3
+			ok = _check("%s is inside the web budget (%d triangles <= 22k)" % [id, tris], tris <= 22000) and ok
 		if id == "marcus":
 			ok = _check("Marcus's own clips: the lunge on dashes, the slash combo on swipes", model_ok and r.anim.has_animation("boss/thrust") and is_equal_approx(float(r.strikes.get("boss/thrust", 0.0)), 0.9) and is_equal_approx(float(r.strikes.get("attack", 0.0)), 0.83)) and ok
 		else:
 			ok = _check("the Abomination's own clips: the slam and the roar", model_ok and r.anim.has_animation("boss/roar") and is_equal_approx(float(r.strikes.get("boss/heavy", 0.0)), 1.67)) and ok
 		main.enemies_root.remove_child(b)
 		b.free()
+	# the Hollow Alpha: the werewolf at 1.35x on the new clips, its howl the roar mocap
+	var al = load("res://scripts/hunt/bosses/hollow_alpha.gd").new()
+	al.main = main
+	al.position = main.player.global_position + Vector3(30, 0.5, 30)
+	main.enemies_root.add_child(al)
+	await physics_frame
+	var ar: Dictionary = al.rigs[0]
+	ok = _check("the Hollow Alpha is the werewolf at 1.35x with the roar", ar.name == "werewolf" and is_equal_approx(ar.model.scale.x, 1.35) and ar.anim != null and ar.anim.has_animation("boss/roar") and ar.anim.has_animation("roar")) and ok
+	main.enemies_root.remove_child(al)
+	al.free()
 	# boss themes: each plays in its own fight, the others keep the shared boss track
 	var audio = root.get_node("Audio")
 	var was_over: bool = main.game_over
@@ -1407,7 +1421,9 @@ func _hunt_checks() -> bool:
 		if r.anim != null and r.anim.has_animation("boss/heavy") and r.anim.current_animation != "":
 			clip_ok = true
 	ok = _check("the boss is clip-driven (*_anim body + boss clip library, playing %s)" % (boss.rigs[0].anim.current_animation if boss.rigs[0].anim != null else "none"), clip_ok) and ok
-	ok = _check("the boss has its silhouette and veins", boss.overlay is ShaderMaterial and float(boss.overlay.get_shader_parameter("vein_amount")) > 0.0) and ok
+	# Marcus on his own model shows it clean (no veins, critic round 2); the others glow
+	var clean: bool = boss.get("own_model") == true
+	ok = _check("the boss has its silhouette and veins (or Marcus clean on his own model)", boss.overlay is ShaderMaterial and (clean or float(boss.overlay.get_shader_parameter("vein_amount")) > 0.0)) and ok
 	ok = _check("tonight's framing card names the boss", h.story != null and h.story.card_text().contains(night1.name)) and ok
 	# QA2 #12: the card sits top centre (clear of the phone stick) and hides under the map
 	h.map_screen.open()

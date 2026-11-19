@@ -20,7 +20,7 @@ dest_files=["res://.godot/imported/gazebo_0.jpg-65801af440d1533997e9c5f17a8a1143
 
 compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.85
+compress/lossy_quality=0.75
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0

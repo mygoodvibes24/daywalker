@@ -776,7 +776,8 @@ void fragment() {
 """
 
 ## Splat layers drawn from the photographic material library (asset round 3) instead of the
-## older 512 px terrain set; a layer missing here keeps assets/textures/terrain.
+## older 512 px terrain set (kept as sources in assets/textures/terrain_src, not shipped); a layer
+## not listed here reads assets/textures/terrain.
 const LIBRARY_LAYERS := {"forest": "forest_floor", "mud": "mud", "rock": "cliff_rock"}
 
 
