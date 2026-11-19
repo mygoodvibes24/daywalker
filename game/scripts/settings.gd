@@ -68,6 +68,31 @@ func _ready() -> void:
 	apply_all()
 	# re-apply the brightness/quality/rain to every scene we change to
 	get_tree().node_added.connect(_on_node_added)
+	get_tree().root.size_changed.connect(apply_ui_scale)
+	apply_ui_scale()
+
+
+## Phones: the 1280x720 layout squeezed onto a ~400 CSS-pixel-tall screen leaves 6-8 px text.
+## Enlarge the whole UI on small touch screens so the logical canvas is about 1.3 logical px
+## per CSS px tall (never below 960x540 logical, so every panel still fits). Desktop: 1.0.
+func apply_ui_scale() -> void:
+	var win := get_tree().root
+	if DisplayServer.get_name() == "headless":
+		return
+	var px := Vector2(win.size)
+	if px.x <= 0.0 or px.y <= 0.0:
+		return
+	var f := 1.0
+	if DisplayServer.is_touchscreen_available() or OS.has_feature("mobile"):
+		var dpr := maxf(DisplayServer.screen_get_scale(), 1.0)
+		var css_h := px.y / dpr
+		var want_h := clampf(css_h * 1.3, 540.0, 720.0) # logical canvas height we aim for
+		var base := minf(px.x / 1280.0, px.y / 720.0)
+		f = 720.0 / want_h
+		f = minf(f, minf(px.x / (960.0 * base), px.y / (540.0 * base))) # keep >= 960x540 logical
+		f = maxf(f, 1.0)
+	if not is_equal_approx(win.content_scale_factor, f):
+		win.content_scale_factor = f
 
 
 func _on_node_added(n: Node) -> void:
@@ -184,7 +209,8 @@ func _apply_display() -> void:
 	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 	if DisplayServer.get_name() == "headless":
 		return
-	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
+	if not OS.has_feature("web"): # browsers own the frame pacing; the call only logs an error there
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
 	var want := window_mode if window_mode in window_modes_available() else 0
 	var mode := DisplayServer.WINDOW_MODE_WINDOWED
 	match want:

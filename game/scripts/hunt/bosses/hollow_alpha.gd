@@ -1,6 +1,7 @@
 extends "res://scripts/hunt/bosses/boss_base.gd"
-## Night 1 — THE HOLLOW ALPHA. A giant of the Hollow Pack: leap slams across the arena,
-## raking swipes, a howl that brings two wolves, and a frenzy below half health.
+## THE HOLLOW ALPHA, Mother Wren's firstborn. A giant of the Hollow Pack: leap slams across
+## the arena, raking swipes, a howl that brings two wolves, and a frenzy below half health.
+## Look: the werewolf body at 1.75x, amber veins, a shaggy black mane of quills.
 
 var howl_cd := 6.0
 
@@ -10,11 +11,19 @@ func _build() -> void:
 	transformed = true
 	aura_color = Color(1.0, 0.5, 0.08)
 	base_overlay = Color(0.12, 0.06, 0.02, 0.25)
+	vein_color = Color(1.0, 0.55, 0.08)
+	vein_amount = 0.7
+	vein_scale = 5.0
 	body_radius = 1.0
 	body_height = 3.8
 	speed = 7.0
 	keep_dist = 2.4
-	add_rig("werewolf", 1.65, null, Color(1.0, 0.7, 0.1))
+	var r := add_rig("werewolf", 1.75, null, Color(1.0, 0.7, 0.1))
+	# silhouette: a mane of black quills round the neck and down the spine
+	var fur := U.mat(Color(0.05, 0.04, 0.035), 0.95)
+	add_spikes(bone_mount(r, "neck"), 7, 0.42, Vector3(0, 0.55, -1.0), 2.6, fur, 0.07)
+	add_spikes(bone_mount(r, "Spine01"), 5, 0.36, Vector3(0, 0.8, -1.0), 1.4, fur, 0.07)
+	add_spikes(bone_mount(r, "Spine02"), 4, 0.28, Vector3(0, 0.9, -1.0), 1.0, fur, 0.06)
 
 
 func _physics_process(delta: float) -> void:

@@ -13,9 +13,11 @@ extends SkeletonModifier3D
 ## The blade's direction in the hand bone's space (the grip socket's +Z).
 @export var blade_dir := Vector3.BACK
 ## The cone the carried blade stays in: its axis in skeleton space (+Z forward) and half-angle.
-@export var cone_axis := Vector3(0.0, -0.45, 1.0)
-@export var cone_angle := deg_to_rad(48.0)
-@export var max_correction := deg_to_rad(70.0)
+## Round 2: forward, ~30 deg down and angled out from the leg (-X is Sol's right), held in a tighter
+## cone, so the blade clears the coat and shows its flat to the follow camera instead of hiding edge-on.
+@export var cone_axis := Vector3(-0.38, -0.58, 1.0)
+@export var cone_angle := deg_to_rad(14.0)
+@export var max_correction := deg_to_rad(85.0)
 var amount := 1.0
 var _bone := -1
 var _socket: Node3D

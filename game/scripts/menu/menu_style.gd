@@ -15,7 +15,7 @@ static func lockup(title_size := 86) -> VBoxContainer:
 	v.add_theme_constant_override("separation", 0)
 	var t := Label.new()
 	t.text = "DAYWALKER"
-	t.add_theme_font_override("font", S.serif())
+	t.add_theme_font_override("font", S.serif_bold())
 	t.add_theme_font_size_override("font_size", title_size)
 	t.add_theme_color_override("font_color", CRIMSON)
 	t.add_theme_color_override("font_outline_color", Color(0.12, 0.0, 0.01, 0.95))

@@ -42,6 +42,19 @@ const CLIPS := {
 	"death": ["death", false],
 	"jump": ["jump", false],
 }
+## Boss-only clips (BOSS_CLIPS=1): more of the hero's sword mocap, retargeted onto the enemy
+## skeletons the bosses use and saved as a separate AnimationLibrary per body, so the shared
+## *_anim.scn the street enemies load stays as it is. boss_base.gd adds it as library "boss".
+##   out name: [hero clip file (sol_mod_anim_<x>.glb), loop]
+const BOSS_CLIPS := {
+	"heavy": ["charged", false], # an overhead two-hander: the slam wind-up and impact
+	"thrust": ["thrust", false], # the lunge: dash attacks
+	"judgment": ["judgment", false], # a big spinning finisher: casting a fan of bolts
+	"quick": ["quick_slash", false], # a fast cut: chained swipes, the blink strike
+	"stance": ["stance", false], # a squared-up taunt: the intro and the phase change
+	"combo": ["triple_combo", false], # three cuts: the enraged swipe chain
+}
+const BOSS_BODIES := ["vampire", "werewolf"]
 const SOL_DIR := "res://assets/characters/sol/"
 const CHARS := {
 	"vampire": {"eye_r": 0.0095},
@@ -62,6 +75,10 @@ const NO_SWING := ["Hips", "Head"] # keep the root and head orientation as rigge
 
 
 func _initialize() -> void:
+	if OS.get_environment("BOSS_CLIPS") != "":
+		_build_boss_clips()
+		quit()
+		return
 	var dir := OS.get_environment("CLIPS_DIR")
 	if dir != "" or OS.get_environment("REBUILD_CLIPS") != "" or not ResourceLoader.exists(CLIPS_SCN):
 		_extract_clips(dir)
@@ -176,7 +193,7 @@ func _global_rests(sk: Skeleton3D) -> Array:
 
 
 ## Retarget one clip from src skeleton to dst skeleton (both metres, same bone names).
-func _retarget(a: Animation, ss: Skeleton3D, ds: Skeleton3D, loop: bool) -> Animation:
+func _retarget(a: Animation, ss: Skeleton3D, ds: Skeleton3D, loop: bool, in_place := false) -> Animation:
 	var n := ds.get_bone_count()
 	var sg := _global_rests(ss)
 	var dg := _global_rests(ds)
@@ -254,7 +271,7 @@ func _retarget(a: Animation, ss: Skeleton3D, ds: Skeleton3D, loop: bool) -> Anim
 		if hp_track >= 0:
 			var sp: Vector3 = a.position_track_interpolate(pos_t[hips_s], time)
 			var off: Vector3 = (sp - sg[hips_s].origin) * hr
-			if loop:
+			if loop or in_place:
 				off = Vector3(0, off.y, 0)
 			out.position_track_insert_key(hp_track, time, dg[hips_d].origin + off)
 	return out
@@ -388,3 +405,61 @@ func _build(n: String, path: String, src: Node3D) -> void:
 	print("%s: bones=%d verts=%d h=%.3f strike=%.2fs eyes=%s,%s -> %s %s" % [n, sk.get_bone_count(), verts.size(), hi.y - lo.y, st, eye_l, eye_r, dst, error_string(err)])
 	out.free()
 	scn.free()
+
+
+## BOSS_CLIPS=1: res://assets/characters/<body>/<body>_boss_clips.res (an AnimationLibrary).
+## The hero clips are read straight from the GLBs (same skeleton as hero_clips.scn), and run
+## in place (the boss moves its own body; the clip's root travel is dropped).
+func _build_boss_clips() -> void:
+	var src: Node3D = (load(CLIPS_SCN) as PackedScene).instantiate()
+	root.add_child(src)
+	var src_sk: Skeleton3D = src.get_node("Skeleton")
+	var hero := {}
+	for out_name in BOSS_CLIPS:
+		var file: String = BOSS_CLIPS[out_name][0]
+		var r := _load_glb(SOL_DIR + "sol_mod_anim_%s.glb" % file)
+		if r.is_empty():
+			continue
+		var scn: Node3D = r[0]
+		var sk: Skeleton3D = r[1]
+		var s: float = r[2]
+		var ap: AnimationPlayer = scn.find_children("*", "AnimationPlayer", true, false)[0]
+		var a: Animation = ap.get_animation(ap.get_animation_list()[0]).duplicate(true)
+		for t in range(a.get_track_count() - 1, -1, -1):
+			var bn := String(a.track_get_path(t).get_concatenated_subnames())
+			if sk.find_bone(bn) < 0 or a.track_get_type(t) not in [Animation.TYPE_ROTATION_3D, Animation.TYPE_POSITION_3D]:
+				a.remove_track(t)
+				continue
+			a.track_set_path(t, NodePath("Skeleton:" + bn))
+			if a.track_get_type(t) == Animation.TYPE_POSITION_3D:
+				for k in a.track_get_key_count(t):
+					a.track_set_key_value(t, k, a.track_get_key_value(t, k) * s)
+		hero[out_name] = a
+		scn.free()
+	for n in BOSS_BODIES:
+		var p := "res://assets/characters/%s/rigged/%s_rigged.glb" % [n, n]
+		if not FileAccess.file_exists(p):
+			print("boss clips: no rigged mesh for ", n)
+			continue
+		var r := _load_glb(p)
+		var sk := _metric_skeleton(r[1], r[2])
+		var holder := Node3D.new()
+		holder.add_child(sk)
+		root.add_child(holder)
+		var lib := AnimationLibrary.new()
+		var strikes := {}
+		for out_name in hero:
+			var a := _retarget(hero[out_name], src_sk, sk, BOSS_CLIPS[out_name][1], true)
+			a.resource_name = out_name
+			lib.add_animation(out_name, a)
+			strikes[out_name] = _strike_time(a, sk)
+		lib.set_meta("strike_times", strikes)
+		var dst := "res://assets/characters/%s/%s_boss_clips.res" % [n, n]
+		var err := ResourceSaver.save(lib, dst, ResourceSaver.FLAG_COMPRESS)
+		var lens := {}
+		for k in lib.get_animation_list():
+			lens[k] = snappedf(lib.get_animation(k).length, 0.01)
+		print("%s boss clips -> %s %s  lengths=%s strikes=%s" % [n, dst, error_string(err), lens, strikes])
+		holder.free()
+		(r[0] as Node).free()
+	src.free()

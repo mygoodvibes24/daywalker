@@ -11,6 +11,7 @@ var director
 var root: Control
 var title: Label
 var sub: Label
+var epilogue: Label # STORY: one line on how it ended (hunt_story.gd epilogue())
 var stats: Label
 var earned: Label
 var buttons: Array[Button] = []
@@ -41,6 +42,12 @@ func _ready() -> void:
 	sub = S.label("", 18, S.TEXT_DIM)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(sub)
+	epilogue = S.label("", 19, MS.BONE)
+	epilogue.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	epilogue.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	epilogue.custom_minimum_size = Vector2(560, 0)
+	epilogue.add_theme_font_override("font", S.serif())
+	v.add_child(epilogue)
 	var r := S.rule(420)
 	r.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	v.add_child(r)
@@ -79,6 +86,8 @@ func show_results(s: Dictionary) -> void:
 	else:
 		title.text = "THE HUNT IS OVER"
 		sub.text = "Sol falls on %s." % ("the Final Night" if int(s.day) >= 3 else "Day %d" % int(s.day))
+	epilogue.text = '"%s"' % s.get("epilogue", "") if s.get("epilogue", "") != "" else ""
+	epilogue.visible = epilogue.text != ""
 	var t := int(s.time)
 	stats.text = "Bosses slain   %d / 3\nKills   %d\nCommunion rank reached   %d\nTime   %d:%02d" % [s.bosses, s.kills, s.rank, t / 60, t % 60]
 	var kept: Array = s.get("kept", [])

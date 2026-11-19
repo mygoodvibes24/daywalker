@@ -13,6 +13,7 @@ config/features=PackedStringArray("4.3", "Forward Plus")
 Settings="*res://scripts/settings.gd"
 Audio="*res://scripts/audio/audio.gd"
 Dialogue="*res://scripts/audio/dialogue.gd"
+Touch="*res://scripts/ui/touch_controls.gd"
 
 [display]
 

@@ -147,3 +147,15 @@ func _toggle(i: int) -> void:
 func _buy(id: String) -> void:
 	if Meta.buy(id):
 		refresh()
+
+
+## Short screens (phones, where the UI is scaled up): shrink the whole panel to fit instead
+## of letting "Begin the Hunt" fall off the bottom (R2-A, U2).
+func _process(_delta: float) -> void:
+	if not is_visible_in_tree() or size.y <= 0.0:
+		return
+	var vs := get_viewport_rect().size
+	var k := minf(1.0, minf(vs.y * 0.97 / size.y, vs.x * 0.97 / size.x))
+	pivot_offset = size * 0.5
+	if not is_equal_approx(scale.x, k):
+		scale = Vector2(k, k)

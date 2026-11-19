@@ -30,6 +30,18 @@ const SFX := {
 	"step": ["sfx/step_wet_1", "sfx/step_wet_2"],
 	"ui_hover": ["sfx/ui_hover"],
 	"ui_click": ["sfx/ui_click"],
+	# bosses (hunt/bosses/boss_base.gd)
+	"boss_slam": ["sfx/boss_slam"],
+	"boss_swipe": ["sfx/boss_swipe"],
+	"blood_bolt": ["sfx/blood_bolt"],
+	"boss_blink": ["sfx/boss_blink"],
+	# the Red Curfew wall (a 3D loop, hunt/curfew_ring.gd)
+	"curfew_drone": ["sfx/curfew_drone"],
+	# the Descent (played from hunt_director.gd)
+	"manhole_clank": ["sfx/manhole_clank"],
+	"land_thud": ["sfx/land_thud"],
+	# a successful parry (player.parried, connected in attach_world)
+	"parry_clang": ["sfx/parry_clang"],
 }
 const MUSIC := {
 	"menu": "music/menu_lair",
@@ -210,6 +222,8 @@ func attach_world(w: Node) -> void:
 	var p = w.get("player")
 	if p != null and p.has_signal("dashed") and not p.dashed.is_connected(_on_dashed):
 		p.dashed.connect(_on_dashed)
+	if p != null and p.has_signal("parried") and not p.parried.is_connected(_on_parried):
+		p.parried.connect(_on_parried)
 	if not w.tree_exiting.is_connected(_on_world_exit):
 		w.tree_exiting.connect(_on_world_exit.bind(w), CONNECT_ONE_SHOT)
 	set_music("explore")
@@ -223,6 +237,30 @@ func _on_world_exit(w: Node) -> void:
 
 func _on_dashed(_dir: Vector3) -> void:
 	play("blood_dash", -3.0, 0.1)
+
+
+## A parry: a bright steel clang on top of the hit, so the window teaches itself.
+func _on_parried(_e) -> void:
+	play("parry_clang", 1.0, 0.05)
+
+
+## A looping 3D player (the Curfew wall's drone): not from the pool, owned by `parent`.
+func loop_3d(name: String, parent: Node3D, volume_db := 0.0) -> AudioStreamPlayer3D:
+	var list: Array = SFX.get(name, [])
+	if list.is_empty():
+		return null
+	var s = stream(list[0])
+	if s is AudioStreamOggVorbis:
+		s.loop = true
+	var p := AudioStreamPlayer3D.new()
+	p.bus = "SFX"
+	p.stream = s
+	p.volume_db = volume_db
+	p.unit_size = 10.0
+	p.max_distance = 60.0
+	p.attenuation_filter_cutoff_hz = 6000.0
+	parent.add_child(p)
+	return p
 
 
 func _world_ok() -> bool:

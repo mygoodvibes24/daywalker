@@ -12,6 +12,14 @@ const HEAVY_HOLD := 0.4 # hold attack this long for the charged slash
 const DASH_ATTACK_WINDOW := 0.3 # attack within this long after a Blood Dash ends: the thrust
 const PARRY_WINDOW := 0.3 # seconds a parry press catches an enemy's wind-up
 const COMBAT_RANGE := 10.0 # enemies this close put Sol in his combat stance
+const ATTACK_BUFFER := 0.2 # an attack pressed this long before Sol can swing again still comes out
+const ACCEL_TIME := 0.08 # seconds from standing to full speed
+const STOP_TIME := 0.12 # seconds from full run to a stop
+const CAM_RADIUS := 0.3 # the camera's collision sphere (keeps the lens out of trunks, posts and walls)
+## The coat at runtime: matte black leather (the generated texture's metal map made it read silver).
+const COAT_DARKEN := 0.35
+const COAT_ROUGHNESS := 0.62
+const COAT_SPECULAR := 0.3
 
 const WALK := 7.5
 const SPRINT := 13.0
@@ -78,6 +86,8 @@ var lunge_speed := 9.0
 var parry_t := 0.0
 var parry_cd := 0.0
 var finisher_t := 0.0
+var attack_buffer_t := 0.0 # > 0: an attack press is waiting for the cooldown to end
+var walk_vel := Vector3.ZERO # the ramped run velocity (acceleration / stop), before dash and lunge
 
 var pivot: Node3D
 var spring: SpringArm3D
@@ -106,8 +116,15 @@ func _ready() -> void:
 	add_child(pivot)
 	spring = SpringArm3D.new()
 	spring.spring_length = 4.8
+	# layer 1 is every static collider in the world: buildings, props, tree trunks and posts
+	# (city.gd post_collider / box_collider). A sphere cast instead of a ray keeps the near plane
+	# out of a trunk the ray only grazes.
 	spring.collision_mask = 1
-	spring.margin = 0.25
+	var cam_shape := SphereShape3D.new()
+	cam_shape.radius = CAM_RADIUS
+	spring.shape = cam_shape
+	spring.add_excluded_object(get_rid())
+	spring.margin = 0.12
 	spring.position.x = 0.55
 	pivot.add_child(spring)
 	camera = Camera3D.new()
@@ -146,11 +163,31 @@ func _build_modular() -> bool:
 	mod_anim = ma
 	for mi in model.find_children("*", "MeshInstance3D", true, false):
 		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	matte_coat(model)
 	hurt.connect(func(_amount, _src): mod_anim.hit())
 	# arm_pivot keeps the swing math alive; the clips draw the actual swing
 	arm_pivot = Node3D.new()
 	visual.add_child(arm_pivot)
 	return true
+
+
+## The coat as darker, matte black leather: no metal map (it read as chrome under the rim light),
+## albedo x0.35, roughness ~0.6, low specular. Static so the menu's Sol can use it too.
+static func matte_coat(model: Node) -> void:
+	var coat_mi := model.find_child("Coat", true, false) as MeshInstance3D
+	if coat_mi == null or coat_mi.mesh == null:
+		return
+	var base := coat_mi.mesh.surface_get_material(0) as StandardMaterial3D
+	if base == null:
+		return
+	var m := base.duplicate() as StandardMaterial3D
+	m.metallic = 0.0
+	m.metallic_texture = null
+	m.metallic_specular = COAT_SPECULAR
+	m.roughness = COAT_ROUGHNESS
+	m.roughness_texture = null
+	m.albedo_color = Color(COAT_DARKEN, COAT_DARKEN, COAT_DARKEN * 0.96)
+	coat_mi.material_override = m
 
 
 ## The generated, skinned Sol model (1.88 m, feet at y=0, facing +Z) with the silver
@@ -278,18 +315,25 @@ func _physics_process(delta: float) -> void:
 		velocity.y = JUMP if jumps_left == 2 else JUMP * 0.85
 		jumps_left -= 1
 
+	# the run ramps up over ACCEL_TIME and down over STOP_TIME (dash, lunge and the bite stay instant)
+	var want := dir * spd
+	if swing_t > 0.0:
+		want *= 0.3
+	var ramp := spd / ACCEL_TIME if want.length() >= walk_vel.length() - 0.01 else maxf(walk_vel.length(), WALK) / STOP_TIME
+	walk_vel = walk_vel.move_toward(want, ramp * delta)
 	var hv := Vector3.ZERO
 	if dash_t > 0.0:
 		hv = dash_dir * DASH_SPEED
 		velocity.y = maxf(velocity.y, 0.0)
+		walk_vel = want # out of a dash at full stride
 	elif bite_t > 0.0:
 		hv = Vector3.ZERO
+		walk_vel = Vector3.ZERO
 	elif finisher_t > 0.0:
 		hv = _forward() * lunge_speed if lunge_t > 0.0 else Vector3.ZERO # rooted in the execution
+		walk_vel = Vector3.ZERO
 	else:
-		hv = dir * spd
-		if swing_t > 0.0:
-			hv *= 0.3
+		hv = walk_vel
 		if lunge_t > 0.0:
 			hv += _forward() * lunge_speed
 	velocity.x = hv.x
@@ -304,8 +348,17 @@ func _physics_process(delta: float) -> void:
 
 	# actions
 	_combat_tick(delta)
-	if Input.is_action_just_pressed("attack") and attack_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0 and Time.get_ticks_msec() >= attack_block_until:
-		_attack_pressed()
+	# input buffer: a press up to ATTACK_BUFFER s early (mid-swing, mid-bite) comes out the moment Sol can
+	if Input.is_action_just_pressed("attack") and Time.get_ticks_msec() >= attack_block_until:
+		attack_buffer_t = ATTACK_BUFFER
+	if attack_buffer_t > 0.0:
+		if attack_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0:
+			attack_buffer_t = 0.0
+			_attack_pressed()
+			if hold_t >= 0.0 and not Input.is_action_pressed("attack"):
+				hold_t = -1.0 # a buffered tap, not a hold
+		else:
+			attack_buffer_t = maxf(attack_buffer_t - delta, 0.0)
 	if Input.is_action_just_pressed("parry") and parry_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0:
 		_parry()
 	var bite_target = _nearest_enemy(BITE_RANGE, 1)
@@ -489,12 +542,23 @@ func _attack() -> void:
 	# PROGRESSION HOOK: the equipped blade sets damage, swing speed and reach
 	var w := weapon_stats()
 	attack_cd /= maxf(w.spd, 0.3)
-	var dmg: float = w.dmg * (1.0 if combo < 3 else 2.0 * (1.0 + stat("finisher"))) * damage_mult()
-	var reach: float = (2.7 if combo < 3 else 3.3) + w.reach
 	attacked.emit(combo, fwd)
 	Audio.play("sword_swing", -2.0 if combo < 3 else 1.0, 0.1) # AUDIO HOOK
+	# the damage waits for the clip's strike frame (~0.1 s), like the special moves
+	var delay := (float(step.hit) - float(step.from)) / (float(step.speed) * maxf(w.spd, 0.3))
 	if mod_anim != null:
-		mod_anim.play_move(step, w.spd, combo == 2)
+		delay = mod_anim.play_move(step, w.spd, combo == 2)
+	_flush_pending() # a strike still in flight from the last press lands now, not never
+	pending = {"t": delay, "move": move_name, "target": target, "combo": combo}
+
+
+## The combo's strike frame: damage, hit-stop, shake and rumble for step `n` (1..3) of the chain.
+func _combo_strike(name: String, n: int, target) -> void:
+	var m := SolMoves.move(name)
+	var fwd := _forward()
+	var w := weapon_stats() # PROGRESSION HOOK: blade damage and reach
+	var dmg: float = w.dmg * (1.0 if n < 3 else 2.0 * (1.0 + stat("finisher"))) * damage_mult()
+	var reach: float = (2.7 if n < 3 else 3.3) + w.reach
 	var hit := false
 	for e in main.enemies_root.get_children():
 		if e.dead or (e.staggered and e != target):
@@ -506,12 +570,28 @@ func _attack() -> void:
 			var hd: float = dmg * _vs_mult(e)
 			e.take_hit(hd, to.normalized() if d > 0.01 else fwd)
 			hit_enemy.emit(e, hd)
-			Audio.play_at("sword_hit", e.global_position, 0.0 if combo < 3 else 3.0) # AUDIO HOOK
+			Audio.play_at("sword_hit", e.global_position, 0.0 if n < 3 else 3.0) # AUDIO HOOK
 			hit = true
 	if hit:
-		shake = maxf(shake, 0.12 if combo < 3 else 0.28)
-		main.rumble(0.4, 0.0 if combo < 3 else 0.5, 0.08)
-		main.set_slowmo(0.06, 0.05 if combo < 3 else 0.09)
+		shake = maxf(shake, float(m.shake))
+		main.rumble(0.4, 0.0 if n < 3 else 0.5, 0.08)
+		main.set_slowmo(0.06, float(m.stop)) # hit-stop
+
+
+## Land a waiting strike right away (a new move is replacing it).
+func _flush_pending() -> void:
+	if pending.is_empty():
+		return
+	var p := pending
+	pending = {}
+	_resolve_pending(p)
+
+
+func _resolve_pending(p: Dictionary) -> void:
+	if p.has("combo"):
+		_combo_strike(p.move, int(p.combo), p.target)
+	else:
+		_strike(p.move, p.target)
 
 
 # ---------------------------------------------------------------- sword moves (sol_moves.gd)
@@ -582,6 +662,7 @@ func _special(name: String) -> void:
 	if mod_anim != null:
 		delay = mod_anim.play_move(m, w.spd)
 	_lunge(float(m.lunge), maxf(delay, 0.1))
+	_flush_pending()
 	pending = {"t": delay, "move": name, "target": target}
 	attacked.emit(3 if name == "charged" else 1, _forward())
 	special_move.emit(name)
@@ -622,7 +703,11 @@ func _finisher(e) -> void:
 	if mod_anim != null:
 		delay = mod_anim.play_move(m, 1.0)
 	_lunge(maxf(to.length() - 1.2, 0.0), maxf(delay * 0.7, 0.1))
+	_flush_pending()
 	pending = {"t": delay, "move": "finisher", "target": e}
+	# the victim plays his half: faces Sol, reels on the first cut, dies on the strike frame
+	if e.has_method("execution_victim"):
+		e.execution_victim(self, delay)
 	attacked.emit(1, _forward())
 	special_move.emit("finisher")
 	Audio.play("sword_swing", 0.0, 0.1) # AUDIO HOOK
@@ -638,6 +723,8 @@ func _strike(name: String, target) -> void:
 			return
 		var fd: float = w.dmg * 2.0 * (1.0 + stat("finisher")) * damage_mult() * _vs_mult(target)
 		target.take_hit(fd, fwd) # staggered: this is the kill (death, drops and Tithe as usual)
+		if target.has_method("execution_death"):
+			target.execution_death(fwd) # thrown back along Sol's cut, with a blood burst
 		Audio.play_at("sword_hit", target.global_position, 4.0) # AUDIO HOOK
 		hit_enemy.emit(target, fd)
 		shake = maxf(shake, float(m.shake))
@@ -725,7 +812,7 @@ func _combat_tick(delta: float) -> void:
 		if pending.t <= 0.0:
 			var p := pending
 			pending = {}
-			_strike(p.move, p.target)
+			_resolve_pending(p)
 	if parry_t > 0.0:
 		parry_t -= delta
 		for e in main.enemies_root.get_children():

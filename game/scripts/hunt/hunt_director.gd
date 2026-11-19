@@ -21,6 +21,7 @@ const HuntHud = preload("res://scripts/ui/hunt_hud.gd")
 const MapScreen = preload("res://scripts/ui/map_screen.gd")
 const ResultsScreen = preload("res://scripts/ui/results_screen.gd")
 const MerchantUI = preload("res://scripts/ui/merchant_ui.gd")
+const Story = preload("res://scripts/hunt/hunt_story.gd")
 
 ## Set by the hub's "Begin the Hunt" (or --hunt / ?hunt) before main.tscn loads. The Hunt is
 ## THE game: main.tscn runs one however it was reached, unless free roam was asked for.
@@ -69,6 +70,9 @@ var map_screen: CanvasLayer
 var results: CanvasLayer
 var merchant: CanvasLayer
 var phase_banner := ""
+var night_bosses: Array = [] # tonight's boss defs per day: two from the pool, then the Final Night
+var story: CanvasLayer # intro, night cards (hunt_story.gd)
+var fell_to := "" # the boss id that ended the run, for the results epilogue
 var _interaction := {}
 
 
@@ -107,6 +111,7 @@ func build_world() -> void:
 		pool[k] = pool[s]
 		pool[s] = t
 	arenas = [Terrain.grounded(pool[0]), Terrain.grounded(pool[1]), Cfg.FINAL_ARENA] # TERRAIN HOOK: on the ground
+	_pick_bosses()
 	poi_root = Node3D.new()
 	poi_root.name = "HuntPOIs"
 	add_child(poi_root)
@@ -127,6 +132,26 @@ func build_world() -> void:
 	# where Sol drops in is known up front, so he never stands in the plaza, even behind
 	# the title overlay of a direct load
 	deploy_point = Terrain.grounded(Cfg.DEPLOY_POINTS[rng.randi() % Cfg.DEPLOY_POINTS.size()]) # TERRAIN HOOK
+
+
+## Nights 1 and 2 draw two different bosses from the pool; the Final Night is fixed. Its own
+## RNG stream, so the boss draw doesn't move the deployment point or the POIs for a seed.
+func _pick_bosses() -> void:
+	var br := RandomNumberGenerator.new()
+	br.seed = seed * 7919 + 13
+	var pool: Array = Cfg.NIGHT_BOSS_POOL.duplicate()
+	for k in range(pool.size() - 1, 0, -1):
+		var s_ := br.randi_range(0, k)
+		var t = pool[k]
+		pool[k] = pool[s_]
+		pool[s_] = t
+	night_bosses = [pool[0], pool[1], Cfg.FINAL_BOSS]
+
+
+func boss_def(d: int) -> Dictionary:
+	if night_bosses.is_empty():
+		_pick_bosses()
+	return night_bosses[clampi(d, 0, 2)]
 
 
 ## main.gd, right after the player exists: park Sol at his deployment point (never the plaza).
@@ -172,6 +197,21 @@ func start() -> void:
 	results = ResultsScreen.new()
 	results.director = self
 	add_child(results)
+	story = Story.new()
+	story.director = self
+	story.main = main
+	add_child(story)
+	if Story.intro_wanted(short):
+		# STORY: the first Hunt opens on Nia's briefing; the Descent follows it
+		state = "intro"
+		main.player.set_physics_process(false)
+		story.play_intro(_begin_deploy)
+		return
+	_begin_deploy()
+
+
+func _begin_deploy() -> void:
+	main.player.set_physics_process(true)
 	if deploy_point.is_empty():
 		deploy_point = Terrain.grounded(Cfg.DEPLOY_POINTS[rng.randi() % Cfg.DEPLOY_POINTS.size()]) # TERRAIN HOOK
 	deploy = DeployScript.new()
@@ -181,10 +221,34 @@ func start() -> void:
 	state = "deploy"
 	deploy.play(deploy_point, deploy_dressing)
 	Dialogue.play_group("hunt_deploy_") # AUDIO HOOK
+	_deploy_sfx(String(deploy_point.get("type", "")))
+
+
+## The Descent's sounds (deploy.gd belongs to the UI pass): timed to its tweens per type.
+func _deploy_sfx(type: String) -> void:
+	var cues := [] # [seconds, sfx, volume]
+	match type:
+		"manhole":
+			cues = [[0.05, "manhole_clank", 2.0], [0.95, "land_thud", 0.0], [1.6, "manhole_clank", -6.0]]
+		"rooftop":
+			cues = [[0.8, "boss_swipe", -6.0], [1.45, "land_thud", 4.0], [1.45, "boss_slam", -8.0]]
+		"boat":
+			cues = [[2.6, "land_thud", -2.0]]
+		"ladder":
+			cues = [[0.2, "manhole_clank", -14.0], [0.9, "manhole_clank", -14.0], [2.1, "land_thud", -6.0]]
+		"subway":
+			cues = [[2.3, "land_thud", -8.0]]
+		_:
+			cues = [[2.2, "land_thud", -10.0]]
+	for c in cues:
+		get_tree().create_timer(c[0]).timeout.connect(func():
+			if deploy != null and is_instance_valid(deploy) and main.player != null:
+				Audio.play_at(c[1], main.player.global_position, c[2]))
 
 
 func _on_deployed() -> void:
 	_enter("explore")
+	_night_card()
 	if "--debugcamp" in OS.get_cmdline_user_args() or main._url_flag("debugcamp"):
 		debug_view_camp()
 
@@ -246,11 +310,12 @@ func _enter(s: String) -> void:
 			_spawn_boss()
 		"final_dusk":
 			main.hud.announce("THE FINAL NIGHT\nSeraphine's work waits at the Undercroft")
+			_night_card()
 
 
 # ---------------------------------------------------------------- frame
 func _physics_process(delta: float) -> void:
-	if state == "idle" or state == "over":
+	if state == "idle" or state == "over" or state == "intro":
 		return
 	var p = main.player
 	run_time += delta
@@ -319,7 +384,7 @@ func _light_watch() -> void:
 
 
 func is_full_moon() -> bool:
-	return not main.is_day() and bool(Cfg.BOSSES[mini(day, 2)].full_moon)
+	return not main.is_day() and bool(boss_def(day).full_moon)
 
 
 func living_enemies() -> int:
@@ -489,13 +554,14 @@ func phase_label() -> String:
 
 # ---------------------------------------------------------------- bosses
 func _spawn_boss() -> void:
-	var def: Dictionary = Cfg.BOSSES[mini(day, 2)]
+	var def: Dictionary = boss_def(day)
 	var b = load(def.script).new()
 	b.main = main
 	b.director = self
+	b.boss_id = def.id
 	b.boss_name = def.name
-	b.boss_title = def.title
-	b.max_hp = def.hp * T.boss_hp
+	b.boss_title = _night_heading() + "  ·  " + def.title
+	b.max_hp = def.hp * T.boss_hp * (Cfg.NIGHT2_HP_MULT if day == 1 else 1.0)
 	b.intro_t = 2.0
 	b.arena_center = arena.pos
 	b.arena_radius = arena.radius
@@ -508,10 +574,11 @@ func _spawn_boss() -> void:
 	b.died.connect(_on_boss_died)
 	boss = b
 	ring.set_radius(arena.radius)
-	Audio.set_boss(true); Dialogue.play(["boss_alpha_intro", "boss_marcus_intro", "boss_seraphine_intro"][mini(day, 2)]) # AUDIO HOOK
-	if day == 0:
-		Audio.play_at("wolf_howl", b.position) # AUDIO HOOK
-	main.hud.announce(def.name + "\n" + def.title)
+	Audio.set_boss(true) # AUDIO HOOK
+	if def.intro != "":
+		Dialogue.play(def.intro)
+	Audio.play_at(def.intro_sfx, b.position, 3.0) # AUDIO HOOK
+	main.hud.announce(def.name + "\n" + b.boss_title)
 	main.set_slowmo(0.4, 0.6)
 	main.rumble(0.5, 0.8, 0.6)
 	# whatever stands outside the arena wall won't join in
@@ -559,8 +626,10 @@ func summons_alive() -> int:
 
 func _on_boss_died(b) -> void:
 	bosses_killed += 1
-	Audio.set_boss(false); Dialogue.play(["boss_alpha_death", "boss_marcus_death", "boss_seraphine_death"][mini(day, 2)]) # AUDIO HOOK
-	var def: Dictionary = Cfg.BOSSES[mini(day, 2)]
+	var def: Dictionary = boss_def(day)
+	Audio.set_boss(false) # AUDIO HOOK
+	if def.death != "":
+		Dialogue.play(def.death)
 	main.loot.spawn_motes(b.global_position + Vector3(0, 1.5, 0), int(round(def.tithe * (1.0 + main.progression.stat("tithe_mult")))))
 	main.loot.spawn_item(random_item(ItemDB.LEGENDARY, "blade"), b.global_position + Vector3(1.5, 0, 0))
 	main.loot.spawn_item(random_item(ItemDB.LEGENDARY, "charm"), b.global_position + Vector3(-1.5, 0, 0))
@@ -595,6 +664,17 @@ func _next_day() -> void:
 	main.hud.announce("DAWN — DAY %d\nThe sun is up. The Curfew will fall again." % (day + 1))
 	state = "explore"
 	phase_t = 0.0
+	_night_card()
+
+
+func _night_heading() -> String:
+	return "THE FINAL NIGHT" if day >= 2 else "NIGHT %d" % (day + 1)
+
+
+## STORY: who tonight's boss is and why it's after Sol.
+func _night_card() -> void:
+	if story != null:
+		story.night_card(_night_heading() + "  ·  TONIGHT YOU HUNT", boss_def(day))
 
 
 ## After Night 2: through the blood-mist to the Undercroft Plaza for the last fight.
@@ -637,7 +717,11 @@ func on_poi_cleared(poi) -> void:
 		3:
 			main.loot.spawn_item(random_item(ItemDB.LEGENDARY, "blade"), pos + Vector3(0.8, 0, 0.8))
 	main.hud.popup("%s CLEARED" % poi.display_name.to_upper())
-	Dialogue.play_group("poi_cleared_") # AUDIO HOOK
+	# AUDIO HOOK: the nest line names a nest; anything else gets the generic one
+	if poi.type == "nest":
+		Dialogue.play_group("poi_cleared_")
+	else:
+		Dialogue.play("poi_cleared_2")
 
 
 func coffin_loot(pos: Vector3, day_: bool) -> void:
@@ -706,6 +790,8 @@ func on_player_died() -> void:
 	else:
 		main.hud.announce("THE HUNT IS OVER")
 		end_t = 2.0
+		if boss != null and is_instance_valid(boss) and not boss.dead:
+			fell_to = boss.boss_id
 
 
 func _revive() -> void:
@@ -764,6 +850,10 @@ func _end_run(won_: bool) -> void:
 		"day": day + 1, "time": run_time, "tithe": main.progression.tithe}
 	summary["earned"] = Meta.record_hunt(summary, carried)
 	summary["kept"] = Meta.data.last.get("kept", [])
+	for d in [Cfg.FINAL_BOSS] + Cfg.NIGHT_BOSS_POOL:
+		if d.id == fell_to:
+			summary["fell_to_epitaph"] = d.epitaph
+	summary["epilogue"] = Story.epilogue(summary)
 	if won:
 		Dialogue.play("hunt_extract") # AUDIO HOOK
 	main.progression.reset() # run-scoped: rank, Tithe, Vows and the Coat start over next Hunt
@@ -794,6 +884,8 @@ func return_to_hub() -> void:
 # ---------------------------------------------------------------- debug / tests / screenshots
 ## Jump the run forward: "shrink1", "boss", "victory"...
 func debug_skip_to(s: String) -> void:
+	if story != null and story.playing:
+		story.finish_intro()
 	if deploy != null and deploy.playing:
 		deploy.finish()
 	if s == "boss" or s == "shrink2":

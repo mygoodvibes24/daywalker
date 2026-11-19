@@ -31,7 +31,9 @@ Negative prompt:
   and four swords (silver blade, sabre, cleaver, rapier). The body was turned to face +Z and sent to the Meshy
   auto-rigger (24-bone humanoid) with seven clips: idle, run, sprint, slash, hit, death, jump; later eight
   sword clips on the same rig (Triple_Combo_Attack, Thrust_Slash, Charged_Slash, Sword_Judgment, Sword_Parry,
-  Weapon_Combo_2, Combat_Stance, Right_Hand_Sword_Slash; see docs/animation_reference/README.md).
+  Weapon_Combo_2, Combat_Stance, Right_Hand_Sword_Slash; see docs/animation_reference/README.md). On
+  2026-11-18 Idle_02 (library id 11, same rig) was added as Sol's standing idle (`sol_mod_anim_idle02.glb`);
+  the rig's original look-around idle is kept only as a long-idle fidget (`idle_look`).
 - **What ships:** `sol_modular.scn` and the four `sol_sword_*.scn` scenes, plus the extracted texture maps
   (`sol_mod_*_Color/NormalGL/ORM_*`; VRAM compressed, 2048 px max for body, head and coat, 1024 px for the hands
   and swords). The runtime loads nothing else: the `.glb` files are build sources and are excluded from exports.
@@ -51,3 +53,13 @@ Negative prompt:
 - **Motion:** clips blended by `scripts/sol_modular_anim.gd`; the coat skirt is simulated by
   `scripts/coat_sim.gd`. The boots are the body's own: the separate boot model did not add enough to justify
   a second texture set and an ankle seam.
+
+# Sol's scanned head (`sol_scan_head*`, used by `sol_modular.scn`)
+
+- **Source:** a simulated face scan (docs/face_scans/README.md). Ten capture photos and two skin plates were
+  generated with Higgsfield (GPT Image 2.6); four of them were reconstructed with Tripo H3.1 multiview-to-3D
+  (`sol_scan_head_raw.glb`, a build source). `tools/project_face_texture.py` projects the photos onto the
+  decimated head and bakes the maps: `sol_scan_head.glb` (36k triangles, skeleton space),
+  `sol_scan_head_albedo.jpg` (2048 x 1328), `_normal.png` and `_orm.png` (1024), `_detail_normal.png` and
+  `_detail_mask.png` (512), and `_eyes.json` (eye positions for the eyeballs). All Lossy (WebP) imports.
+- The older Tripo bust (`sol_mod_head_src.glb`) is kept as the fallback (`USE_SCANNED_HEAD = false`).

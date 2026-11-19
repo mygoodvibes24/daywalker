@@ -7,7 +7,8 @@ All on the same 24-joint Meshy rig of Sol's body. The build tool (`game/tools/bu
 
 | Clip | Library id | File | Used for |
 |---|---|---|---|
-| idle | 0 | `sol_mod_rig_idle.glb` | standing |
+| Idle_02 | 11 | `sol_mod_anim_idle02.glb` | standing: a calm, grounded breathing stance (1.9 s loop). The build stores it as `idle` (round 2: the owner disliked the old idle) |
+| idle (look-around) | 0 | `sol_mod_rig_idle.glb` | stored as `idle_look`; only a rare fidget after 12 s standing still out of combat (`sol_modular_anim.gd` FIDGET_AFTER) |
 | run | 14 | `sol_mod_anim_run.glb` | running |
 | sprint (Lean_Forward_Sprint) | 509 | `sol_mod_anim_sprint.glb` | sprinting |
 | slash (Left_Slash) | 97 | `sol_mod_anim_slash.glb` | fallback swing (and the enemies' attack) |
