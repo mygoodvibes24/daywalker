@@ -292,7 +292,7 @@ func _hud_visible(on: bool) -> void:
 ## "NIGHT 1 · THE HOLLOW ALPHA" and why, for a few seconds: top centre under the compass and the
 ## phase line (QA2 #12: clear of the phone stick bottom-left and the touch buttons top-right). It
 ## waits for a HUD announcement ("DAY 1") to clear first, and hides while the map is open.
-func night_card(heading: String, def: Dictionary) -> void:
+func night_card(heading: String, def: Dictionary, mod: Dictionary = {}) -> void:
 	if _card != null and is_instance_valid(_card):
 		_card.queue_free()
 	_card = S.panel(14)
@@ -321,6 +321,19 @@ func night_card(heading: String, def: Dictionary) -> void:
 	why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	why.custom_minimum_size = Vector2(470, 0)
 	v.add_child(why)
+	if not mod.is_empty():
+		# tonight's run modifier (hunt_config.gd NIGHT_MODIFIERS): its name, then what it changes
+		var mr := ColorRect.new()
+		mr.color = Color(MS.CRIMSON.r, MS.CRIMSON.g, MS.CRIMSON.b, 0.5)
+		mr.custom_minimum_size = Vector2(470, 1)
+		v.add_child(mr)
+		var mn := S.title("◆  " + String(mod.get("name", "")), 22, mod.get("color", S.GOLD))
+		mn.name = "Modifier"
+		v.add_child(mn)
+		var md := S.label(String(mod.get("desc", "")), 15, S.TEXT)
+		md.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		md.custom_minimum_size = Vector2(470, 0)
+		v.add_child(md)
 	_card.modulate.a = 0.0
 	if _card_tw != null and _card_tw.is_valid():
 		_card_tw.kill()

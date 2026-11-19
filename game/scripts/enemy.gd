@@ -1,3 +1,4 @@
+class_name Enemy
 extends CharacterBody3D
 ## Vampires of the Velvet Court and the Hollow Pack (who change at night).
 

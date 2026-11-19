@@ -1,3 +1,4 @@
+class_name BossBase
 extends CharacterBody3D
 ## Shared body and brain for Hunt bosses (night bosses and field-boss landmarks).
 ## The bodies are the auto-rigged enemy models (*_anim.scn, tools/build_enemy_anims.gd) driven

@@ -11,7 +11,6 @@ const OptionsPanel = preload("res://scripts/menu/options_panel.gd")
 const ControlsPanel = preload("res://scripts/menu/controls_panel.gd")
 const MainScript = preload("res://scripts/main.gd")
 const HubPanel = preload("res://scripts/hunt/hub_panel.gd") # the Undercroft hub before a Hunt
-const HuntDirector = preload("res://scripts/hunt/hunt_director.gd")
 const HuntMeta = preload("res://scripts/hunt/hunt_meta.gd")
 const GAME_SCENE := "res://scenes/main.tscn"
 

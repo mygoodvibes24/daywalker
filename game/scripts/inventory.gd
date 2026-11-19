@@ -1,3 +1,4 @@
+class_name Inventory
 extends Node
 ## What Sol carries ("the Coat"): a bag of item instances plus equipment —
 ## 1 blade, 3 charms and 2 quick-use slots. Items are item_db.gd instances.
