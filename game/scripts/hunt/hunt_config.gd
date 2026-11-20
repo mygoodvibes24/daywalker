@@ -101,6 +101,43 @@ const ELITES := {
 		"hp": 2.4, "dmg": 1.4, "speed": 1.0, "scale": 1.15, "aura": Color(1.0, 0.85, 0.25)},
 }
 
+# ---------------------------------------------------------------- micro-POIs (between the camps)
+## Small one-use finds on the roads between the sites, so the walk from camp to camp pays:
+## no enemies, one [E] interaction, one reward. Placed by micro_poi.gd's generate() on the map's
+## road points, away from the big sites. n = how many per Hunt.
+const MICRO_POIS := {
+	"cache": {"label": "Smuggler's Cache", "n": 5, "color": Color(1.0, 0.78, 0.35), "act": "PRY OPEN THE CACHE",
+		"blurb": "Tithe and a find, stashed by the Docks crews."},
+	"captive": {"label": "Captive", "n": 3, "color": Color(0.55, 0.85, 1.0), "act": "CUT THE CAPTIVE LOOSE",
+		"blurb": "Someone the Court left tied up for later. They pay you back."},
+	"fridge": {"label": "Blood Fridge", "n": 3, "color": Color(1.0, 0.2, 0.25), "act": "DRINK FROM THE BLOOD FRIDGE",
+		"blurb": "A humming cooler of bagged blood: heals and eases the hunger."},
+	"shrine": {"label": "Moon Shrine", "n": 3, "color": Color(0.8, 0.75, 1.0), "act": "LIGHT A CANDLE AT THE SHRINE",
+		"blurb": "A street shrine: +8 max blood for the rest of the Hunt."},
+}
+const MICRO_SPACING := 34.0 # between two micro-POIs
+const MICRO_CLEAR := 22.0 # from any big site
+const SHRINE_HP := 8.0
+
+# ---------------------------------------------------------------- night modifiers
+## One per night (seeded per Hunt; no night repeats the one before), named on the night card
+## and on the phase line. "mods" go into progression's stat table for that night (the same keys
+## as Vows and charms); the rest is read by the director (fog, aggro, the straggler trickle).
+const NIGHT_MODIFIERS := {
+	"blood_moon": {"name": "BLOOD MOON", "color": Color(1.0, 0.18, 0.15),
+		"desc": "Everything hits 30% harder. Tithe +40%, and better loot.",
+		"mods": {"dmg_taken": 0.3, "tithe_mult": 0.4, "loot_luck": 0.4}},
+	"fog": {"name": "THE FOG", "color": Color(0.75, 0.8, 0.85),
+		"desc": "Sight is short. Camps notice you later; stragglers come sooner.",
+		"mods": {}, "fog": 3.2, "aggro": 0.65, "roam_grace": 0.4, "roam_cap": 2},
+	"hunting_party": {"name": "HUNTING PARTY", "color": Color(1.0, 0.6, 0.15),
+		"desc": "The Pack is out in numbers: twice the wolves roam the streets. +25% Tithe.",
+		"mods": {"tithe_mult": 0.25}, "roam_cap": 5, "roam_every": 0.55, "roam_pack": true},
+	"ashen_sky": {"name": "ASHEN SKY", "color": Color(0.7, 0.66, 0.6),
+		"desc": "Overcast: the sun will not heal you. Your Blood Dash recharges 30% faster.",
+		"mods": {"sun_heal": -1.0, "dash_rate": 0.3}},
+}
+
 # ---------------------------------------------------------------- the merchant
 const MERCHANT_STOCK := [
 	{"id": "blood_vial", "r": 0, "n": 2, "price": 30},

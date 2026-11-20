@@ -2,12 +2,10 @@
 
 - **Source:** generated with Higgsfield on 2026-11-13: Tripo text-to-3D (textured, PBR, ~45k face limit),
   then sent to Higgsfield's auto-rigger.
-- **What ships:** `sol_unrigged.glb` (the textured text-to-3D mesh with its base color, normal and ORM maps)
-  and `sol.scn`, built from it by `res://tools/build_sol_rig.gd`. The auto-rig output was not used: its skeleton
-  was fitted to the wrong facing axis (arm joints at the sternum, knees at the coat hem) and it dropped the normal
-  and ORM maps. The build script bakes the mesh to 1.88 m, feet at y=0, facing +Z, and adds a 20-bone skeleton
-  (including three coat-panel bones) with procedural skin weights. All motion is procedural (`scripts/sol_anim.gd`).
-- **Regenerate the rig:** `cd game && godot --headless -s res://tools/build_sol_rig.gd`
+- **Retired (round 3):** the first in-game Sol, `sol.scn` built from `sol_unrigged.glb` by `tools/build_sol_rig.gd` and
+  animated procedurally by `scripts/sol_anim.gd`, was replaced by the modular, clip-driven `sol_modular.scn`
+  (`tools/build_sol_modular.gd`). The old mesh, its textures, the build tool and the animator were deleted to cut
+  about 1.6 MB from the web download; they are in git history (before round 3) if they are ever needed.
 
 ## Prompt
 

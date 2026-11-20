@@ -51,7 +51,7 @@ var bolt_mat: StandardMaterial3D
 var bolt_t := 0.5
 var flash := 0.0
 var tween: Tween
-var main
+var main: Main
 var drone: AudioStreamPlayer3D # AUDIO: the wall hums where it is nearest Sol
 var crackle_t := 2.0
 

@@ -1,3 +1,4 @@
+class_name Poi
 extends Node3D
 ## One point of interest in a Hunt: its dressing, its pre-placed camp of enemies (idle until
 ## Sol comes close), its loot and its "cleared" state. Enemies only exist while Sol is within
@@ -12,8 +13,8 @@ const HFx = preload("res://scripts/hunt/hunt_fx.gd")
 
 signal cleared_now(poi)
 
-var director
-var main
+var director: HuntDirector
+var main: Main
 var type := ""
 var def: Dictionary
 var display_name := ""
@@ -145,7 +146,7 @@ func tick(delta: float, ppos: Vector3, budget: int) -> int:
 			if not is_instance_valid(e) or e.dead:
 				roused = true
 				break
-			if e.global_position.distance_to(ppos) < Cfg.AGGRO_RANGE or e.hp < e.max_hp - 0.01 or e.staggered:
+			if e.global_position.distance_to(ppos) < (director.aggro_range() if director != null else Cfg.AGGRO_RANGE) or e.hp < e.max_hp - 0.01 or e.staggered:
 				roused = true
 				break
 		if roused and director != null:

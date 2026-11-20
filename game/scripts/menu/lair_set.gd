@@ -14,7 +14,7 @@ const Atmo = preload("res://scripts/atmosphere.gd")
 const PostFxScript = preload("res://scripts/post_fx.gd")
 const BenchPose = preload("res://scripts/menu/sol_bench_pose.gd")
 const NiaIdle = preload("res://scripts/menu/nia_idle.gd")
-const SOL_SCENES := ["res://assets/characters/sol/sol_modular.scn", "res://assets/characters/sol/sol.scn"]
+const SOL_SCENES := ["res://assets/characters/sol/sol_modular.scn"]
 const NIA_SCENE := "res://assets/characters/nia/nia.scn"
 ## Nia's face scan (asset round 3: captures in docs/face_scans/nia, the raw reconstruction in
 ## assets/characters/nia/scan/) is ON HOLD: the projection pipeline leaves the same visible seams
