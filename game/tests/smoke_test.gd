@@ -99,10 +99,29 @@ func _initialize() -> void:
 	ok = await _asset_r3_checks(main) and ok
 	ok = await _menu_checks(main) and ok
 	ok = await _hunt_checks() and ok
+	ok = _download_checks() and ok
 	if FileAccess.file_exists(SMOKE_SAVE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SMOKE_SAVE))
 	print("SMOKE TEST: ", "PASS" if ok else "FAIL")
 	quit(0 if ok else 1)
+
+## W2 / K4: the web export leaves staging, tools and tests out, and the retired Sol and *_rig.scn
+## bodies stay deleted (about 6 MB of the old pck).
+func _download_checks() -> bool:
+	var ok := true
+	var cf := ConfigFile.new()
+	var loaded := cf.load("res://export_presets.cfg") == OK
+	var ex: String = str(cf.get_value("preset.0", "exclude_filter", "")) if loaded else ""
+	ok = _check("the web export excludes assets_staging, tools and tests (%s)" % ex, loaded and ex.contains("assets_staging/*") and ex.contains("tools/*") and ex.contains("tests/*")) and ok
+	var dead := ["res://assets/characters/sol/sol.scn", "res://assets/characters/vampire/vampire_rig.scn", "res://assets/characters/werewolf/werewolf_rig.scn",
+		"res://assets/characters/civilian/civilian_rig.scn", "res://scripts/sol_anim.gd"]
+	var gone := true
+	for d in dead:
+		if FileAccess.file_exists(d):
+			gone = false
+	ok = _check("the retired Sol body and *_rig.scn fallbacks stay deleted", gone) and ok
+	return ok
+
 
 func _check(name: String, cond: bool) -> bool:
 	print(("  ok   " if cond else "  FAIL ") + name)
@@ -963,6 +982,9 @@ func _three_boss_win(m) -> bool:
 	for night in 3:
 		if night < 2:
 			h.debug_skip_to("boss")
+			var ap: Vector3 = h.arena.pos
+			var sd := Vector2(p.global_position.x - ap.x, p.global_position.z - ap.z).length()
+			ok = _check("debug_skip_to(boss) stands Sol inside the arena (%.1f m from centre, radius %.0f)" % [sd, h.arena.radius], sd < float(h.arena.radius) - 1.0 and sd > 2.0) and ok
 		else:
 			await _wait_physics(int((h.T.final_dusk + 1.0) * 60.0)) # dusk -> the Undercroft Plaza
 		await _wait_physics(5)
@@ -975,6 +997,8 @@ func _three_boss_win(m) -> bool:
 		b.take_hit(1e7, Vector3.FORWARD)
 		m.clear_slowmo()
 		await _wait_physics(3)
+		if night < 2:
+			ok = _check("win run: a Blood Rite after night %d" % (night + 1), await _take_rite(h)) and ok
 		if night == 0:
 			await _wait_physics(int((h.T.victory + 1.0) * 60.0))
 			ok = _check("win run: dawn of Day 2 (%s)" % h.state, h.day == 1 and h.state == "explore") and ok
@@ -983,6 +1007,8 @@ func _three_boss_win(m) -> bool:
 	await _wait_physics(int((h.T.victory + 1.5) * 60.0))
 	ok = _check("win run: 3 bosses, won, results up (%s)" % h.state, h.bosses_killed == 3 and h.won and h.state == "over" and h.results.visible) and ok
 	ok = _check("win run: results carry the win epilogue", h.summary.get("won", false) and String(h.summary.get("epilogue", "")) != "" and h.results.epilogue.visible) and ok
+	ok = _check("win run: results list the Blood Rites taken (%s)" % str(h.summary.get("rites", [])), h.summary.get("rites", []).size() == 2 and h.results.stats.text.contains("Blood Rites")) and ok
+	ok = _check("win run: no Rite after the Final Night (offered %d)" % h.rites_offered, h.rites_offered == 2 and not h.rite_ui.is_open()) and ok
 	paused = false
 	return ok
 
@@ -1092,8 +1118,8 @@ func _menu_checks(main) -> bool:
 	menu.queue_free()
 	await process_frame
 	# coming from the menu, main.tscn starts at once without the title overlay
-	var Main = load("res://scripts/main.gd")
-	Main.started_once = true
+	var MainScript = load("res://scripts/main.gd")
+	MainScript.started_once = true
 	var m2 = load("res://scenes/main.tscn").instantiate()
 	root.add_child(m2)
 	await process_frame
@@ -1165,7 +1191,7 @@ func _special_checks(main) -> bool:
 	var v = _spawn(main, 0, p.global_position + Vector3(0, 0.4, 1.4))
 	var backed := false
 	var lunged := false
-	for i in 540:
+	for i in 900: # 15 s: a backstep can land on cooldown before the opener
 		await physics_frame
 		if not is_instance_valid(v) or v.dead:
 			break
@@ -1227,9 +1253,190 @@ func _boss_parry_checks(m, boss) -> bool:
 	return ok
 
 
+## Wait for the Blood Rite screen and take its first offer. True if it opened and the pick held.
+func _take_rite(h) -> bool:
+	for i in 400:
+		if h.rite_ui.is_open():
+			break
+		await physics_frame
+	if not h.rite_ui.is_open():
+		return false
+	var id: String = h.rite_ui.offer[0]
+	h.rite_ui.armed_at = 0
+	var took: bool = h.rite_ui.pick(id)
+	await process_frame
+	return took and id in h.main.progression.rites and not paused
+
+
+## L1: the Blood Rite. After a night boss the pick-1-of-3 opens over a paused world, ignores input for
+## a moment, needs a choice to close, applies the Rite (stats, a full heal) and shows in the Coat.
+func _rite_checks(m) -> bool:
+	var ok := true
+	var h = m.hunt
+	var p = m.player
+	var Rites = load("res://scripts/hunt/blood_rite.gd")
+	var opened := false
+	for i in 400:
+		if h.rite_ui.is_open():
+			opened = true
+			break
+		await physics_frame
+	var offer: Array = h.rite_ui.offer
+	var distinct := {}
+	for id in offer:
+		distinct[id] = true
+	ok = _check("a Blood Rite opens after the boss: 3 different Rites, world paused (%s)" % ", ".join(offer), opened and offer.size() == 3 and distinct.size() == 3 and paused and m.menu_open()) and ok
+	if not opened:
+		return false
+	ok = _check("the Rite has a card per offer, the first focused for pad / keyboard", h.rite_ui.buttons.size() == 3 and h.rite_ui.buttons[0].focus_neighbor_right != NodePath("")) and ok
+	h.rite_ui._pick(offer[1]) # a mashed press right as it opens
+	ok = _check("the Rite ignores a click in its first moment", h.rite_ui.is_open() and m.progression.rites.is_empty()) and ok
+	h.rite_ui.armed_at = 0
+	_key(KEY_ESCAPE, true)
+	await process_frame
+	_key(KEY_ESCAPE, false)
+	await process_frame
+	ok = _check("Esc doesn't close the Rite or open the pause menu", h.rite_ui.is_open() and not m.pause_menu.visible) and ok
+	p.max_hp = 100.0
+	p.hp = 30.0
+	_key(KEY_2, true) # keyboard: 2 takes the second card
+	await process_frame
+	_key(KEY_2, false)
+	await process_frame
+	var took: String = offer[1]
+	ok = _check("[2] takes the second Rite (%s), unpauses and fills Sol's blood (hp %.0f / %.0f)" % [took, p.hp, p.max_hp],
+		not h.rite_ui.is_open() and not paused and took in m.progression.rites and is_equal_approx(p.hp, p.max_hp)) and ok
+	var mods: Dictionary = Rites.RITES[took].mods
+	var applied := true
+	for k in mods:
+		if m.progression.stat(k) < float(mods[k]) - 0.001:
+			applied = false
+	ok = _check("the Rite's mods are in the stat table", applied) and ok
+	ok = _check("the Coat lists the Rite", m.inventory_ui._stats_text().contains(Rites.name_of(took))) and ok
+	# each Rite's move hook, forced on one at a time
+	var prog = m.progression
+	var saved: Array = prog.rites.duplicate()
+	for id in ["sanguine_riposte", "long_shadow", "curfew_born", "fourth_cut", "butchers_frenzy"]:
+		if not id in prog.rites:
+			prog.rite_choices = [id]
+			prog.choose_rite(id)
+	p.hp = 40.0
+	var dash0: float = p.dash_charges
+	p.parried.emit(null)
+	ok = _check("Sanguine Riposte: a parry heals 20 and refunds a dash (hp %.0f)" % p.hp, is_equal_approx(p.hp, 60.0) and p.dash_charges >= minf(dash0 + 1.0, p.MAX_DASH) - 0.01) and ok
+	p.dash_t = p.DASH_TIME
+	p.dashed.emit(Vector3.FORWARD)
+	ok = _check("Long Shadow: the Blood Dash lasts 60%% longer (%.3f s)" % p.dash_t, is_equal_approx(p.dash_t, p.DASH_TIME * 1.6) and p.invuln_t >= p.dash_t) and ok
+	p.dash_t = 0.0
+	ok = _check("Curfew-Born: the Curfew burns 70% less", is_equal_approx(prog.stat("curfew_resist"), 0.7)) and ok
+	p.frenzy_t = 0.0
+	p.special_move.emit("finisher")
+	ok = _check("Butcher's Frenzy: an execution starts a Frenzy (%.1f s)" % p.frenzy_t, p.frenzy_t >= 6.0) and ok
+	p.frenzy_t = 0.0
+	_clear_enemies(m)
+	var fwd: Vector3 = p._forward()
+	var vic = _spawn(m, 0, p.global_position + fwd * 2.0)
+	await _wait_physics(2)
+	var hp0: float = vic.hp
+	var n: int = Rites.echo_cut(m, fwd, 1.5)
+	ok = _check("The Fourth Cut: the phantom blade hits what's in front (%d hit, hp %.0f -> %.0f)" % [n, hp0, vic.hp], n >= 1 and (vic.hp < hp0 or vic.dead)) and ok
+	_clear_enemies(m)
+	prog.rites = saved
+	prog.recompute()
+	p.max_hp = 1e9
+	p.hp = 1e9
+	return ok
+
+
+## L4: one run modifier per night, on the night card and the phase line, in the stat table.
+func _modifier_checks(m) -> bool:
+	var ok := true
+	var h = m.hunt
+	var Cfg = load("res://scripts/hunt/hunt_config.gd")
+	var mod: Dictionary = h.modifier()
+	ok = _check("tonight has a run modifier (%s)" % h.modifier_id(), not mod.is_empty() and h.night_mods.size() == 3 and Cfg.NIGHT_MODIFIERS.has(h.modifier_id())) and ok
+	ok = _check("no night repeats the modifier before it (%s)" % ", ".join(h.night_mods), h.night_mods[0] != h.night_mods[1] and h.night_mods[1] != h.night_mods[2]) and ok
+	ok = _check("the modifier is named on the night card", h.story.card_text().contains(String(mod.name))) and ok
+	ok = _check("...and on the phase line (%s)" % h.phase_label(), h.phase_label().contains(String(mod.name))) and ok
+	ok = _check("its mods are in the stat table", m.progression.night_mods == mod.get("mods", {})) and ok
+	ok = _check("the Fog multiplies the fog (scale %.2f, base %.2f)" % [m.atmo.fog_scale, h.base_fog], is_equal_approx(m.atmo.fog_scale, h.base_fog * float(mod.get("fog", 1.0)))) and ok
+	var seen := {}
+	var HD = load("res://scripts/hunt/hunt_director.gd")
+	for sd in range(1, 13):
+		var hh = HD.new()
+		hh.seed = sd
+		hh._pick_modifiers()
+		seen[hh.night_mods[0]] = true
+		hh.free()
+	ok = _check("the modifier draw varies by seed (%s)" % ", ".join(seen.keys()), seen.size() >= 3) and ok
+	# every modifier applies and clears cleanly
+	var keep: Array = h.night_mods.duplicate()
+	for id in Cfg.NIGHT_MODIFIERS:
+		h.night_mods = [id, id, id]
+		h._apply_modifier()
+		var d: Dictionary = Cfg.NIGHT_MODIFIERS[id]
+		if m.progression.night_mods != d.get("mods", {}) or not is_equal_approx(m.atmo.fog_scale, h.base_fog * float(d.get("fog", 1.0))):
+			ok = _check("modifier %s applies" % id, false) and ok
+	h.night_mods = keep
+	h._apply_modifier()
+	return ok
+
+
+## L2: micro-POIs between the camps: a cache, a captive, a blood fridge and a shrine, each one use.
+func _micro_checks(m) -> bool:
+	var ok := true
+	var h = m.hunt
+	var p = m.player
+	var Cfg = load("res://scripts/hunt/hunt_config.gd")
+	var types := {}
+	var spaced := true
+	for mp in h.micros:
+		types[mp.type] = mp
+		for poi in h.pois:
+			if mp.distance_to(poi.global_position) < Cfg.MICRO_CLEAR - 0.5:
+				spaced = false
+	ok = _check("micro-POIs fill the roads between the sites (%d, types %s)" % [h.micros.size(), ", ".join(types.keys())], h.micros.size() >= 8 and types.size() == 4) and ok
+	ok = _check("micro-POIs keep clear of the big sites", spaced) and ok
+	var standing := true
+	for mp in h.micros:
+		if not m.spot_clear(Vector3(mp.global_position.x, m.ground_y(mp.global_position.x, mp.global_position.z), mp.global_position.z)):
+			standing = false
+	ok = _check("micro-POIs stand on open ground", standing) and ok
+	if types.size() < 4:
+		return false
+	var saved_pos: Vector3 = p.global_position
+	p.max_hp = 100.0
+	# the fridge, through the real [E] path
+	var fr = types.fridge
+	p.global_position = fr.global_position + Vector3(1.2, 0.2, 0.0)
+	p.hp = 20.0
+	p.hunger = 80.0
+	await _wait_physics(3)
+	var prompt_seen: bool = h.prompt.contains(String(Cfg.MICRO_POIS.fridge.act))
+	Input.action_press("interact")
+	await physics_frame
+	await physics_frame
+	Input.action_release("interact")
+	ok = _check("a blood fridge shows its prompt and [E] drinks (hp %.0f, hunger %.0f)" % [p.hp, p.hunger], prompt_seen and fr.used and p.hp >= 69.0 and p.hunger <= 41.0) and ok
+	ok = _check("...once: a used find offers nothing", fr.interaction(fr.global_position).is_empty() and not fr.use()) and ok
+	var sh = types.shrine
+	var mh0: float = p.max_hp
+	sh.use()
+	ok = _check("a shrine adds %d max blood for the run (%.0f -> %.0f)" % [int(Cfg.SHRINE_HP), mh0, p.max_hp], is_equal_approx(p.max_hp, mh0 + Cfg.SHRINE_HP)) and ok
+	var items0: int = m.loot.get_child_count()
+	types.captive.use()
+	types.cache.use()
+	await _wait_physics(2)
+	ok = _check("a captive and a cache pay out (loot nodes %d -> %d)" % [items0, m.loot.get_child_count()], types.captive.used and types.cache.used and m.loot.get_child_count() > items0) and ok
+	p.global_position = saved_pos
+	p.max_hp = 1e9
+	p.hp = 1e9
+	return ok
+
+
 func _start_hunt():
-	var Main = load("res://scripts/main.gd")
-	Main.started_once = true
+	var MainScript = load("res://scripts/main.gd")
+	MainScript.started_once = true
 	var m = load("res://scenes/main.tscn").instantiate()
 	root.add_child(m)
 	await process_frame
@@ -1337,6 +1544,8 @@ func _hunt_checks() -> bool:
 		if Vector2(poi.global_position.x, poi.global_position.z).length() < 20.0:
 			far_ok = false
 	ok = _check("POIs stay off the plaza", far_ok) and ok
+	ok = await _modifier_checks(m) and ok
+	ok = await _micro_checks(m) and ok
 	var dists := {}
 	for poi in h.pois:
 		dists[load("res://scripts/map/map_layout.gd").district_at(poi.global_position.x, poi.global_position.z)] = true
@@ -1442,6 +1651,7 @@ func _hunt_checks() -> bool:
 	await _wait_physics(3)
 	ok = _check("killing the boss counts", h.bosses_killed == 1 and boss.dead) and ok
 	m.clear_slowmo()
+	ok = await _rite_checks(m) and ok
 	await _wait_physics(int((h.T.victory + 1.0) * 60.0))
 	ok = _check("killing the boss advances the day (day %d, %s)" % [h.day + 1, h.state], h.day == 1 and h.state == "explore" and m.is_day()) and ok
 	# death ends the run
