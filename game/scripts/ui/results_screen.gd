@@ -7,7 +7,7 @@ const MS = preload("res://scripts/menu/menu_style.gd")
 const Cfg = preload("res://scripts/hunt/hunt_config.gd")
 const Meta = preload("res://scripts/hunt/hunt_meta.gd")
 
-var director
+var director: HuntDirector
 var root: Control
 var title: Label
 var sub: Label
@@ -90,6 +90,11 @@ func show_results(s: Dictionary) -> void:
 	epilogue.visible = epilogue.text != ""
 	var t := int(s.time)
 	stats.text = "Bosses slain   %d / 3\nKills   %d\nCommunion rank reached   %d\nTime   %d:%02d" % [s.bosses, s.kills, s.rank, t / 60, t % 60]
+	var rites: Array = s.get("rites", [])
+	if not rites.is_empty():
+		stats.text += "\nBlood Rites   " + "  ·  ".join(rites)
+	if int(s.get("micros", 0)) > 0:
+		stats.text += "\nFinds between the sites   %d" % int(s.micros)
 	var kept: Array = s.get("kept", [])
 	if not kept.is_empty():
 		stats.text += "\n\nSewn into your armoury:  " + ", ".join(kept)

@@ -6,8 +6,8 @@ extends CanvasLayer
 const S = preload("res://scripts/ui/ui_style.gd")
 const Compass = preload("res://scripts/ui/compass.gd")
 
-var director
-var main
+var director: HuntDirector
+var main: Main
 var root: Control
 var compass: Control
 var phase: Label
