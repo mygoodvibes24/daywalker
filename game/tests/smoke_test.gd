@@ -1191,7 +1191,7 @@ func _special_checks(main) -> bool:
 	var v = _spawn(main, 0, p.global_position + Vector3(0, 0.4, 1.4))
 	var backed := false
 	var lunged := false
-	for i in 540:
+	for i in 900: # 15 s: a backstep can land on cooldown before the opener
 		await physics_frame
 		if not is_instance_valid(v) or v.dead:
 			break
