@@ -92,6 +92,7 @@ func _initialize() -> void:
 	ok = await _terrain_checks(main) and ok
 	ok = await _progression_checks(main) and ok
 	ok = await _coat_checks(main) and ok
+	ok = await _sheath_checks(main) and ok
 	ok = await _move_checks(main) and ok
 	ok = await _fall_checks(main) and ok
 	ok = await _special_checks(main) and ok
@@ -531,9 +532,62 @@ func _coat_checks(main) -> bool:
 
 ## The sword moves (scripts/sol_moves.gd): hold for the charged slash, attack out of a Blood Dash for
 ## the thrust, the execution on a staggered enemy, and a parry that turns a wind-up aside.
+## Round 3 (owner's playtest): the sword rides on Sol's back when calm, he draws on attack, and puts it
+## away again after SHEATHE_AFTER s of calm; weapon swaps work in both places.
+func _sheath_checks(main) -> bool:
+	var p = main.player
+	var ok := true
+	main.clear_slowmo()
+	_clear_enemies(main)
+	p.dead = false
+	p.hp = p.max_hp
+	p.global_position = Vector3(10.0, 0.1, 10.0)
+	p.velocity = Vector3.ZERO
+	for i in 5: await physics_frame
+	if p.sheath == null:
+		return _check("the modular Sol has a back scabbard", false)
+	p.sheath.sheathe(true)
+	await physics_frame
+	var open_ok: bool = p.sheath.open_hand == null or (p.sheath.open_hand.visible and not p.sheath.fist.visible)
+	ok = _check("calm: the sword is on his back, hand empty (scabbard parts %d)" % p.sheath.scabbard.get_child_count(), p.sword_on_back() and open_ok and p.sheath.scabbard.get_child_count() >= 2 and not p.mod_anim.armed) and ok
+	# attack: the draw, and the first swing chains out of it
+	p.attack_cd = 0.0
+	p.attack_block_until = 0
+	p.attack_buffer_t = p.ATTACK_BUFFER
+	var waited := 0.0
+	var swung := false
+	for i in 40:
+		await physics_frame
+		waited += get_physics_process_delta_time()
+		if p.move_name != "" and p.swing_t > 0.0:
+			swung = true
+			break
+	for i in 20: await physics_frame
+	ok = _check("attack draws the sword and swings out of the draw (%.2f s to the swing)" % waited, swung and waited < 0.3 and p.sword_in_hand() and p.mod_anim.armed) and ok
+	# calm again: it goes back after the timeout
+	p.calm_t = p.SHEATHE_AFTER - 0.2
+	for i in 60: await physics_frame
+	ok = _check("after %.0f s of calm the sword is sheathed again" % p.SHEATHE_AFTER, p.sword_on_back()) and ok
+	# weapon swaps in both states (the heavy cleaver family too)
+	var keep: Dictionary = p.weapon_item
+	p.set_weapon_visual({"id": "foundry_cleaver", "r": 0})
+	await process_frame
+	var on_back_ok: bool = p.weapon_visual != null and p.weapon_visual.get_parent() == p.sheath.carrier and p.sword_on_back()
+	p.draw_sword()
+	for i in 30: await physics_frame
+	var in_hand_ok: bool = p.sword_in_hand() and p.weapon_visual.get_parent() == p.sheath.carrier and p.weapon_visual.is_visible_in_tree()
+	ok = _check("a cleaver swapped in on his back draws into his hand", on_back_ok and in_hand_ok) and ok
+	p.set_weapon_visual(keep)
+	p.auto_sheathe = false # the move checks below want the sword out
+	return ok
+
+
 func _move_checks(main) -> bool:
 	var p = main.player
 	var ok := true
+	if p.sheath != null:
+		p.sheath.draw(true)
+		p.auto_sheathe = false
 	main.clear_slowmo()
 	_clear_enemies(main)
 	main.time_of_day = 0.9 # night: vampires don't burn
