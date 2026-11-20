@@ -1,3 +1,4 @@
+class_name Progression
 extends Node
 ## Sol's progression: Tithe (the blood-essence currency), Communion rank (levels),
 ## Vows (passive perks picked on each rank) and the save file.
@@ -9,6 +10,7 @@ signal vows_changed
 signal stats_changed
 
 const ItemDB = preload("res://scripts/items/item_db.gd")
+const Rites = preload("res://scripts/hunt/blood_rite.gd")
 
 const MAX_LEVEL := 15
 const BASE_HP := 100.0
@@ -48,6 +50,12 @@ var level := 1
 var tithe := 0
 var vows: Array = []
 var vow_choices: Array = [] # the three offered and not yet picked
+## HUNT: Blood Rites taken this run (blood_rite.gd RITES ids), the three on offer, tonight's
+## modifier mods (hunt_config.gd NIGHT_MODIFIERS) and run bonuses from micro-POIs (shrines).
+var rites: Array = []
+var rite_choices: Array = []
+var night_mods: Dictionary = {}
+var run_mods: Dictionary = {}
 var death_drop := {} # {"pos": [x, y, z], "amount": n} — Tithe lost at the last death
 var stats := {}
 var rng := RandomNumberGenerator.new()
@@ -87,6 +95,10 @@ func recompute() -> void:
 		s[k] = PER_LEVEL[k] * (level - 1)
 	for id in vows:
 		_add_mods(s, VOWS.get(id, {}).get("mods", {}))
+	for id in rites:
+		_add_mods(s, Rites.RITES.get(id, {}).get("mods", {}))
+	_add_mods(s, night_mods)
+	_add_mods(s, run_mods)
 	if inventory != null:
 		for inst in inventory.equipped_items():
 			_add_mods(s, ItemDB.item_mods(inst))
@@ -180,6 +192,11 @@ func connect_player(p) -> void:
 	p.hit_enemy.connect(_on_hit)
 	p.bit_enemy.connect(_on_bite)
 	p.hurt.connect(_on_hurt)
+	# Blood Rite effects that hang off Sol's own signals (blood_rite.gd)
+	p.parried.connect(func(e): Rites.on_parried(self, e))
+	p.dashed.connect(func(dir): Rites.on_dashed(self, dir))
+	p.attacked.connect(func(c, fwd): Rites.on_attacked(self, c, fwd))
+	p.special_move.connect(func(n): Rites.on_special(self, n))
 
 
 func _on_hit(_e, dmg: float) -> void:
@@ -195,6 +212,7 @@ func _on_bite(_e, blood: int) -> void:
 		p.dash_charges = minf(p.dash_charges + 1.0, p.MAX_DASH)
 	if blood == 2 and has_flag("wolf_noburn"):
 		p.burn_t = 0.0
+	Rites.on_bite(self, _e)
 
 
 func _on_hurt(_amount: float, src) -> void:
@@ -217,6 +235,8 @@ func on_kill(e: Node) -> void:
 		p.heal(stat("kill_heal"))
 	if has_flag("moonsplit") and e.kind == 1 and e.transformed:
 		p.dash_charges = minf(p.dash_charges + 1.0, p.MAX_DASH)
+	if has_flag("kill_dash"):
+		p.dash_charges = minf(p.dash_charges + 0.5, p.MAX_DASH)
 
 
 func _process(delta: float) -> void:
@@ -225,6 +245,37 @@ func _process(delta: float) -> void:
 		var p = main.player
 		if main.daylight() > 0.3 and not (p.hunger < 30.0 and p.since_hurt > 4.0):
 			p.heal(p.SUN_HEAL * (1.0 + stat("sun_heal")) * delta)
+
+
+# ---------------------------------------------------------------- Blood Rites (run-scoped)
+## Offer three Rites not yet taken (fewer if the pool runs dry). Returns the offer.
+func offer_rites(n := 3) -> Array:
+	rite_choices = Rites.roll(rites, n, rng)
+	return rite_choices
+
+
+func choose_rite(id: String) -> bool:
+	if not Rites.RITES.has(id) or id in rites or not id in rite_choices:
+		return false
+	rites.append(id)
+	rite_choices.clear()
+	recompute()
+	var p = main.player if main != null else null
+	if p != null and not p.dead:
+		p.hp = p.max_hp # the rite fills you
+	vows_changed.emit()
+	return true
+
+
+## Tonight's modifier (hunt_director.gd); {} clears it.
+func set_night_mods(mods: Dictionary) -> void:
+	night_mods = mods.duplicate()
+	recompute()
+
+
+func add_run_mod(key: String, v: float) -> void:
+	run_mods[key] = float(run_mods.get(key, 0.0)) + v
+	recompute()
 
 
 # ---------------------------------------------------------------- death
@@ -296,6 +347,10 @@ func reset() -> void:
 	tithe = 0
 	vows = []
 	vow_choices = []
+	rites = []
+	rite_choices = []
+	night_mods = {}
+	run_mods = {}
 	death_drop = {}
 	if inventory != null:
 		inventory.reset()

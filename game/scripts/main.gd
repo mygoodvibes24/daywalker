@@ -1,3 +1,4 @@
+class_name Main
 extends Node3D
 ## Port Vesper: world, day/night cycle, spawning and game state.
 
@@ -16,7 +17,6 @@ const FxScript = preload("res://scripts/fx.gd")
 const InventoryUI = preload("res://scripts/ui/inventory_ui.gd")
 const LevelupUI = preload("res://scripts/ui/levelup_ui.gd")
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
-const HuntDirector = preload("res://scripts/hunt/hunt_director.gd") # HUNT HOOK
 const Depths = preload("res://scripts/map/undercroft.gd") # UNDERCROFT HOOK: the crypt under the plaza
 
 const DAY_LENGTH := 240.0 # seconds for one full day/night cycle
@@ -40,7 +40,7 @@ static var started_once := false
 var sun: DirectionalLight3D
 var env: Environment
 var atmo: Node3D # lighting, fog, sky, rain and post FX (atmosphere.gd)
-var player: CharacterBody3D
+var player: Player
 var hud: CanvasLayer
 var enemies_root: Node3D
 var lamps: Array[OmniLight3D] = []
@@ -50,15 +50,15 @@ var rng := RandomNumberGenerator.new()
 var nav_region: NavigationRegion3D
 var city: Node3D # city.gd: geometry, materials, props
 var started := false
-var progression: Node # progression.gd
-var inventory: Node # inventory.gd
-var loot: Node3D # loot.gd
+var progression: Progression
+var inventory: Inventory
+var loot: Loot
 var fx: Node3D # fx.gd
 var inventory_ui: CanvasLayer
 var levelup_ui: CanvasLayer
 var pause_menu: CanvasLayer # Esc: Resume / Options / Controls / Quit to Menu
 var ui_block_until := 0 # ms; swallows the button press that closed a menu
-var hunt: Node3D = null # HUNT HOOK: hunt_director.gd while a Hunt runs (null in free roam)
+var hunt: HuntDirector = null # HUNT HOOK: hunt_director.gd while a Hunt runs (null in free roam)
 var free_roam := false # debug only (--freeroam / ?freeroam): plaza start + the old roaming spawner
 var depths: Node3D # UNDERCROFT HOOK: map/undercroft.gd (the Undercroft Depths and its rival)
 
@@ -266,8 +266,9 @@ func _bake_navigation() -> void:
 	var src := NavigationMeshSourceGeometryData3D.new()
 	var t0 := Time.get_ticks_msec()
 	NavigationServer3D.parse_source_geometry_data(nm, src, self)
+	var t1 := Time.get_ticks_msec()
 	NavigationServer3D.bake_from_source_geometry_data(nm, src)
-	print("navmesh: %d polys in %d ms" % [nm.get_polygon_count(), Time.get_ticks_msec() - t0]) # TERRAIN HOOK
+	print("navmesh: %d polys in %d ms (parse %d, bake %d)" % [nm.get_polygon_count(), Time.get_ticks_msec() - t0, t1 - t0, Time.get_ticks_msec() - t1]) # TERRAIN HOOK
 	nav_region = NavigationRegion3D.new()
 	nav_region.navigation_mesh = nm
 	add_child(nav_region)
@@ -601,7 +602,8 @@ func open_pause() -> void:
 
 func menu_open() -> bool:
 	return inventory_ui.is_open() or levelup_ui.is_open() or Time.get_ticks_msec() < ui_block_until \
-		or (hunt != null and hunt.story != null and hunt.story.playing) # the first-Hunt intro (QA2 #3)
+		or (hunt != null and hunt.story != null and hunt.story.playing) \
+		or (hunt != null and hunt.rite_ui != null and hunt.rite_ui.is_open()) # the first-Hunt intro (QA2 #3), the Blood Rite
 
 
 func open_levelup() -> void:

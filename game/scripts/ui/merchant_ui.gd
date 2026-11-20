@@ -7,8 +7,8 @@ const MS = preload("res://scripts/menu/menu_style.gd")
 const Cfg = preload("res://scripts/hunt/hunt_config.gd")
 const ItemDB = preload("res://scripts/items/item_db.gd")
 
-var director
-var main
+var director: HuntDirector
+var main: Main
 var root: Control
 var list: VBoxContainer
 var tithe_label: Label

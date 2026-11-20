@@ -1,3 +1,4 @@
+class_name Enemy
 extends CharacterBody3D
 ## Vampires of the Velvet Court and the Hollow Pack (who change at night).
 
@@ -77,17 +78,11 @@ var eye_color: Color
 var marker: MeshInstance3D
 
 # Character models. *_anim.scn (tools/build_enemy_anims.gd) carries an auto-rigged skeleton and
-# real clips; *_rig.scn (tools/bake_rigs.gd) is the older hand-made rig posed procedurally; the
-# primitive bodies are the last fallback.
+# real clips; the primitive bodies are the fallback. (The older *_rig.scn bodies were deleted in round 3.)
 const ANIM_PATHS := {
 	"vampire": "res://assets/characters/vampire/vampire_anim.scn",
 	"werewolf": "res://assets/characters/werewolf/werewolf_anim.scn",
 	"civilian": "res://assets/characters/civilian/civilian_anim.scn",
-}
-const MODEL_PATHS := {
-	"vampire": "res://assets/characters/vampire/vampire_rig.scn",
-	"werewolf": "res://assets/characters/werewolf/werewolf_rig.scn",
-	"civilian": "res://assets/characters/civilian/civilian_rig.scn",
 }
 static var _scene_cache := {} # shared PackedScenes (their AnimationLibraries are shared too)
 static var _eye_meshes := {}
@@ -163,7 +158,7 @@ func _ready() -> void:
 static func _model_scene(n: String) -> PackedScene:
 	if not _scene_cache.has(n):
 		var ps: PackedScene = null
-		for path in [ANIM_PATHS[n], MODEL_PATHS[n]]:
+		for path in [ANIM_PATHS[n]]:
 			if ResourceLoader.exists(path):
 				ps = load(path) as PackedScene
 				if ps != null:

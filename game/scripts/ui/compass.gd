@@ -5,8 +5,8 @@ extends Control
 const Icons = preload("res://scripts/ui/poi_icons.gd")
 const SPAN := deg_to_rad(100.0) # half the field shown on the strip
 
-var director
-var main
+var director: HuntDirector
+var main: Main
 var font: Font
 
 
