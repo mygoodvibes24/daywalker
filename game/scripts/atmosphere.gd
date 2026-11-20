@@ -15,6 +15,7 @@ const PostFxScript = preload("res://scripts/post_fx.gd")
 
 const SOL_LIGHT_LAYER := 1 << 19 # render layer 20: only Sol receives the rim and fill lights
 
+const WEB_LOD_THRESHOLD := 4.0 # px of allowed LOD error (default 1)
 var tier := "web"
 ## Exposed setting: scales the fog density (the map sets it so landmarks read at range).
 var fog_scale := 1.0
@@ -194,8 +195,10 @@ func _build_sun() -> void:
 		sun.shadow_blur = 1.5
 		sun.light_angular_distance = 0.6 # soft penumbrae (PCSS)
 	else:
-		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-		sun.directional_shadow_max_distance = 50.0
+		# frame budget (web): one orthogonal shadow pass over 40 m instead of two splits over
+		# 50 m; every shadow caster is drawn once per split
+		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+		sun.directional_shadow_max_distance = 40.0
 	sun.light_volumetric_fog_energy = 1.0
 	add_child(sun)
 
@@ -211,6 +214,8 @@ func _setup_viewport() -> void:
 		RenderingServer.directional_shadow_atlas_set_size(4096, true)
 	else:
 		vp.msaa_3d = Viewport.MSAA_2X
+		# frame budget (web): imported meshes (characters, props) drop to their LODs sooner
+		vp.mesh_lod_threshold = WEB_LOD_THRESHOLD
 
 
 ## The street lamps exist only after main builds the city; dress them the first time we see them.
