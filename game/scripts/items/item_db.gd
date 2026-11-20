@@ -96,6 +96,10 @@ const ITEMS := {
 	"moonsplitter": {"name": "Moonsplitter", "kind": "blade", "family": "cleaver", "dmg": 28.0, "spd": 0.75, "reach": 0.0, "unique": true,
 		"mods": {"vs_wolf": 0.6, "moonsplit": 1.0}, "effect": "Killing a werewolf refunds a Blood Dash.",
 		"desc": "A silver headsman's blade. The Pack tells its children about it."},
+	# the rival daywalker's blade (map/undercroft_rival.gd): only he drops it
+	"crowes_penance": {"name": "Crowe's Penance", "kind": "blade", "family": "longblade", "dmg": 22.0, "spd": 1.05, "reach": 0.5, "unique": true, "boss_only": true,
+		"mods": {"lifesteal": 0.06, "dodge_heal": 8.0}, "effect": "A duellist's blade: perfect dodges heal 8 blood, and every cut drinks a little.",
+		"desc": "Silas Crowe's pale longblade, from the old Vigil. He carved his own name off the crypt wall with it."},
 	# ------------------------------------------------------------ charms (gris-gris)
 	"red_flannel": {"name": "Red Flannel Bag", "kind": "charm", "family": "grisgris", "mods": {"max_hp": 12.0},
 		"desc": "Nine herbs, a lock of hair and a promise, tied in red."},
@@ -286,7 +290,7 @@ static func random_item(rng: RandomNumberGenerator, night: bool, full_moon: bool
 	var pool: Array = []
 	for id in ITEMS:
 		var d: Dictionary = ITEMS[id]
-		if id == "marrow_silver":
+		if id == "marrow_silver" or ITEMS[id].get("boss_only", false):
 			continue
 		var k: String = d.kind
 		if (kind == "consumable" and (k == "vial" or k == "flare")) or k == kind:

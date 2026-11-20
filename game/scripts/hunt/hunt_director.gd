@@ -134,6 +134,17 @@ func build_world() -> void:
 	deploy_point = Terrain.grounded(Cfg.DEPLOY_POINTS[rng.randi() % Cfg.DEPLOY_POINTS.size()]) # TERRAIN HOOK
 
 
+## A point of interest built outside the generator (map/undercroft.gd's Undercroft Depths): it is
+## ticked, shown on the map and the compass and counted with the other sites. It speaks poi.gd's
+## duck API (type, def, display_name, cleared, tick, on_light_changed, recall, interaction,
+## distance_to, is_combat).
+func register_poi(p: Node3D) -> void:
+	if poi_root == null or p in pois:
+		return
+	poi_root.add_child(p)
+	pois.append(p)
+
+
 ## Nights 1 and 2 draw two different bosses from the pool; the Final Night is fixed. Its own
 ## RNG stream, so the boss draw doesn't move the deployment point or the POIs for a seed.
 func _pick_bosses() -> void:
