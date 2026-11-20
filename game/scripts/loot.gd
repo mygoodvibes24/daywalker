@@ -1,3 +1,4 @@
+class_name Loot
 extends Node3D
 ## Loot in the world: Tithe motes, dropped items with rarity light beams,
 ## cold coffins / smuggler crates (caches) and the Tithe lost at death.

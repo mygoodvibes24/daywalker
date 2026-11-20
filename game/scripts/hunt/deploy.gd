@@ -10,7 +10,7 @@ const Dressing = preload("res://scripts/hunt/poi_dressing.gd")
 
 signal finished
 
-var main
+var main: Main
 var point: Dictionary
 var cam: Camera3D
 var t := 0.0

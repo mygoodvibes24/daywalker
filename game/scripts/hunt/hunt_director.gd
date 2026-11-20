@@ -1,3 +1,4 @@
+class_name HuntDirector
 extends Node3D
 ## The Hunt: a short co-op-roguelite style run through Port Vesper.
 ##   hub (main menu: the Undercroft) -> deploy (the Descent) -> DAY 1: explore -> the Red
@@ -22,6 +23,10 @@ const MapScreen = preload("res://scripts/ui/map_screen.gd")
 const ResultsScreen = preload("res://scripts/ui/results_screen.gd")
 const MerchantUI = preload("res://scripts/ui/merchant_ui.gd")
 const Story = preload("res://scripts/hunt/hunt_story.gd")
+const MicroScript = preload("res://scripts/hunt/micro_poi.gd")
+const Rites = preload("res://scripts/hunt/blood_rite.gd")
+const RiteUIScript = preload("res://scripts/ui/rite_ui.gd")
+const POIClass = preload("res://scripts/hunt/poi.gd")
 
 ## Set by the hub's "Begin the Hunt" (or --hunt / ?hunt) before main.tscn loads. The Hunt is
 ## THE game: main.tscn runs one however it was reached, unless free roam was asked for.
@@ -32,7 +37,7 @@ static var force_freeroam := false
 static var force_short := false
 static var seed_override := -1
 
-var main
+var main: Main
 var short := false
 var T: Dictionary # timings
 var seed := 0
@@ -74,6 +79,17 @@ var night_bosses: Array = [] # tonight's boss defs per day: two from the pool, t
 var story: CanvasLayer # intro, night cards (hunt_story.gd)
 var fell_to := "" # the boss id that ended the run, for the results epilogue
 var _interaction := {}
+## Micro-POIs between the camps (micro_poi.gd): one-use caches, captives, blood fridges, shrines.
+var micros: Array = []
+var _micros_checked := false
+## Blood Rites waiting to be offered (names of what died), and the screen that offers them.
+var rite_queue: Array = []
+var rite_wait := 0.0
+var rite_ui: CanvasLayer
+var rites_offered := 0
+## Tonight's modifier per night (hunt_config.gd NIGHT_MODIFIERS ids), and the map's own fog.
+var night_mods: Array = []
+var base_fog := 1.0
 
 
 static func wanted(main_) -> bool:
@@ -112,17 +128,24 @@ func build_world() -> void:
 		pool[s] = t
 	arenas = [Terrain.grounded(pool[0]), Terrain.grounded(pool[1]), Cfg.FINAL_ARENA] # TERRAIN HOOK: on the ground
 	_pick_bosses()
+	_pick_modifiers()
 	poi_root = Node3D.new()
 	poi_root.name = "HuntPOIs"
 	add_child(poi_root)
 	for e in Spawner.generate(seed, main.city):
 		var poi = POIScript.new()
 		poi.setup(self, e.type, e.seed, e.get("boss", {}))
-		poi.name = "POI_%s_%d" % [e.type, pois.size()]
 		poi.position = e.pos
-		poi_root.add_child(poi)
-		poi.cleared_now.connect(on_poi_cleared)
-		pois.append(poi)
+		register_poi(poi)
+	var avoid: Array = []
+	for poi in pois:
+		avoid.append(poi.position)
+	for e in MicroScript.generate(seed, main.city, avoid):
+		var mp = MicroScript.new()
+		mp.setup(self, e.type, e.seed)
+		mp.position = e.pos
+		mp.rotation.y = e.yaw
+		register_site(mp)
 	deploy_dressing = DeployScript.build_points(self)
 	ring = RingScript.new()
 	ring.name = "RedCurfew"
@@ -201,6 +224,11 @@ func start() -> void:
 	story.director = self
 	story.main = main
 	add_child(story)
+	rite_ui = RiteUIScript.new()
+	rite_ui.main = main
+	add_child(rite_ui)
+	base_fog = main.atmo.fog_scale if main.atmo != null else 1.0
+	_apply_modifier()
 	if Story.intro_wanted(short):
 		# STORY: the first Hunt opens on Nia's briefing; the Descent follows it
 		state = "intro"
@@ -317,6 +345,9 @@ func _physics_process(delta: float) -> void:
 	var p = main.player
 	run_time += delta
 	phase_t += delta
+	if not _micros_checked:
+		_check_micros()
+	_tick_rite(delta)
 	_tick_pois(delta)
 	_hold_roamers()
 	match state:
@@ -407,13 +438,14 @@ func _tick_pois(delta: float) -> void:
 ## only comes for him once he walks into it or hits it (_hold_roamers). Nothing hunts him
 ## from the start of a day; the trickle begins once he has had time to pick a direction.
 func _roam(delta: float) -> void:
-	if state == "explore" and phase_t < Cfg.ROAM_GRACE:
+	var mod := modifier()
+	if state == "explore" and phase_t < Cfg.ROAM_GRACE * float(mod.get("roam_grace", 1.0)):
 		return
 	roam_t -= delta
 	if roam_t > 0.0:
 		return
-	roam_t = Cfg.ROAM_EVERY * (0.6 if not main.is_day() else 1.0)
-	if roamers.size() < Cfg.ROAM_CAP and living_enemies() < Cfg.MAX_ACTIVE_ENEMIES:
+	roam_t = Cfg.ROAM_EVERY * (0.6 if not main.is_day() else 1.0) * float(mod.get("roam_every", 1.0))
+	if roamers.size() < Cfg.ROAM_CAP + int(mod.get("roam_cap", 0)) and living_enemies() < Cfg.MAX_ACTIVE_ENEMIES:
 		_spawn_roamer()
 
 
@@ -439,8 +471,8 @@ func _spawn_roamer() -> void:
 		return # nowhere quiet enough this time
 	var e: CharacterBody3D = EnemyScript.new()
 	e.main = main
-	if main.is_day():
-		e.kind = 1 # the Pack in human form; vampires sleep by day
+	if main.is_day() or modifier().get("roam_pack", false):
+		e.kind = 1 # the Pack in human form; vampires sleep by day (a Hunting Party is all Pack)
 	elif main.is_full_moon():
 		e.kind = 1 if rng.randf() < 0.7 else 0
 	else:
@@ -455,7 +487,7 @@ func _spawn_roamer() -> void:
 ## one; runs every frame, before the enemies' own physics (process_physics_priority -10).
 func _hold_roamers() -> void:
 	var p = main.player
-	var range_: float = Cfg.AGGRO_RANGE if state == "explore" else Cfg.AGGRO_RANGE * 1.5 # the Curfew makes them twitchy
+	var range_: float = aggro_range() if state == "explore" else aggro_range() * 1.5 # the Curfew makes them twitchy
 	for i in range(roamers.size() - 1, -1, -1):
 		var r: Dictionary = roamers[i]
 		var e = r.e
@@ -484,6 +516,7 @@ func _curfew_damage(delta: float, p) -> void:
 	if out > 0.0:
 		outside_t += delta
 		var dps := minf(Cfg.RING_DAMAGE + Cfg.RING_RAMP * outside_t, Cfg.RING_DAMAGE_MAX)
+		dps *= clampf(1.0 - main.progression.stat("curfew_resist"), 0.1, 1.0) # Blood Rite: Curfew-Born
 		p.since_hurt = 0.0
 		p.hp -= dps * delta
 		if p.hp <= 0.0:
@@ -526,8 +559,16 @@ static func mmss(s: float) -> String:
 	return "%d:%02d" % [n / 60, n % 60]
 
 
-## "DAY 1 — The Curfew falls in 2:10"
+## "DAY 1 — The Curfew falls in 2:10   ◆ BLOOD MOON"
 func phase_label() -> String:
+	var base := _phase_text()
+	var mod := modifier()
+	if base != "" and not mod.is_empty() and state != "victory":
+		return base + "   ◆ " + String(mod.name)
+	return base
+
+
+func _phase_text() -> String:
 	var dname := "FINAL NIGHT" if day >= 2 else "DAY %d" % (day + 1)
 	match state:
 		"deploy":
@@ -647,6 +688,8 @@ func _on_boss_died(b) -> void:
 	else:
 		main.hud.announce(def.name + " FALLS\nTake what it guarded. Dawn is coming.")
 		_enter("victory")
+	if day < 2:
+		queue_rite(POIClass.title_case(def.name.split(",")[0]))
 	boss = null
 
 
@@ -662,6 +705,7 @@ func _next_day() -> void:
 	main.hud.announce("DAWN — DAY %d\nThe sun is up. The Curfew will fall again." % (day + 1))
 	state = "explore"
 	phase_t = 0.0
+	_apply_modifier()
 	_night_card()
 
 
@@ -672,7 +716,7 @@ func _night_heading() -> String:
 ## STORY: who tonight's boss is and why it's after Sol.
 func _night_card() -> void:
 	if story != null:
-		story.night_card(_night_heading() + "  ·  TONIGHT YOU HUNT", boss_def(day))
+		story.night_card(_night_heading() + "  ·  TONIGHT YOU HUNT", boss_def(day), modifier())
 
 
 ## After Night 2: through the blood-mist to the Undercroft Plaza for the last fight.
@@ -680,6 +724,7 @@ func _final_night() -> void:
 	day = 2
 	revives = Cfg.REVIVES_PER_DAY
 	_set_arena(2)
+	_apply_modifier()
 	hud.fade_flash()
 	var p = main.player
 	var c: Vector3 = arena.pos
@@ -695,6 +740,108 @@ func _final_night() -> void:
 			e.queue_free()
 	ring.set_radius(arena.radius)
 	_enter("boss")
+
+
+# ---------------------------------------------------------------- the site API
+## Add a point of interest to the Hunt (poi.gd or anything with the same shape): it is parented
+## under HuntPOIs, ticked every frame (tick(delta, ppos, budget) -> spawned), told about dusk and
+## dawn (on_light_changed), recalled at the boss wall (recall), drawn on the map and compass
+## (type, def.color, cleared), offered for [E] (interaction(ppos) -> {text, act, ...}) and paid
+## out through on_poi_cleared when it emits cleared_now(poi). Call before the navmesh bake
+## (build_world) if it has colliders.
+func register_poi(poi: Node3D) -> void:
+	if poi.name == "" or poi.name.begins_with("@"):
+		poi.name = "POI_%s_%d" % [poi.type, pois.size()]
+	if poi.get_parent() == null:
+		poi_root.add_child(poi)
+	if poi.has_signal("cleared_now") and not poi.cleared_now.is_connected(on_poi_cleared):
+		poi.cleared_now.connect(on_poi_cleared)
+	pois.append(poi)
+
+
+## Add a small interactive site with no camp (micro_poi.gd shape): distance_to(p),
+## interaction(ppos) -> {text, act: "micro"} and use(). Shown on the map as a diamond.
+func register_site(site: Node3D) -> void:
+	if site.name == "" or site.name.begins_with("@"):
+		site.name = "Micro_%s_%d" % [site.type, micros.size()]
+	if site.get_parent() == null:
+		poi_root.add_child(site)
+	micros.append(site)
+
+
+# ---------------------------------------------------------------- night modifiers
+## One modifier per night (Day 1, Day 2, the Final Night), on its own seeded stream so the draw
+## never moves the POIs or the bosses; no night repeats the one before it.
+func _pick_modifiers() -> void:
+	var mr := RandomNumberGenerator.new()
+	mr.seed = seed * 104729 + 71
+	var ids: Array = Cfg.NIGHT_MODIFIERS.keys()
+	night_mods = []
+	for d in 3:
+		var pick: String = ids[mr.randi() % ids.size()]
+		if not night_mods.is_empty() and pick == night_mods[-1]:
+			pick = ids[(ids.find(pick) + 1 + mr.randi() % (ids.size() - 1)) % ids.size()]
+		night_mods.append(pick)
+
+
+## Tonight's modifier def ({} before the Hunt has drawn them).
+func modifier() -> Dictionary:
+	if night_mods.is_empty():
+		return {}
+	return Cfg.NIGHT_MODIFIERS.get(night_mods[clampi(day, 0, night_mods.size() - 1)], {})
+
+
+func modifier_id() -> String:
+	return "" if night_mods.is_empty() else String(night_mods[clampi(day, 0, night_mods.size() - 1)])
+
+
+## Push tonight's modifier into the stat table (progression.gd) and the world (fog).
+func _apply_modifier() -> void:
+	var mod := modifier()
+	main.progression.set_night_mods(mod.get("mods", {}))
+	if main.atmo != null:
+		main.atmo.fog_scale = base_fog * float(mod.get("fog", 1.0))
+
+
+## How close Sol can come before an idle camp or straggler notices him (the Fog shortens it).
+func aggro_range() -> float:
+	return Cfg.AGGRO_RANGE * float(modifier().get("aggro", 1.0))
+
+
+# ---------------------------------------------------------------- the Blood Rite
+## A boss died: offer a Rite once the death has played out (and no menu is up).
+func queue_rite(from: String) -> void:
+	if state == "over" or won:
+		return
+	rite_queue.append(from)
+	rite_wait = maxf(rite_wait, 2.2)
+
+
+func _tick_rite(delta: float) -> void:
+	if rite_queue.is_empty() or rite_ui == null or rite_ui.is_open():
+		return
+	rite_wait -= delta
+	var p = main.player
+	if rite_wait > 0.0 or p == null or p.dead or main.menu_open() or (map_screen != null and map_screen.is_open()) or end_t >= 0.0:
+		return
+	var from: String = rite_queue.pop_front()
+	var offer: Array = main.progression.offer_rites(3)
+	if offer.is_empty():
+		return # every Rite already taken
+	rites_offered += 1
+	rite_ui.open(offer, from)
+
+
+## The first frame of the Hunt (physics is live): drop micro-POIs that landed inside or under
+## something solid (a parked car, a crate stack) on a road point.
+func _check_micros() -> void:
+	_micros_checked = true
+	for i in range(micros.size() - 1, -1, -1):
+		var mp = micros[i]
+		var pos: Vector3 = mp.global_position
+		if not main.spot_clear(Vector3(pos.x, main.ground_y(pos.x, pos.z), pos.z)):
+			micros.remove_at(i)
+			mp.queue_free()
 
 
 # ---------------------------------------------------------------- POIs
@@ -715,6 +862,8 @@ func on_poi_cleared(poi) -> void:
 		3:
 			main.loot.spawn_item(random_item(ItemDB.LEGENDARY, "blade"), pos + Vector3(0.8, 0, 0.8))
 	main.hud.popup("%s CLEARED" % poi.display_name.to_upper())
+	if poi.type == "fieldboss":
+		queue_rite(poi.display_name) # a Landmark horror's blood is worth a Rite too
 	# AUDIO HOOK: the nest line names a nest; anything else gets the generic one
 	if poi.type == "nest":
 		Dialogue.play_group("poi_cleared_")
@@ -748,7 +897,7 @@ func _interactions(p) -> void:
 	_interaction = {}
 	if p == null or p.dead or p.bite_ready or main.menu_open() or main.loot.prompt_text != "":
 		return
-	for poi in pois:
+	for poi in pois + micros:
 		if poi.distance_to(p.global_position) > 6.0:
 			continue
 		var it: Dictionary = poi.interaction(p.global_position)
@@ -771,6 +920,8 @@ func _interactions(p) -> void:
 				merchant.open()
 			"coffin":
 				_interaction.poi.open_coffin(_interaction.coffin)
+			"micro":
+				_interaction.poi.use()
 
 
 # ---------------------------------------------------------------- death
@@ -842,7 +993,9 @@ func _end_run(won_: bool) -> void:
 		if ItemDB.kind_of(b) == "charm":
 			carried.append(b)
 	summary = {"won": won, "bosses": bosses_killed, "kills": main.kills, "rank": main.progression.level,
-		"day": day + 1, "time": run_time, "tithe": main.progression.tithe}
+		"day": day + 1, "time": run_time, "tithe": main.progression.tithe,
+		"rites": main.progression.rites.map(func(id): return Rites.name_of(id)),
+		"micros": micros.filter(func(m): return is_instance_valid(m) and m.used).size()}
 	summary["earned"] = Meta.record_hunt(summary, carried)
 	summary["kept"] = Meta.data.last.get("kept", [])
 	for d in [Cfg.FINAL_BOSS] + Cfg.NIGHT_BOSS_POOL:
@@ -851,7 +1004,7 @@ func _end_run(won_: bool) -> void:
 	summary["epilogue"] = Story.epilogue(summary)
 	if won:
 		Dialogue.play("hunt_extract") # AUDIO HOOK
-	main.progression.reset() # run-scoped: rank, Tithe, Vows and the Coat start over next Hunt
+	main.progression.reset() # run-scoped: rank, Tithe, Vows, Rites and the Coat start over next Hunt
 	main.player.hp = maxf(main.player.hp, 0.0)
 	if map_screen != null:
 		map_screen.close()
@@ -885,7 +1038,31 @@ func debug_skip_to(s: String) -> void:
 		deploy.finish()
 	if s == "boss" or s == "shrink2":
 		ring.set_radius(Cfg.RING_STAGE1)
+	if s == "boss":
+		_place_in_arena() # L5: QA and screenshots want Sol inside tonight's arena, not outside it
 	_enter(s)
+
+
+## Stand Sol on open ground 6 m from the arena centre, facing it (the boss spawns across from him).
+func _place_in_arena() -> void:
+	var p = main.player
+	if p == null:
+		return
+	var c: Vector3 = arena.pos
+	var dir := Vector3(-c.x, 0.0, -c.z) # towards the map centre: the side Sol usually comes from
+	dir = dir.normalized() if dir.length() > 1.0 else Vector3(0, 0, 1)
+	var to: Vector3 = main.safe_ground(c + dir * 6.0)
+	if Vector2(to.x - c.x, to.z - c.z).length() > float(arena.radius) - 1.0:
+		var x := c.x + dir.x * 6.0
+		var z := c.z + dir.z * 6.0
+		to = Vector3(x, main.ground_y(x, z), z)
+	p.global_position = to + Vector3(0, 0.2, 0)
+	p.velocity = Vector3.ZERO
+	var look := Vector3(c.x - to.x, 0.0, c.z - to.z).normalized()
+	p.facing = atan2(look.x, look.z)
+	p.cam_yaw = atan2(-look.x, -look.z)
+	if p.visual != null:
+		p.visual.rotation.y = p.facing
 
 
 func _unhandled_input(event: InputEvent) -> void:

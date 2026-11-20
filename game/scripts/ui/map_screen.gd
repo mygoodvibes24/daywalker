@@ -10,8 +10,8 @@ const CityScript = preload("res://scripts/city.gd")
 const MapLayout = preload("res://scripts/map/map_layout.gd")
 const WORLD := MapLayout.HALF # half-extent shown (MAP HOOK: the large map's bounds)
 
-var director
-var main
+var director: HuntDirector
+var main: Main
 var panel: Control
 var frame: Control # clips the map drawing to its square
 var canvas: Control # the map itself
@@ -170,6 +170,11 @@ func _draw_map() -> void:
 	# POIs
 	for poi in director.pois:
 		Icons.draw(canvas, poi.type, _w2m(poi.global_position), 9.0, poi.def.color, poi.cleared)
+	for mp in director.micros: # micro-POIs: small diamonds, grey once taken
+		if is_instance_valid(mp):
+			var mc := _w2m(mp.global_position)
+			var col: Color = Color(0.45, 0.45, 0.45) if mp.used else mp.def.color
+			canvas.draw_colored_polygon(PackedVector2Array([mc + Vector2(0, -5), mc + Vector2(4, 0), mc + Vector2(0, 5), mc + Vector2(-4, 0)]), col)
 	Icons.draw(canvas, "arena", _w2m(director.arena.pos), 13.0, Color(1.0, 0.12, 0.1))
 	canvas.draw_string(font, _w2m(director.arena.pos) + Vector2(-100, 30), director.arena.name.to_upper(), HORIZONTAL_ALIGNMENT_CENTER, 200, 13, Color(1, 0.6, 0.55))
 	# deployment point
@@ -243,6 +248,10 @@ func _legend(at: Vector2) -> void:
 		Icons.draw(deco, t, Vector2(at.x + 10, y), 9.0, d.color)
 		deco.draw_string(font, Vector2(at.x + 28, y + 5), d.label, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, S.TEXT)
 		y += 28
+	var mc := Vector2(at.x + 10, y)
+	deco.draw_colored_polygon(PackedVector2Array([mc + Vector2(0, -6), mc + Vector2(5, 0), mc + Vector2(0, 6), mc + Vector2(-5, 0)]), Color(1.0, 0.78, 0.35))
+	deco.draw_string(font, Vector2(at.x + 28, y + 5), "Cache, captive, fridge, shrine", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, S.TEXT)
+	y += 28
 	Icons.draw(deco, "arena", Vector2(at.x + 10, y), 10.0, Color(1, 0.12, 0.1))
 	deco.draw_string(font, Vector2(at.x + 28, y + 5), "Tonight's arena", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, S.TEXT)
 	y += 28

@@ -323,6 +323,8 @@ func _stats_text() -> String:
 		names.append(prog.VOWS[id].name)
 	lines.append("")
 	lines.append("Vows:  " + ("none yet — keep vigil at the Undercroft" if names.is_empty() else ", ".join(names)))
+	if not prog.rites.is_empty(): # HUNT: Blood Rites taken after bosses (blood_rite.gd)
+		lines.append("Blood Rites:  " + ", ".join(prog.rites.map(func(id): return prog.Rites.name_of(id))))
 	return "\n".join(lines)
 
 
