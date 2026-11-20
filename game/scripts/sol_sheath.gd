@@ -27,7 +27,7 @@ const SPINE_BONE := "Spine02"
 ## left hip; +X is Sol's left).
 const GRIP_X := -0.16
 const GRIP_Y := 1.72
-const BACK_GAP := 0.07
+const BACK_GAP := 0.043
 const BLADE_DIR := Vector3(0.45, -0.89, 0.0)
 static var _back_z := 0.0 # the coat's back surface (measured once from the coat mesh)
 
@@ -113,9 +113,9 @@ func fit_scabbard() -> void:
 		c.queue_free()
 	var blade_len := 0.0
 	var guard_z := 0.05
-	var half_w := 0.025
-	var half_t := 0.006
 	var guard_w := 0.0
+	var lo := Vector3(INF, INF, 0)
+	var hi := Vector3(-INF, -INF, 0)
 	var inv := carrier.global_transform.affine_inverse() if carrier.is_inside_tree() else Transform3D()
 	for mi in carrier.find_children("*", "MeshInstance3D", true, false):
 		var m := mi as MeshInstance3D
@@ -124,19 +124,21 @@ func fit_scabbard() -> void:
 		var rel: Transform3D = inv * m.global_transform if carrier.is_inside_tree() else _rel(m)
 		var v: PackedVector3Array = m.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 		for p in v:
-			var q := rel * p
-			blade_len = maxf(blade_len, q.z)
+			blade_len = maxf(blade_len, (rel * p).z)
 		for p in v:
 			var q := rel * p
 			if q.z > blade_len * 0.35 and q.z < blade_len * 0.75:
-				half_w = maxf(half_w, absf(q.y))
-				half_t = maxf(half_t, absf(q.x))
+				lo = Vector3(minf(lo.x, q.x), minf(lo.y, q.y), 0)
+				hi = Vector3(maxf(hi.x, q.x), maxf(hi.y, q.y), 0)
 			elif q.z > -0.02 and q.z < blade_len * 0.25 and absf(q.y) > guard_w:
 				guard_w = absf(q.y)
 				guard_z = q.z
-	print("scabbard fit: len %.3f guard_z %.3f half_w %.3f half_t %.3f" % [blade_len, guard_z, half_w, half_t])
-	if blade_len <= 0.1:
+	if blade_len <= 0.1 or lo.x == INF:
 		blade_len = 1.0
+		lo = Vector3(-0.01, -0.025, 0)
+		hi = Vector3(0.01, 0.025, 0)
+	var mid := (lo + hi) * 0.5 # the blade's cross-section centre (not always on the grip axis)
+	var size := hi - lo
 	var mouth := guard_z + 0.015
 	var body_len := maxf(blade_len - mouth + 0.02, 0.3)
 	var leather := StandardMaterial3D.new()
@@ -148,14 +150,14 @@ func fit_scabbard() -> void:
 	iron.metallic = 0.8
 	iron.roughness = 0.4
 	var box := BoxMesh.new()
-	box.size = Vector3(half_t * 2.0 + 0.016, half_w * 2.0 + 0.018, body_len)
-	_part(box, leather, Vector3(0, 0, mouth + body_len * 0.5))
+	box.size = Vector3(size.x + 0.012, size.y + 0.014, body_len)
+	_part(box, leather, Vector3(mid.x, mid.y, mouth + body_len * 0.5))
 	var throat := BoxMesh.new()
-	throat.size = Vector3(half_t * 2.0 + 0.024, half_w * 2.0 + 0.028, 0.05)
-	_part(throat, iron, Vector3(0, 0, mouth + 0.025))
+	throat.size = Vector3(size.x + 0.02, size.y + 0.024, 0.05)
+	_part(throat, iron, Vector3(mid.x, mid.y, mouth + 0.025))
 	var chape := BoxMesh.new()
-	chape.size = Vector3(half_t * 2.0 + 0.022, half_w * 2.0 + 0.024, 0.06)
-	_part(chape, iron, Vector3(0, 0, mouth + body_len - 0.03))
+	chape.size = Vector3(size.x + 0.018, size.y + 0.02, 0.06)
+	_part(chape, iron, Vector3(mid.x, mid.y, mouth + body_len - 0.03))
 
 
 func _rel(n: Node3D) -> Transform3D:
