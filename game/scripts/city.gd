@@ -72,6 +72,12 @@ var cache_spots: Array = []
 var road_points := PackedVector3Array()
 ## Block cells (Vector2i) that got buildings, and every cell whose edges are streets.
 var block_cells: Array = []
+## Old Quarter rows whose block runs on over the next row (40 m long blocks, no cross street).
+const LONG_BLOCK_J := [-3, 1]
+## Street segments built over by a long block: Vector3i(line, cell, axis) as in _build_streets.
+var filled_segs := {}
+## Sub-cell centre -> bitmask of its sides that face into its own long block (1 +z, 2 -z).
+var inner_sides := {}
 var street_cells := {}
 var sign_spots: Array = []
 var _t := 0.0
@@ -1332,6 +1338,11 @@ func build() -> void:
 	add_child(car_bodies)
 	_build_ground()
 	# the Old Quarter grid round the cathedral plaza
+	# Owner's playtest: "in the city part the streets are too short". The north-south streets
+	# now run unbroken past 40 m blocks (the cross streets at z = -40 and z = 40 are built over),
+	# so each avenue reads as one long canyon of galleries out to the cathedral and the pines
+	# (concept 12). Every crossing that remains is still a road point; the avenues are intact.
+	var consumed := {}
 	for i in range(Layout.OQ_I[0], Layout.OQ_I[1]):
 		for j in range(Layout.OQ_J[0], Layout.OQ_J[1]):
 			street_cells[Vector2i(i, j)] = true
@@ -1341,7 +1352,15 @@ func build() -> void:
 				continue
 			if cz == -30.0 and absf(cx) == 10.0:
 				continue # the cathedral takes these two blocks
-			_build_block(cx, cz, "quarter")
+			if consumed.has(Vector2i(i, j)):
+				continue
+			var span := 1
+			if j in LONG_BLOCK_J and not (j == -3 and (i == -1 or i == 0)):
+				span = 2 # (behind the cathedral the z = -40 street stays: it's its back lane)
+			for k in range(1, span):
+				consumed[Vector2i(i, j + k)] = true
+				filled_segs[Vector3i(j + k, i, 1)] = true
+			_build_block(cx, j * GRID + GRID * span * 0.5, "quarter", span)
 	# the Velvet Mile: grand blocks either side of the boulevard
 	for i in range(Layout.VM_I[0], Layout.VM_I[1]):
 		if i == Layout.VM_MILE_I:
@@ -1487,6 +1506,8 @@ func _collect_grid_spots() -> void:
 	for k in mini(cells.size(), 22):
 		var b: Vector2 = cells[k]
 		var side := r.randi_range(0, 3)
+		if side < 2 and (int(inner_sides.get(b, 0)) & (1 << side)) != 0:
+			side += 2 # the inside of a long block: put it on an avenue side instead
 		var n: Vector3 = [Vector3(0, 0, 1), Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(-1, 0, 0)][side]
 		var t := Vector3.UP.cross(n)
 		var p: Vector3 = Vector3(b.x, 0.1, b.y) + n * 4.9 + t * r.randf_range(-3.5, 3.5)
@@ -1692,22 +1713,42 @@ func _district(cx: float, cz: float) -> String:
 	return Layout.district_at(cx, cz)
 
 
-func _build_block(cx: float, cz: float, dist: String) -> void:
+func _build_block(cx: float, cz: float, dist: String, span := 1) -> void:
 	ck = _chunk_of(cx, cz)
 	_near = maxf(absf(cx), absf(cz)) <= 40.0
-	block_cells.append(Vector2(cx, cz))
+	var hz := GRID * span * 0.5 # half the block's length along z
+	for k in span:
+		var sc := Vector2(cx, cz - hz + GRID * (k + 0.5))
+		block_cells.append(sc)
+		if span > 1:
+			inner_sides[sc] = (1 if k < span - 1 else 0) | (2 if k > 0 else 0)
 	var walk_col := Color(1, 1, 1) if dist != "quarter" else Color(0.72, 0.66, 0.6)
-	_slab(cx - GRID * 0.5 + ROAD_HALF, cz - GRID * 0.5 + ROAD_HALF, cx + GRID * 0.5 - ROAD_HALF, cz + GRID * 0.5 - ROAD_HALF,
+	_slab(cx - GRID * 0.5 + ROAD_HALF, cz - hz + ROAD_HALF, cx + GRID * 0.5 - ROAD_HALF, cz + hz - ROAD_HALF,
 		"sidewalk" if dist != "quarter" else "cobble_fan", walk_col, Color(0.62, 0.6, 0.57))
 	# split the lot into parcels
 	var L := LOT
+	var Lz := hz - FACADE
 	var parcels: Array = []
 	var pattern := rng.randi_range(0, 4)
 	if dist == "quarter":
 		pattern = [1, 2, 3, 4][rng.randi() % 4]
 	elif dist == "docks":
 		pattern = [0, 0, 1, 2][rng.randi() % 4]
+	if span > 1:
+		pattern = 9 # a long block: a terrace of townhouses down each avenue
 	match pattern:
+		9:
+			# rows across the block, 6.5-10 m deep, some split into two houses back to back
+			var z := -Lz
+			while z < Lz - 0.01:
+				var dz := rng.randf_range(6.5, 10.0)
+				var z1 := Lz if Lz - (z + dz) < 5.0 else z + dz
+				if rng.randf() < 0.55:
+					var sx := rng.randf_range(-1.2, 1.2)
+					parcels.append([-L, z, sx, z1]); parcels.append([sx, z, L, z1])
+				else:
+					parcels.append([-L, z, L, z1])
+				z = z1
 		0:
 			parcels.append([-L, -L, L, L])
 		1:
@@ -1729,7 +1770,7 @@ func _build_block(cx: float, cz: float, dist: String) -> void:
 	var alley_sides := {} # parcel index -> facade side that faces the alley
 	var alley_p := {"quarter": 0.45, "midtown": 0.6, "docks": 0.6, "velvet": 0.35}
 	# (never on the blocks lining the x = 0 avenue, which keeps its gallery fronts unbroken)
-	if (pattern == 1 or pattern == 2) and rng.randf() < alley_p[dist] and not (dist == "quarter" and absf(cx) == 10.0):
+	if span == 1 and (pattern == 1 or pattern == 2) and rng.randf() < alley_p[dist] and not (dist == "quarter" and absf(cx) == 10.0):
 		var AW := 2.8
 		var s := clampf((parcels[0][2] if pattern == 1 else parcels[0][3]), -0.8, 0.8)
 		if pattern == 1:
@@ -1755,13 +1796,16 @@ func _build_block(cx: float, cz: float, dist: String) -> void:
 		spec["z0"] = cz + p[1]
 		spec["x1"] = cx + p[2]
 		spec["z1"] = cz + p[3]
-		spec["bc"] = Vector2(cx, cz)
+		# the street-cell centre this parcel faces (a long block spans several; lamps stand at
+		# each cell's mid-point and the gallery columns step round them)
+		var pcz: float = cz + (p[1] + p[3]) * 0.5
+		spec["bc"] = Vector2(cx, cz - hz + GRID * (clampi(floori((pcz - (cz - hz)) / GRID), 0, span - 1) + 0.5))
 		spec["alley"] = alley_sides.get(pi, -1)
 		if spec.alley >= 0 and dist == "quarter":
 			spec["wall"] = "brick" # alley walls are bare brick even in the Quarter
 			spec["wcol"] = BRICK[rng.randi() % BRICK.size()]
 		# which sides face a street
-		spec["ext"] = [is_equal_approx(p[3], L), is_equal_approx(p[1], -L), is_equal_approx(p[2], L), is_equal_approx(p[0], -L)]
+		spec["ext"] = [is_equal_approx(p[3], Lz), is_equal_approx(p[1], -Lz), is_equal_approx(p[2], L), is_equal_approx(p[0], -L)]
 		var H := _building(spec)
 		var fp := Rect2(cx + p[0], cz + p[1], p[2] - p[0], p[3] - p[1])
 		hlod_box(fp, H, spec.wcol)
@@ -2186,6 +2230,10 @@ func _gallery(spec: Dictionary, f: Facade, levels: int) -> void:
 		var k1 := lace.v.size()
 		fbox(metal, f, u - 0.05, 0.0, u + 0.05, roof_y - 0.14, D - 0.15, D - 0.05, Color.WHITE, false)
 		_solid_uv(lace, k1)
+		# QA2 #8: the iron columns were ghosts (Sol, enemies and the camera passed through them)
+		post_collider(f.p(u, 0, D - 0.1), 0.09, roof_y)
+	# ... and the gallery decks stop the camera arm instead of letting it poke through the floor
+	cam_blocker(f.p(f.w * 0.5, gh - 0.07, D * 0.5), Vector3(f.w, 0.3, D), Basis(f.r, Vector3.UP, f.n))
 	# hanging ferns in baskets between the columns
 	for k in levels:
 		var y := gh + (k + 1) * fh - 0.14 if k + 1 < levels else roof_y - 0.14
@@ -2663,24 +2711,39 @@ func _palm(p: Vector3) -> void:
 	body.add_child(cs)
 
 
+## V6 (critic R2): the plaza's trees were flat black cards. Now a live oak hung with Spanish
+## moss, from the same textured tree builder as the bayou cypress (one draw, plus a cheap
+## shadow proxy), each one turned and scaled a little differently.
+var _oak_mesh: ArrayMesh
+var _oak_shadow: ArrayMesh
+
+
 func _tree(p: Vector3) -> void:
-	var m := _b("metal")
-	var bark := Color(0.2, 0.16, 0.13)
-	cyl(m, p, 0.42, 0.3, 2.6, 8, bark, false)
-	var lv := _b("leaves")
-	# low, spreading boughs
-	for k in 5:
-		var a := k * TAU / 5.0 + rng.randf() * 0.5
-		var tip := p + Vector3(cos(a) * 3.0, rng.randf_range(3.3, 4.3), sin(a) * 3.0)
-		beam(m, p + Vector3(0, 2.4, 0), tip, 0.22, 0.22, bark)
-		_foliage(lv, tip + Vector3(0, 0.3, 0), rng.randf_range(1.6, 2.2))
-	_foliage(lv, p + Vector3(0, 5.0, 0), 2.6)
+	const Trees = preload("res://scripts/map/trees.gd")
+	if _oak_mesh == null:
+		_oak_mesh = Trees.cypress_mesh(9.5, 811)
+		_oak_shadow = Trees.shadow_mesh(9.5, 4.0, 4.5)
+	var s := rng.randf_range(0.95, 1.12)
+	var xf := Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s * 1.15, s, s * 1.15)), p - Vector3(0, 0.1, 0))
+	var oak := MeshInstance3D.new()
+	oak.name = "PlazaOak"
+	oak.mesh = _oak_mesh
+	oak.transform = xf
+	oak.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	oak.visibility_range_end = 140.0
+	add_child(oak)
+	var sh_mi := MeshInstance3D.new()
+	sh_mi.mesh = _oak_shadow
+	sh_mi.transform = xf
+	sh_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+	sh_mi.visibility_range_end = 60.0
+	add_child(sh_mi)
 	var body := StaticBody3D.new()
 	body.position = p
 	collider_root.add_child(body)
 	var cs := CollisionShape3D.new()
 	var sh := CylinderShape3D.new()
-	sh.radius = 0.4
+	sh.radius = 1.0 * s # the flared buttress roots of the trunk (QA2: colliders match the mesh)
 	sh.height = 3.0
 	cs.shape = sh
 	cs.position.y = 1.5
@@ -2928,6 +2991,8 @@ func _build_streets() -> void:
 		var a := sk.x
 		var b := sk.y
 		var axis := sk.z
+		if filled_segs.has(sk):
+			continue # built over by a long block
 		var s := a * GRID
 		if true:
 			var g0 := b * GRID
@@ -3168,6 +3233,8 @@ func _sidewalk_props() -> void:
 		var cz := bc.y
 		if true:
 			for side in 4:
+				if side < 2 and (int(inner_sides.get(bc, 0)) & (1 << side)) != 0:
+					continue # that side is the inside of a long block
 				var n: Vector3 = [Vector3(0, 0, 1), Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(-1, 0, 0)][side]
 				var r := Vector3.UP.cross(n)
 				var face := Vector3(cx, WALK_TOP, cz) + n * LOT
@@ -3490,10 +3557,10 @@ const WetMats = preload("res://scripts/wet_materials.gd")
 
 
 func _make_map_materials() -> void:
-	M["mud"] = WetMats._make(Color(0.085, 0.062, 0.042), 0.62, 1.0) # rutted wet dirt roads
-	M["earth"] = WetMats._make(Color(0.04, 0.038, 0.03), 0.08, 0.8) # forest floor, cemetery gravel
+	M["mud"] = WetMats._make(Color(0.085, 0.062, 0.042), 0.62, 0.45) # rutted wet dirt roads
+	M["earth"] = WetMats._make(Color(0.04, 0.038, 0.03), 0.08, 0.4) # forest floor, cemetery gravel
 	M["earth"].set_shader_parameter("damp_roughness", 0.7)
-	M["dock"] = WetMats._make(Color(0.1, 0.098, 0.095), 0.3, 0.7) # quay concrete
+	M["dock"] = WetMats.concrete(Color(0.16, 0.155, 0.15)) # quay and tank-farm concrete
 	# open water: near-black with a weak, glossy sheen (a full mirror reads as snow at grazing angles)
 	M["water"] = Terrain.river_mat # the river: the terrain's water shader (moving normals, fresnel)
 	M["swamp"] = Terrain.water_mat

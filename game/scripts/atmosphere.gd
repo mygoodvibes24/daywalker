@@ -359,7 +359,7 @@ func update_lighting(d: float, night: float, full_moon: bool) -> void:
 		var pz: float = main.player.global_position.z
 		_wilds = move_toward(_wilds, clampf((-pz - 62.0) / 30.0, 0.0, 1.0), get_process_delta_time() * 0.5)
 	env.ambient_light_color = Color(0.3, 0.38, 0.6).lerp(Color(0.68, 0.7, 0.76), d)
-	env.ambient_light_energy = lerpf(0.55 if cinematic else 0.6, 0.65, d)
+	env.ambient_light_energy = lerpf(0.55 if cinematic else 0.6, 0.65, d) + 0.25 * _wilds * night
 	env.ambient_light_sky_contribution = 0.0
 	env.tonemap_exposure = (lerpf(1.25, 1.0, d) if cinematic else lerpf(1.3, 1.0, d)) * Settings.brightness
 	env.glow_intensity = lerpf(1.0, 0.45, d) * (1.0 if cinematic else 0.8)
@@ -373,7 +373,7 @@ func update_lighting(d: float, night: float, full_moon: bool) -> void:
 	else:
 		sun.light_color = Color(0.6, 0.7, 1.0) if not full_moon else Color(0.85, 0.82, 0.95)
 		# V8 (critic R2): no street lamps out in the pines and the bayou, so the moon does the work
-		sun.light_energy = (0.7 if full_moon else 0.5)
+		sun.light_energy = (0.7 if full_moon else 0.5) * (1.0 + 0.6 * _wilds)
 		sun.light_volumetric_fog_energy = 1.4
 		sky_mat.sun_angle_max = 9.0 if full_moon else 5.0
 	_update_lightning(night)

@@ -23,6 +23,7 @@ const CHUNK_CELLS := 32 # 64 m render chunks
 const LOD1_EVERY := 4 # the far LOD keeps every 4th sample (8 m)
 const LOD_RANGE := 120.0 # LOD0 up to here, LOD1 beyond
 const TOWER := Vector3(25, 0, -190)
+const LAKE_DEPTH := 1.3 # m below the surface at the middle (wadeable; Sol is 1.85 m)
 
 static var H := PackedFloat32Array() # heights, row-major (z * N + x)
 static var C := PackedColorArray() # splat hints per sample: r path, g wet, b mud, a forest litter
@@ -164,7 +165,9 @@ static func _wild(x: float, z: float, hint: Array) -> float:
 		elif s >= 0.72:
 			shore = lv - (1.0 - s) / 0.28 * 0.85
 		else:
-			shore = lv - 0.85 - (0.72 - s) / 0.72 * 4.5
+			# QA2 #19: no invisible wall any more; the bowl bottoms out chest-deep (LAKE_DEPTH), so
+			# Sol wades right across it, the water dark enough over the middle to hide the bed
+			shore = lv - 0.85 - smoothstep(0.72, 0.0, s) * (LAKE_DEPTH - 0.85)
 		var t := 1.0 - _ss(rr + 6.0, rr + 24.0, dl)
 		h = lerpf(h, shore, t)
 		if dl < rr + 6.0:
@@ -367,7 +370,6 @@ static func build_nodes(parent: Node3D) -> void:
 		for ci in chunks:
 			_chunk(parent, ci, cj)
 	_far_ring(parent)
-	_lake_fence(body)
 	_water(parent)
 
 
@@ -561,26 +563,6 @@ static func _far_ring(parent: Node3D) -> void:
 	parent.add_child(mi)
 
 
-## An invisible fence round the lake's deep middle: wade the shelf, never drown.
-static func _lake_fence(body: StaticBody3D) -> void:
-	var lp: Vector3 = Layout.LAKE.pos
-	var lv: float = Layout.LAKE.level
-	var segs := 28
-	for k in segs:
-		var a0 := TAU * k / segs
-		var a1 := TAU * (k + 1) / segs
-		var p0 := lp + Vector3(cos(a0), 0, sin(a0)) * _lake_r(lp.x + cos(a0) * 10.0, lp.z + sin(a0) * 10.0) * 0.74
-		var p1 := lp + Vector3(cos(a1), 0, sin(a1)) * _lake_r(lp.x + cos(a1) * 10.0, lp.z + sin(a1) * 10.0) * 0.74
-		var mid := (p0 + p1) * 0.5
-		var cs := CollisionShape3D.new()
-		var sh := BoxShape3D.new()
-		sh.size = Vector3(p0.distance_to(p1) + 0.6, 6.0, 0.4)
-		cs.shape = sh
-		var dir := (p1 - p0).normalized()
-		cs.transform = Transform3D(Basis(dir, Vector3.UP, dir.cross(Vector3.UP)), Vector3(mid.x, lv - 2.0, mid.z))
-		body.add_child(cs)
-
-
 # ================================================================ water
 ## The lake (a polar grid that follows the shore) and the bayou (a grid over the low ground).
 ## Vertex alpha carries the depth (0 at the shore .. 1 deep): no depth texture on the web.
@@ -588,8 +570,8 @@ static func _water(parent: Node3D) -> void:
 	# the lake
 	var lp: Vector3 = Layout.LAKE.pos
 	var lv: float = Layout.LAKE.level
-	var rings := [0.0, 0.25, 0.5, 0.7, 0.82, 0.92, 1.0, 1.08, 1.18]
-	var segs := 56
+	var rings := [0.0, 0.25, 0.5, 0.7, 0.82, 0.9, 0.96, 1.0, 1.05, 1.12, 1.2]
+	var segs := 64
 	var v := PackedVector3Array()
 	var col := PackedColorArray()
 	for ring in rings.size():
@@ -599,7 +581,7 @@ static func _water(parent: Node3D) -> void:
 			var rr := _lake_r(lp.x + dir.x * 10.0, lp.z + dir.z * 10.0)
 			var p: Vector3 = lp + dir * rr * float(rings[ring])
 			v.append(Vector3(p.x, lv, p.z))
-			col.append(Color(1, 1, 1, clampf((lv - height_at(p.x, p.z)) / 2.2, 0.0, 1.0)))
+			col.append(Color(1, 1, 1, clampf((lv - height_at(p.x, p.z)) / LAKE_DEPTH, 0.0, 1.0)))
 	var idx := PackedInt32Array()
 	for ring in rings.size() - 1:
 		for k in segs:
@@ -741,12 +723,14 @@ shader_type spatial;
 render_mode blend_mix, cull_disabled, depth_draw_opaque, diffuse_burley, specular_schlick_ggx;
 
 uniform sampler2D wave_nrm : hint_normal, filter_linear_mipmap, repeat_enable;
-uniform vec3 deep_col : source_color = vec3(0.006, 0.012, 0.012);
-uniform vec3 shallow_col : source_color = vec3(0.06, 0.055, 0.04);
-uniform vec3 sky_col : source_color = vec3(0.1, 0.11, 0.12);
-uniform float shallow_alpha = 0.35;
-uniform float deep_alpha = 0.94;
+uniform vec3 deep_col : source_color = vec3(0.004, 0.008, 0.011);
+uniform vec3 shallow_col : source_color = vec3(0.022, 0.028, 0.027);
+uniform vec3 sky_col : source_color = vec3(0.14, 0.17, 0.24);
+uniform vec3 shore_col : source_color = vec3(0.05, 0.045, 0.035);
+uniform float shallow_alpha = 0.5;
+uniform float deep_alpha = 0.97;
 uniform float flow = 1.0;
+uniform float reflect = 0.75;
 
 varying vec3 wp;
 
@@ -754,24 +738,33 @@ void vertex() {
 	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
+// V4 (critic R2): black, mirror-like water. Two scrolling ripple layers plus slow wind
+// patches; a fresnel sky reflection (bright at grazing angles, where the moon and the lamps
+// streak across it); and a shore band where the water thins over the mud instead of a hard
+// rim. No depth texture on the web: vertex alpha carries the depth (0 shore .. 1 deep).
 void fragment() {
 	vec2 p = wp.xz;
 	vec3 a = texture(wave_nrm, p * 0.045 + TIME * vec2(0.011, 0.006) * flow).rgb;
 	vec3 b = texture(wave_nrm, p * 0.13 + TIME * vec2(-0.009, 0.014) * flow).rgb;
-	vec3 nm = normalize((a + b) - 1.0) * 0.5 + 0.5;
+	vec3 c = texture(wave_nrm, p * 0.31 + TIME * vec2(0.02, -0.017) * flow).rgb;
+	float gust = smoothstep(0.35, 0.75, texture(wave_nrm, p * 0.011 + TIME * vec2(0.004, 0.002)).g);
+	vec3 nm = normalize((a + b + c * mix(0.3, 1.0, gust)) - 1.5) * 0.5 + 0.5;
 	NORMAL_MAP = nm;
-	NORMAL_MAP_DEPTH = 0.55;
+	NORMAL_MAP_DEPTH = mix(0.25, 0.6, gust);
 	float depth = COLOR.a;
-	float fres = pow(1.0 - clamp(dot(normalize(NORMAL), VIEW), 0.0, 1.0), 5.0);
-	vec3 col = mix(shallow_col, deep_col, smoothstep(0.0, 0.8, depth));
-	// a thin pale line where the water meets the shore
-	float edge = 1.0 - smoothstep(0.0, 0.07, depth);
-	col += vec3(0.08, 0.08, 0.075) * edge * (0.5 + 0.5 * a.r);
-	ALBEDO = mix(col, sky_col, fres * 0.35);
-	ALPHA = clamp(mix(shallow_alpha, deep_alpha, smoothstep(0.0, 0.6, depth)) + fres * 0.35, 0.0, 1.0) * smoothstep(-0.02, 0.05, depth + 0.04);
-	ROUGHNESS = 0.08;
+	float fres = pow(1.0 - clamp(dot(normalize(NORMAL), VIEW), 0.0, 1.0), 4.0);
+	vec3 col = mix(shallow_col, deep_col, smoothstep(0.0, 0.7, depth));
+	// the shore: wet mud colour showing through a thin film, a faint broken foam line
+	float shore = 1.0 - smoothstep(0.0, 0.18, depth);
+	col = mix(col, shore_col, shore * 0.6);
+	float foam = (1.0 - smoothstep(0.0, 0.05, depth)) * smoothstep(0.55, 0.8, a.r + b.g * 0.5);
+	col += vec3(0.05, 0.05, 0.048) * foam;
+	ALBEDO = mix(col, sky_col, clamp(fres * reflect, 0.0, 0.85));
+	float al = mix(shallow_alpha, deep_alpha, smoothstep(0.0, 0.45, depth)) + fres * 0.3;
+	ALPHA = clamp(al, 0.0, 1.0) * smoothstep(-0.02, 0.06, depth + 0.03);
+	ROUGHNESS = mix(0.02, 0.09, gust);
 	METALLIC = 0.0;
-	SPECULAR = 0.4;
+	SPECULAR = 0.6;
 }
 """
 

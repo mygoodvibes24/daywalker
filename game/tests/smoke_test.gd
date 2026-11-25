@@ -182,7 +182,13 @@ func _terrain_checks(main) -> bool:
 	ok = _check("Hollow Pines has hills (highest %.1f m)" % hmax, hmax > 12.0) and ok
 	ok = _check("the city plates stay level", absf(c.height_at(0, 0)) < 0.001 and absf(c.height_at(150, 100)) < 0.001 and absf(c.height_at(-150, 0)) < 0.001) and ok
 	var lp: Vector3 = L.LAKE.pos
-	ok = _check("the lake is deep in the middle, wadeable at the edge", c.height_at(lp.x, lp.z) < L.LAKE.level - 3.0 and c.height_at(lp.x + L.LAKE.radius * 0.9, lp.z) > L.LAKE.level - 1.0) and ok
+	# QA2 #19: no invisible wall; the whole lake is wadeable, chest-deep in the middle
+	var lake_mid: float = L.LAKE.level - c.height_at(lp.x, lp.z)
+	var fenced := false
+	for n in c.find_children("Terrain", "StaticBody3D", false, false):
+		fenced = fenced or (n as Node).get_child_count() > 1
+	ok = _check("the lake is wadeable right across (%.2f m deep in the middle), shallow at the edge, no invisible wall" % lake_mid,
+		lake_mid > 1.0 and lake_mid < 1.6 and c.height_at(lp.x + L.LAKE.radius * 0.9, lp.z) > L.LAKE.level - 1.0 and not fenced) and ok
 	var space = main.get_world_3d().direct_space_state
 	var q := PhysicsRayQueryParameters3D.create(Vector3(30, 80, -150), Vector3(30, -20, -150))
 	var hit: Dictionary = space.intersect_ray(q)
