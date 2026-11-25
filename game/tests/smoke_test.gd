@@ -95,6 +95,7 @@ func _initialize() -> void:
 	ok = await _move_checks(main) and ok
 	ok = await _fall_checks(main) and ok
 	ok = await _special_checks(main) and ok
+	ok = await _undercroft_checks(main) and ok
 	ok = await _audio_checks(main) and ok
 	ok = await _asset_r3_checks(main) and ok
 	ok = await _menu_checks(main) and ok
@@ -1210,6 +1211,134 @@ func _special_checks(main) -> bool:
 	return ok
 
 
+
+# ---------------------------------------------------------------- the Undercroft Depths
+## Walk Sol toward w (flat), holding forward like a player. Gives up after max_frames.
+func _walk_to(p, w: Vector3, max_frames := 300) -> void:
+	for n in max_frames:
+		var to: Vector3 = w - p.global_position
+		to.y = 0.0
+		if to.length() < 0.45:
+			break
+		p.cam_yaw = atan2(-to.x, -to.z)
+		Input.action_press("move_forward", 1.0)
+		await physics_frame
+	Input.action_release("move_forward")
+
+
+## The owner's report: "I couldn't go down the stairs." Sol walks down the plaza well's spiral,
+## through the red door and the tunnel into the flooded crypt, the rival daywalker fights him
+## (and is hard), dies, drops his blade, and Sol walks all the way back up to the street.
+func _undercroft_checks(main) -> bool:
+	var ok := true
+	var p = main.player
+	var d = main.depths
+	var U = load("res://scripts/map/undercroft.gd")
+	U.record_path = "user://smoke_undercroft.json"
+	if FileAccess.file_exists(U.record_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(U.record_path))
+	U.record = {}
+	_clear_enemies(main)
+	var tod: float = main.time_of_day
+	main.time_of_day = 0.9
+	var spawn_t: float = main.spawn_timer
+	main.spawn_timer = 99999.0
+	p.dead = false
+	p.max_hp = 1e9
+	p.hp = 1e9
+	ok = _check("the Undercroft Depths are built (crypt %d tris in %d meshes, %d lights, none shadowed)" % [d.budget_tris, d.budget_meshes, d.lights.size()],
+		d != null and d.budget_tris > 1000 and d.budget_tris < 250000 and d.budget_meshes <= 40 and d.lights.size() <= 8 and d.lights.all(func(l): return not l.shadow_enabled)) and ok
+	var falls0: int = p.falls
+	p.global_position = Vector3(0, 0.3, 6.0)
+	p.velocity = Vector3.ZERO
+	await _wait_physics(10)
+	var down: Array = [Vector3(0, 0, 4.5), Vector3(0, 0, 2.3)]
+	for k in 26:
+		var a := deg_to_rad(116.0 + k * 10.0)
+		down.append(Vector3(cos(a) * 2.25, 0, sin(a) * 2.25))
+	down.append_array([Vector3(1.0, 0, 1.0), Vector3(0, 0, 1.6)])
+	for w in down:
+		await _walk_to(p, w)
+	ok = _check("Sol walks down the well's spiral stair to its floor (at %s)" % p.global_position, p.global_position.y < -3.2 and p.global_position.y > -3.6 and not p.dead) and ok
+	for w in [Vector3(0, 0, 3.5), Vector3(0, 0, 8.0), Vector3(0, 0, 13.0), Vector3(0, 0, 17.0), Vector3(0, 0, 19.5), Vector3(0, 0, 22.0), Vector3(0, 0, 25.0)]:
+		await _walk_to(p, w)
+	await _wait_physics(5)
+	ok = _check("...through the door and the tunnel onto the crypt's floor (at %s, inside %s, street hidden %s)" % [p.global_position, d.inside, not main.city.visible],
+		absf(p.global_position.y - U.Y) < 0.3 and p.global_position.z > 23.0 and d.inside and not main.city.visible and absf(main.ground_y(0.0, 27.0) - U.Y) < 0.01) and ok
+	var r = d.rival
+	ok = _check("the rival daywalker waits down there", r != null and is_instance_valid(r) and not r.dead) and ok
+	if r == null or not is_instance_valid(r):
+		return false
+	var hp0: float = p.hp
+	var used := {}
+	for i in 900:
+		await physics_frame
+		if r.state == "windup":
+			used[r.atk_name] = true
+		if used.size() >= 3 and p.hp < hp0:
+			break
+	main.clear_slowmo()
+	ok = _check("Silas Crowe engages with a name plate and a health bar (%s)" % r.label.text, r.engaged and r.label.text.contains("CROWE") and r.bar.visible) and ok
+	ok = _check("...fights with Sol's moveset (%s) and draws blood (%.0f)" % [used.keys(), hp0 - p.hp], used.size() >= 2 and p.hp < hp0) and ok
+	var street_hp: float = load("res://scripts/enemy.gd").new().max_hp
+	ok = _check("...and is much tougher than a street enemy (%.0f vs %.0f)" % [r.max_hp, street_hp], r.max_hp >= street_hp * 3.0) and ok
+	# a parry in his last wind-up breaks his attack and opens a punish window
+	r.reset_to(r.home)
+	r.global_position = p.global_position + Vector3(0, 0, 2.0)
+	r.engaged = true
+	r._start("light1")
+	while r.state == "windup" and not r.parry_open():
+		await physics_frame
+	var parried: bool = r.parry_open()
+	r.on_parried(2.5)
+	ok = _check("his swing is parryable in its wind-up and a parry makes him reel", parried and r.state == "reel") and ok
+	p.hp = 1e9
+	var frames := 0
+	while not r.dead and frames < 600:
+		r.invuln_t = 0.0
+		if r.state == "guard":
+			r.state = "stalk"
+		r.take_hit(35.0, Vector3.FORWARD)
+		frames += 1
+		await physics_frame
+	await _wait_physics(20)
+	main.clear_slowmo()
+	var blade := false
+	for g in main.loot.ground_items:
+		if g.inst.id == "crowes_penance" and is_instance_valid(g.node) and absf(g.node.global_position.y - U.Y) < 1.0:
+			blade = true
+	for g in main.loot.ground_items.duplicate():
+		if g.inst.id == "crowes_penance":
+			main.loot._remove_item(g)
+	ok = _check("the rival dies and drops Crowe's Penance on the crypt floor", r.dead and d.rival_dead and blade) and ok
+	ok = _check("...and the kill is remembered (%s)" % U.record, int(U.record.get("rival_kills", 0)) == 1 and FileAccess.file_exists(U.record_path)) and ok
+	var ItemDB = load("res://scripts/items/item_db.gd")
+	var rng := RandomNumberGenerator.new()
+	var never := true
+	for i in 300:
+		rng.seed = i
+		if ItemDB.random_item(rng, true, true, 1.0).get("id", "") == "crowes_penance":
+			never = false
+	ok = _check("his blade never drops from random loot", never) and ok
+	var up: Array = [Vector3(0, 0, 22.0), Vector3(0, 0, 19.0), Vector3(0, 0, 14.0), Vector3(0, 0, 8.0), Vector3(0, 0, 3.5), Vector3(0, 0, 1.5), Vector3(1.5, 0, 0.3)]
+	for k in 26:
+		var a := deg_to_rad(366.0 - k * 10.0)
+		up.append(Vector3(cos(a) * 2.25, 0, sin(a) * 2.25))
+	up.append_array([Vector3(0, 0, 2.6), Vector3(0, 0, 5.0), Vector3(0, 0, 8.0)])
+	for w in up:
+		await _walk_to(p, w)
+	await _wait_physics(10)
+	ok = _check("Sol walks back up to the plaza (at %s, inside %s, street shown %s, falls %d)" % [p.global_position, d.inside, main.city.visible, p.falls - falls0],
+		absf(p.global_position.y - main.ground_y(p.global_position.x, p.global_position.z)) < 0.5 and p.global_position.z > 6.0 and not d.inside and main.city.visible and p.falls == falls0 and d.rival == null) and ok
+	if FileAccess.file_exists(U.record_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(U.record_path))
+	U.record = {}
+	main.time_of_day = tod
+	main.spawn_timer = spawn_t
+	p.max_hp = 100.0
+	p.hp = 100.0
+	return ok
+
 ## QA2 #1: the parry works in a boss fight. A boss swipe in its last wind-up is turned aside (the
 ## boss reels, no chain), and an add standing after the boss in enemies_root is still parried.
 func _boss_parry_checks(m, boss) -> bool:
@@ -1470,6 +1599,11 @@ func _hunt_checks() -> bool:
 	ok = _check("...and deploys away from the plaza (point %.0f m out, Sol %.0f m out)" % [Vector2(dp0.x, dp0.z).length(), Vector2(p0.global_position.x, p0.global_position.z).length()],
 		Vector2(dp0.x, dp0.z).length() > 50.0 and Vector2(p0.global_position.x, p0.global_position.z).length() > 40.0) and ok
 	await _wait_physics(20)
+	var uc_poi = null
+	for poi in h0.pois:
+		if poi.type == "undercroft":
+			uc_poi = poi
+	ok = _check("the Hunt map shows the Undercroft Depths (a combat site on the plaza well)", uc_poi != null and uc_poi.is_combat() and not uc_poi.cleared and uc_poi.distance_to(Vector3.ZERO) < 1.0) and ok
 	h0.deploy.finish()
 	p0.hp = 1e9
 	p0.max_hp = 1e9

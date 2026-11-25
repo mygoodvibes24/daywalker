@@ -70,6 +70,7 @@ var max_hp := MAX_HP
 var hp := MAX_HP
 var body_radius := 0.45
 var body_height := 1.9
+var tithe_value := 220 # progression.kill_value: an elite's worth (a vampire is 8)
 
 var state := "wait" # wait, taunt, stalk, windup, strike, follow, recover, reel, guard, backstep, roar, feed
 var state_t := 0.0

@@ -125,7 +125,7 @@ func _plan_lights() -> void:
 			var r := rng.randf_range(0.028, 0.045)
 			candle_xfs.append(Transform3D(Basis().scaled(Vector3(r / 0.04, h / 0.3, r / 0.04)), p + off))
 		halo_xfs.append(Transform3D(Basis().scaled(Vector3.ONE * (0.9 + 0.12 * n)), p + Vector3(0, 0.45, 0)))
-		bake.append([p + Vector3(0, 0.4, 0), warm * (0.55 + 0.12 * n) * float(c[3]), 2.6 + 0.35 * n])
+		bake.append([p + Vector3(0, 0.4, 0), warm * (0.75 + 0.15 * n) * float(c[3]), 3.0 + 0.4 * n])
 	# blood fridges (east), the subway lantern, the window lit from the cathedral (south)
 	bake.append([Vector3(8.2, Y + 1.2, 17.3), Color(1.0, 0.05, 0.04) * 2.6, 5.5])
 	bake.append([Vector3(7.6, Y + 1.9, 30.2), warm * 1.6, 5.0])
@@ -182,9 +182,9 @@ float vn(vec2 p) {
 void fragment() {
 	float t = TIME * 0.35;
 	vec2 p = wp.xz;
-	float n1 = vn(p * 1.7 + vec2(t, t * 0.6));
-	float n2 = vn(p * 3.9 - vec2(t * 0.8, t * 1.3));
-	vec3 nrm = normalize(vec3((n1 - 0.5) * 0.5 + (n2 - 0.5) * 0.25, 1.0, (n2 - 0.5) * 0.5 - (n1 - 0.5) * 0.2));
+	float n1 = vn(p * 0.9 + vec2(t, t * 0.6));
+	float n2 = vn(p * 2.1 - vec2(t * 0.8, t * 1.3));
+	vec3 nrm = normalize(vec3((n1 - 0.5) * 0.22 + (n2 - 0.5) * 0.1, 1.0, (n2 - 0.5) * 0.22 - (n1 - 0.5) * 0.08));
 	NORMAL = normalize((VIEW_MATRIX * vec4(nrm, 0.0)).xyz);
 	ALBEDO = vec3(0.004, 0.005, 0.006);
 	ROUGHNESS = 0.04;
@@ -249,7 +249,7 @@ func _lib(name: String) -> Array:
 	return out
 
 
-func _crypt_mat(tex: String, tile: float, tint: Color, wet := 0.3, albedo_mul := 0.5) -> ShaderMaterial:
+func _crypt_mat(tex: String, tile: float, tint: Color, wet := 0.3, albedo_mul := 0.7) -> ShaderMaterial:
 	var sh := Shader.new()
 	sh.code = CRYPT_SHADER
 	if not mats.has("_crypt_shader"):
@@ -389,7 +389,7 @@ class Geo:
 	var col := PackedColorArray()
 	var idx := PackedInt32Array()
 	var bake: Array
-	var ambient := Color(0.035, 0.032, 0.036)
+	var ambient := Color(0.075, 0.062, 0.06)
 
 	func _init(b: Array) -> void:
 		bake = b
@@ -515,6 +515,8 @@ class Geo:
 
 
 var _geos := {} # "band|mat" -> Geo
+var budget_tris := 0 # merged crypt + tunnel geometry (the smoke test's budget check)
+var budget_meshes := 0
 
 
 func G(mat: String, band := "t") -> Geo:
@@ -548,6 +550,8 @@ func _flush_geo(parent: Node3D, prefix: String) -> void:
 		mi.mesh = g.mesh(mats[mat])
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		parent.add_child(mi)
+		budget_tris += g.idx.size() / 3
+		budget_meshes += 1
 		_geos.erase(key)
 
 
@@ -1218,11 +1222,11 @@ func _build_env() -> void:
 	env.background_color = Color(0, 0, 0)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.3, 0.27, 0.3)
-	env.ambient_light_energy = 0.32
+	env.ambient_light_energy = 0.6
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_white = 6.0
-	env.tonemap_exposure = 1.25
+	env.tonemap_exposure = 1.6
 	env.glow_enabled = true
 	env.glow_normalized = false
 	env.glow_intensity = 0.85
@@ -1254,8 +1258,9 @@ func _process(delta: float) -> void:
 	_flag_drop()
 	var cp := cam.global_position
 	var pp: Vector3 = p.global_position
-	var near_well := Vector2(pp.x, pp.z).length() < 26.0
-	tunnel_root.visible = near_well or inside
+	# the tunnel only once the eye is down the well (from the street the door shows just its glow)
+	var near_well := Vector2(pp.x, pp.z).length() < 8.0 and (cp.y < 0.3 or pp.y < -0.8)
+	tunnel_root.visible = near_well or inside or contains(pp)
 	hall_root.visible = inside or (cp.y < -2.0 and ZONE.has_point(Vector2(cp.x, cp.z))) or (pp.y < -3.0 and ZONE.has_point(Vector2(pp.x, pp.z)))
 	var want := inside
 	if not inside and cp.y < ENTER_Y and ZONE.has_point(Vector2(cp.x, cp.z)) and pp.y < ENTER_Y + 1.0:
@@ -1299,7 +1304,7 @@ func _set_inside(on: bool) -> void:
 			env.tonemap_exposure = street.tonemap_exposure
 		p.camera.environment = env
 		var tw := create_tween()
-		tw.tween_property(env, "tonemap_exposure", 1.25 * Settings.brightness, 0.8)
+		tw.tween_property(env, "tonemap_exposure", 1.6 * Settings.brightness, 0.8)
 	else:
 		for n in _hidden:
 			if is_instance_valid(n):
