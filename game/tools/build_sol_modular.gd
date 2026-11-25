@@ -49,6 +49,14 @@ const CUTS := {
 	"judgment": [["judgment", 0.3, 2.1, false]], # Sword_Judgment: the killing cut at 1.03 s
 	"parry": [["parry", 0.0, 1.2, false]], # Sword_Parry: a held guard
 	"quick_slash": [["quick_slash", 0.1, 1.25, false]], # Right_Hand_Sword_Slash: strike at 0.57 s
+	# the Arsenal clips (round 4, scripts/items/arsenal_moves.gd)
+	# Heavy_Hammer_Swing: wind-up 0.4-1.2 s (the hammer rises over the head), the slam lands at 1.55 s
+	"hammer_swing": [["hammer", 0.3, 1.87, false], ["hammer_slam", 1.05, 1.87, false]],
+	# Axe_Spin_Attack: a full turn, the sweep's fastest moment at 0.92 s
+	"axe_spin": [["axe_spin", 0.1, 1.6, false], ["axe_sweep", 0.6, 1.35, false]],
+	# Double_Blade_Spin: a 2 m lunging flurry, right 0.45 / spin 0.85 / left 1.35 / right 1.55 s; the
+	# crouched hold after 1.8 s is cut off
+	"double_spin": [["dspin", 0.2, 1.9, false], ["dspin_a", 0.25, 1.1, false], ["dspin_b", 1.0, 1.85, false]],
 }
 const LOOPED := ["idle", "run", "sprint", "stance"]
 ## Sol's standing idle: Idle_02 (a calm, grounded breathing stance, 1.9 s loop) replaced the rig's own
@@ -230,6 +238,17 @@ func _initialize() -> void:
 	blade.owner = root
 	blade.transform = bone_rest_g[skel.find_bone("RightHand")].affine_inverse() * fist_r * tunnel
 	blade.transform.basis = blade.transform.basis.orthonormalized()
+	# the left-hand socket (twin daggers, scripts/items/weapon_visual.gd): the same tunnel in the mirrored
+	# fist; the mirror flips the frame's handedness, so the flat axis (+X, symmetric) is flipped back
+	var blade_l := Node3D.new()
+	blade_l.name = "BladeL"
+	hl.add_child(blade_l)
+	blade_l.owner = root
+	var bl_xf := bone_rest_g[skel.find_bone("LeftHand")].affine_inverse() * _fist_xf("Left") * tunnel
+	var bl_b := bl_xf.basis.orthonormalized()
+	if bl_b.determinant() < 0.0:
+		bl_b.x = -bl_b.x
+	blade_l.transform = Transform3D(bl_b, bl_xf.origin)
 	var ext := _fist_extent(tunnel)
 	print("fist tunnel: centre %s, fist spans %.3f m toward the thumb, %.3f m toward the little finger" % [TUNNEL_CENTRE, ext.x, ext.y])
 	for sname in SWORDS:
