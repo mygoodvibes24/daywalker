@@ -97,6 +97,7 @@ func _initialize() -> void:
 	ok = await _special_checks(main) and ok
 	ok = await _audio_checks(main) and ok
 	ok = await _asset_r3_checks(main) and ok
+	ok = await _cemetery_checks(main) and ok
 	ok = await _menu_checks(main) and ok
 	ok = await _hunt_checks() and ok
 	ok = _download_checks() and ok
@@ -860,6 +861,110 @@ func _asset_r3_checks(main) -> bool:
 	main.game_over = was_over
 	for n in ["wolf_roar", "claw_swipe", "pounce_whoosh", "lunge_whoosh", "body_fall", "boss_slam_impact"]:
 		ok = _check("creature SFX loads: " + n, audio._pick(n) != null) and ok
+	return ok
+
+
+## St. Roch Cemetery (map/cemetery.gd, world/crows.gd): the groundskeeper's shed and the open
+## grave exist and block, the grave furniture stays inside its share of the web budget, and crows
+## take off when Sol walks up to them or swings nearby.
+func _cemetery_checks(main) -> bool:
+	var ok := true
+	var city = main.city
+	var p = main.player
+	_clear_enemies(main)
+	main.spawn_timer = 9999.0
+	var info: Dictionary = city.get_meta("cemetery", {})
+	ok = _check("cemetery built (%d headstones)" % int(info.get("stones", 0)), int(info.get("stones", 0)) > 400) and ok
+	var shed: Rect2 = info.get("shed", Rect2())
+	ok = _check("the groundskeeper's shed exists, lit, with its keeper", city.get_node_or_null("GroundskeeperShed") != null and shed.size.x > 2.0 and city.get_meta("gy_keeper", null) != null and (city.get_meta("gy_keeper") as Node).lights.size() >= 3) and ok
+	# the shed is solid: a ray across it hits
+	var space: PhysicsDirectSpaceState3D = city.get_world_3d().direct_space_state
+	var sc := Vector3(shed.get_center().x, 1.2, shed.get_center().y)
+	var q := PhysicsRayQueryParameters3D.create(sc + Vector3(-6, 0, 0), sc, 1)
+	ok = _check("the shed has collision", not space.intersect_ray(q).is_empty()) and ok
+	# the open grave: a hole with a collider over it (Sol can't walk into it)
+	var hole: Rect2 = info.get("hole", Rect2())
+	var hc := Vector3(hole.get_center().x, 0, hole.get_center().y)
+	var hits := 0
+	for off in [Vector3.ZERO, Vector3(hole.size.x * 0.4, 0, 0), Vector3(-hole.size.x * 0.4, 0, hole.size.y * 0.4)]:
+		var rq := PhysicsRayQueryParameters3D.create(hc + off + Vector3(0, 4, 0), hc + off + Vector3(0, -3, 0), 1)
+		var h := space.intersect_ray(rq)
+		if not h.is_empty() and h.position.y > 0.05:
+			hits += 1
+	ok = _check("the open grave has collision (%d/3 probes)" % hits, hole.size.x > 0.5 and hits == 3 and city.get_node_or_null("OpenGrave") != null) and ok
+	# budget: the cemetery's own draw nodes and their worst-case triangles (all in range at once)
+	var nodes: Array = info.get("nodes", [])
+	var tris := 0
+	for n in nodes:
+		if n is MultiMeshInstance3D:
+			var mm: MultiMesh = n.multimesh
+			tris += mm.mesh.get_faces().size() / 3 * mm.instance_count
+		elif n is MeshInstance3D:
+			tris += n.mesh.get_faces().size() / 3
+	ok = _check("cemetery decoration inside its web budget (%d draw nodes <= 60, %dk triangles <= 260k)" % [nodes.size(), tris / 1000], nodes.size() <= 60 and tris <= 260000) and ok
+	# crows: walk Sol up to a low perched crow, it takes off; a swing scatters others nearby
+	var crows = city.get_node_or_null("Crows")
+	ok = _check("crows spawned and perched (%d)" % (crows.perched_count() if crows != null else 0), crows != null and crows.perched_count() >= 20) and ok
+	if crows == null:
+		return ok
+	var foot := Rect2(-66, 100, 132, 100)
+	var pick := -1
+	for k in crows.crows.size():
+		var cs: Dictionary = crows.crow_state(k)
+		if cs.state == "perched" and cs.pos.y < 2.0 and foot.has_point(Vector2(cs.pos.x, cs.pos.z)) and crows.crows[k].t > 1.0:
+			pick = k
+			break
+	ok = _check("a crow perched low in the cemetery", pick >= 0) and ok
+	if pick >= 0:
+		var cp: Vector3 = crows.crow_state(pick).pos
+		var t0: int = crows.takeoffs
+		var dir := Vector3(1, 0, 0)
+		var stand := cp + dir * 3.5
+		if not main.spot_clear(Vector3(stand.x, main.ground_y(stand.x, stand.z) + 0.9, stand.z)):
+			stand = cp - dir * 3.5
+		p.velocity = Vector3.ZERO
+		p.global_position = Vector3(stand.x, main.ground_y(stand.x, stand.z) + 0.2, stand.z)
+		await _wait_physics(45)
+		var st: Dictionary = crows.crow_state(pick)
+		ok = _check("a crow takes off when Sol comes within 4 m (%s, %d take-offs)" % [st.state, crows.takeoffs - t0], st.state != "perched" and crows.takeoffs > t0) and ok
+		await _wait_physics(60)
+		st = crows.crow_state(pick)
+		ok = _check("the startled crow flies off (%.1f m up and away)" % st.pos.distance_to(cp), st.state == "gone" or st.pos.distance_to(cp) > 3.0) and ok
+	# a swing scatters perched crows within the attack radius
+	var near: Dictionary = {}
+	for k in crows.crows.size():
+		var cs: Dictionary = crows.crow_state(k)
+		if cs.state == "perched" and cs.pos.y < 6.0 and foot.has_point(Vector2(cs.pos.x, cs.pos.z)) and p.global_position.distance_to(cs.pos) > 20.0:
+			near = {"k": k, "pos": cs.pos}
+			break
+	if not near.is_empty():
+		var np: Vector3 = near.pos
+		var away := Vector3(0, 0, 8.0)
+		var sp := np + away
+		if not main.spot_clear(Vector3(sp.x, 1.0, sp.z)):
+			sp = np - away
+		p.velocity = Vector3.ZERO
+		p.global_position = Vector3(sp.x, main.ground_y(sp.x, sp.z) + 0.2, sp.z)
+		await _wait_physics(5)
+		var was: String = crows.crow_state(near.k).state
+		p.attacked.emit(0, Vector3.FORWARD)
+		await _wait_physics(40)
+		ok = _check("a swing 8 m away scatters a perched crow (%s -> %s)" % [was, crows.crow_state(near.k).state], crows.crow_state(near.k).state != "perched") and ok
+	# the keeper says his line when Sol walks up (subtitle; text-only voice)
+	var keeper = city.get_meta("gy_keeper", null)
+	if keeper != null:
+		var kp: Vector3 = keeper.global_position + Vector3(2.5, 0, 0)
+		p.global_position = Vector3(kp.x, main.ground_y(kp.x, kp.z) + 0.2, kp.z)
+		var dlg = root.get_node("Dialogue")
+		dlg.stop_all()
+		var was_unlocked: bool = root.get_node("Audio").unlocked
+		root.get_node("Audio").unlocked = true
+		keeper._talk_cd = 0.0
+		await _wait_physics(10)
+		ok = _check("the groundskeeper speaks when Sol comes near (%s)" % dlg.subtitle_text(), keeper.spoke >= 1 and dlg.subtitle_text().begins_with("OLD AMOS")) and ok
+		dlg.stop_all()
+		root.get_node("Audio").unlocked = was_unlocked
+	main.spawn_timer = 4.0
 	return ok
 
 

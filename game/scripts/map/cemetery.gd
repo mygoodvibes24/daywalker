@@ -347,7 +347,8 @@ static func _grass(c, s: Ctx) -> void:
 	var r := s.r
 	var n := 0
 	var tries := 0
-	while n < 2600 and tries < 9000:
+	var want := int(2600 * Crows.density(c))
+	while n < want and tries < 9000:
 		tries += 1
 		var x := r.randf_range(X0 + 0.6, X1 - 0.6)
 		var z := r.randf_range(Z0 + 0.6, Z1 - 0.6)

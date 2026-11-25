@@ -23,6 +23,8 @@ const CASCADE_R := 7.0 # a crow taking off startles its neighbours
 const MAX_CROWS := 72
 const RESPAWN := Vector2(35.0, 80.0) # seconds before a crow that flew off turns up again
 const META := "crow_perches"
+const SCAN := 0.12 # seconds between proximity scans (distance only, no raycasts)
+const IDLE_R := 70.0 # perched crows further than this from Sol skip their idle animation
 
 enum { PERCHED, FLYING, GONE }
 
@@ -66,6 +68,8 @@ var _players: Array[AudioStreamPlayer3D] = []
 var _ambient_t := 6.0
 var _connected := false
 var takeoffs := 0 # crows that have taken off (tests, debug)
+var max_crows := MAX_CROWS # scaled down on weak devices (Settings tier / foliage density)
+var _scan_t := 0.0
 
 
 ## Register a perch on the host (the city) while it is being built.
@@ -96,7 +100,7 @@ static func spawn(host: Node3D) -> Node3D:
 
 func add_perch_now(pos: Vector3, yaw: float = INF, occupy := false) -> void:
 	perches.append({"pos": pos, "yaw": rng.randf() * TAU if yaw == INF else yaw, "busy": false})
-	if occupy and _ready_done and crows.size() < MAX_CROWS:
+	if occupy and _ready_done and crows.size() < max_crows:
 		_new_crow(perches.size() - 1)
 
 
@@ -105,8 +109,23 @@ func _ready() -> void:
 	_build_mesh()
 
 
+## How much decoration this device can afford (0.3 .. 1): the Performance agent's
+## Settings.foliage_density when it exists, else a cut on the web tier.
+static func density(host: Node = null) -> float:
+	var ml := Engine.get_main_loop() as SceneTree
+	var st: Node = ml.root.get_node_or_null("Settings") if ml != null else null
+	if st != null:
+		var fd = st.get("foliage_density")
+		if fd is float or fd is int:
+			return clampf(float(fd), 0.3, 1.0)
+	if host != null and host.get("web_tier") == true:
+		return 0.6
+	return 1.0
+
+
 func _setup() -> void:
 	_ready_done = true
+	max_crows = int(MAX_CROWS * density(get_parent()))
 	var host := get_parent()
 	var all: Array = host.get_meta(META, []).duplicate()
 	for f: Callable in host.get_meta(META + "_providers", []):
@@ -117,7 +136,7 @@ func _setup() -> void:
 	var order := range(perches.size())
 	order.shuffle()
 	for k in order:
-		if crows.size() >= MAX_CROWS * 0.8:
+		if crows.size() >= max_crows * 0.8:
 			break
 		if rng.randf() < 0.55:
 			_new_crow(k)
@@ -126,7 +145,7 @@ func _setup() -> void:
 
 func _new_crow(k: int) -> void:
 	var c := Crow.new()
-	c.scale = rng.randf_range(0.85, 1.12)
+	c.scale = rng.randf_range(1.1, 1.4) # a touch larger than life so they read at play distance
 	_settle(c, k)
 	c.idle_t = rng.randf_range(0.2, 3.0)
 	crows.append(c)
@@ -490,10 +509,15 @@ func _process(delta: float) -> void:
 		var v = player.get("velocity")
 		run = v is Vector3 and Vector2(v.x, v.z).length() > 6.5
 	var scare := SCARE_R_RUN if run else SCARE_R
+	# proximity is checked on a timer, not every frame: a plain distance test per perched crow
+	_scan_t -= dt
+	var scan := _scan_t <= 0.0
+	if scan:
+		_scan_t = SCAN
 	for c: Crow in crows:
 		match c.state:
 			PERCHED:
-				_perched(c, dt, pp, scare)
+				_perched(c, dt, pp, scare, scan)
 			FLYING:
 				_flying(c, dt, pp)
 			GONE:
@@ -504,10 +528,10 @@ func _process(delta: float) -> void:
 	_upload()
 
 
-func _perched(c: Crow, dt: float, pp: Vector3, scare: float) -> void:
+func _perched(c: Crow, dt: float, pp: Vector3, scare: float, scan: bool) -> void:
 	c.t += dt
-	var d := c.pos.distance_to(pp)
-	if c.delay < 0.0 and d < scare and c.t > 0.6:
+	var d := c.pos.distance_squared_to(pp)
+	if scan and c.delay < 0.0 and d < scare * scare and c.t > 0.6:
 		c.delay = rng.randf_range(0.0, 0.12)
 		c.away = c.pos - pp
 	if c.delay >= 0.0:
@@ -516,6 +540,9 @@ func _perched(c: Crow, dt: float, pp: Vector3, scare: float) -> void:
 		if c.delay < 0.0:
 			_take_off(c, pp)
 		return
+	if d > IDLE_R * IDLE_R:
+		return # too far for anyone to see it fidget
+	d = sqrt(d)
 	# idle: look about, peck, shuffle round, hop to face somewhere else, ruffle the wings
 	c.idle_t -= dt
 	if c.idle_t <= 0.0:
