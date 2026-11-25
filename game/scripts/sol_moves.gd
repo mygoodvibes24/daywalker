@@ -65,11 +65,33 @@ const FALLBACK := {"clip": "slash", "from": 0.12, "to": 0.68, "hit": 0.32, "spee
 const FALLBACK_BACK := {"clip": "slash_back", "from": 0.2, "to": 0.68, "hit": 0.38, "speed": 1.6, "lunge": 0.7}
 
 
+## The Arsenal (round 4): the new weapon types' chains, combo routes and Weapon Arts live in
+## items/arsenal_moves.gd, in the same row format; move() and combo_step() look there too.
+const ArsenalMoves = preload("res://scripts/items/arsenal_moves.gd")
+
+
 static func move(name: String) -> Dictionary:
-	return MOVES.get(name, MOVES.light1)
+	if MOVES.has(name):
+		return MOVES[name]
+	return ArsenalMoves.MOVES.get(name, MOVES.light1)
+
+
+static func has_move(name: String) -> bool:
+	return MOVES.has(name) or ArsenalMoves.MOVES.has(name)
+
+
+static func chain(chain_name: String) -> Array:
+	if COMBOS.has(chain_name):
+		return COMBOS[chain_name]
+	return ArsenalMoves.COMBOS.get(chain_name, COMBOS.light)
+
+
+## How many presses a chain has (3, or 4 for the twin stakes).
+static func chain_len(chain_name: String) -> int:
+	return chain(chain_name).size()
 
 
 ## The combo step for press number `combo` (1-based) of a chain.
-static func combo_step(chain: String, combo: int) -> String:
-	var steps: Array = COMBOS.get(chain, COMBOS.light)
+static func combo_step(chain_name: String, combo: int) -> String:
+	var steps: Array = chain(chain_name)
 	return steps[clampi(combo - 1, 0, steps.size() - 1)]

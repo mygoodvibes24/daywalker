@@ -5,6 +5,8 @@ extends RefCounted
 ## otherwise (the fallback bodies) a box blade whose origin is the hilt.
 
 const ItemDB = preload("res://scripts/items/item_db.gd")
+const Arsenal = preload("res://scripts/items/arsenal_data.gd")
+const Forge = preload("res://scripts/items/weapon_forge.gd") # the Arsenal's procedural weapons
 
 static var _mats := {}
 static var _sword_mats := {}
@@ -29,12 +31,63 @@ static func sword_for(inst: Dictionary) -> String:
 	return FAMILY_SWORD.get(d.get("family", ""), DEFAULT_SWORD)
 
 
-## Which combo chain (scripts/sol_moves.gd COMBOS) an item swings: the heavy cleaver family uses
-## Weapon_Combo_2, everything else the light Triple_Combo_Attack.
+## The weapon type (items/arsenal_data.gd TYPES) an item belongs to, by its blade family.
+static func type_for(inst: Dictionary) -> String:
+	if inst.is_empty():
+		return Arsenal.DEFAULT_TYPE
+	var d := ItemDB.get_def(inst.get("id", "marrow_silver"))
+	return Arsenal.type_of_family(d.get("family", "saber"))
+
+
+static func type_data(inst: Dictionary) -> Dictionary:
+	return Arsenal.get_type(type_for(inst))
+
+
+## Which combo chain (scripts/sol_moves.gd COMBOS, items/arsenal_moves.gd COMBOS) an item swings: the
+## cleaver family Weapon_Combo_2, the sword family the light Triple_Combo_Attack, and each Arsenal type
+## its own chain.
 static func combo_for(inst: Dictionary) -> String:
 	if inst.is_empty():
 		return "light"
-	return "heavy" if sword_for(inst) == "cleaver" else "light"
+	return String(type_data(inst).chain)
+
+
+## Where the blade rides when sheathed (Group B's sheathing): {bone: index, slot, xf: Transform3D local
+## to that bone} on `skel` (Sol's modular skeleton), from the weapon type's mount (arsenal_data.gd).
+## The weapon visual's origin is its grip, so a socket with this transform carries it.
+static func mount_transform(inst: Dictionary, skel: Skeleton3D) -> Dictionary:
+	var m: Dictionary = type_data(inst).mount
+	var bi := skel.find_bone(String(m.bone))
+	if bi < 0:
+		return {}
+	var rest_g := skel.get_bone_global_rest(bi)
+	var r: Vector3 = m.rot
+	var target := Transform3D(Basis.from_euler(Vector3(deg_to_rad(r.x), deg_to_rad(r.y), deg_to_rad(r.z))), rest_g.origin + m.pos)
+	return {"bone": bi, "slot": m.slot, "xf": rest_g.affine_inverse() * target}
+
+
+## True for the families built here from primitives (the Arsenal types) instead of a sword model.
+static func is_procedural(inst: Dictionary) -> bool:
+	var d := ItemDB.get_def(inst.get("id", "marrow_silver"))
+	return Forge.FAMILIES.has(d.get("family", ""))
+
+
+## The procedural weapon (weapon_forge.gd); `left` builds the left-hand twin of a dual type.
+static func build_procedural(inst: Dictionary, left := false) -> Node3D:
+	return Forge.build(inst, left)
+
+
+## A second copy for the left hand (BladeL) when the type fights with a pair, else null.
+static func build_left(inst: Dictionary) -> Node3D:
+	if not bool(type_data(inst).get("dual", false)):
+		return null
+	return Forge.build(inst, true) if is_procedural(inst) else null
+
+
+## How far the striking end reaches from the grip (m): the slash trail's tip.
+static func tip_length(inst: Dictionary) -> float:
+	var d := ItemDB.get_def(inst.get("id", "marrow_silver"))
+	return float(Forge.TIP.get(d.get("family", "saber"), 1.0))
 
 
 ## The sword model for an item, tinted toward its family's steel and its rarity colour
@@ -192,6 +245,8 @@ static func _steel(c: Color, rarity: int) -> StandardMaterial3D:
 ## `thickness` is the original blade's flat-axis size, so it matches the hand it sits in.
 ## `modelled`: use the sword models (the modular hero holds them by the grip).
 static func build(inst: Dictionary, thickness: float = 0.014, modelled: bool = false) -> Node3D:
+	if is_procedural(inst):
+		return build_procedural(inst)
 	if modelled:
 		var m := build_model(inst)
 		if m != null:
