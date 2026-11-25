@@ -126,15 +126,15 @@ const SPEC := {
 ## The values each preset sets (Custom keeps whatever is there).
 const PRESET_VALUES := [
 	{ # Very Low: the weakest phone GPU
-		"resolution_scale": 0.55, "dynamic_res": true, "shadow_quality": 0, "shadow_distance": 25.0, "view_distance": 0.45,
+		"resolution_scale": 0.55, "dynamic_res": true, "shadow_quality": 0, "shadow_distance": 25.0, "view_distance": 0.55,
 		"foliage_density": 0.1, "tree_density": 0.5, "crowd_density": 0.7, "fog_quality": 0, "post_fx": false, "ssao": false,
 		"rain": false, "aa": 0, "coat_quality": 0, "vfx_amount": 0.35, "light_quality": 0, "fps_cap": 0, "quality": 0},
 	{ # Low: phones
-		"resolution_scale": 0.7, "dynamic_res": true, "shadow_quality": 0, "shadow_distance": 35.0, "view_distance": 0.6,
+		"resolution_scale": 0.7, "dynamic_res": true, "shadow_quality": 0, "shadow_distance": 35.0, "view_distance": 0.7,
 		"foliage_density": 0.35, "tree_density": 0.75, "crowd_density": 0.85, "fog_quality": 0, "post_fx": false, "ssao": false,
 		"rain": true, "aa": 0, "coat_quality": 1, "vfx_amount": 0.6, "light_quality": 1, "fps_cap": 1, "quality": 0},
 	{ # Medium: laptops, web desktop
-		"resolution_scale": 0.85, "dynamic_res": true, "shadow_quality": 1, "shadow_distance": 50.0, "view_distance": 0.8,
+		"resolution_scale": 0.85, "dynamic_res": true, "shadow_quality": 1, "shadow_distance": 50.0, "view_distance": 0.9,
 		"foliage_density": 0.7, "tree_density": 1.0, "crowd_density": 1.0, "fog_quality": 1, "post_fx": true, "ssao": false,
 		"rain": true, "aa": 1, "coat_quality": 2, "vfx_amount": 0.85, "light_quality": 2, "fps_cap": 1, "quality": 1},
 	{ # High: native desktop
@@ -190,8 +190,9 @@ static func window_modes_available() -> Array:
 
 
 static func cinematic() -> bool:
-	return str(ProjectSettings.get_setting_with_override("rendering/renderer/rendering_method")) == "forward_plus" \
-		and not OS.has_feature("web") and DisplayServer.get_name() != "headless"
+	# Forward+ / Mobile have a RenderingDevice; Compatibility (GL) has none (whatever the project
+	# setting says: --rendering-method overrides it)
+	return RenderingServer.get_rendering_device() != null and not OS.has_feature("web") and DisplayServer.get_name() != "headless"
 
 
 ## Camera shake multiplier (Preferences slider; Reduced motion turns it off).
@@ -732,13 +733,18 @@ func _apply_geo(g) -> void:
 		return
 	if not g.has_meta("q_vr"):
 		if g.visibility_range_end <= 0.0 and g.visibility_range_begin <= 0.0:
-			g.set_meta("q_vr", null)
+			g.set_meta("q_vr", Vector4.ZERO) # no range set by the builder: leave it alone
 		else:
 			g.set_meta("q_vr", Vector4(g.visibility_range_begin, g.visibility_range_end, g.visibility_range_begin_margin, g.visibility_range_end_margin))
-	var vr = g.get_meta("q_vr")
-	if vr is Vector4:
-		g.visibility_range_begin = vr.x * view_distance
-		g.visibility_range_end = vr.y * view_distance
+	var vr: Vector4 = g.get_meta("q_vr")
+	if vr != Vector4.ZERO:
+		# never closer than 40 m (or the builder's own range): camps and landmarks stay in sight;
+		# begin scales by the same factor so LOD pairs (near mesh / far impostor) stay matched
+		var f := view_distance
+		if vr.y > 0.0:
+			f = maxf(view_distance, minf(1.0, 40.0 / vr.y))
+		g.visibility_range_begin = vr.x * f
+		g.visibility_range_end = vr.y * f
 	if g is MultiMeshInstance3D and g.multimesh != null:
 		var nm := String(g.name)
 		var dens := -1.0

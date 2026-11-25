@@ -985,16 +985,16 @@ func _perf_checks(main) -> bool:
 	await process_frame
 	var pv: Dictionary = St.PRESET_VALUES[0]
 	ok = _check("Very Low: no shadows (sun %s), render scale %.2f, short view %.2f, sparse foliage, no post FX, static coat, 30 fps" % [sun.shadow_enabled, vp.scaling_3d_scale, St.view_distance],
-		St.shadow_quality == 0 and not sun.shadow_enabled and vp.scaling_3d_scale <= 0.6 and St.view_distance <= 0.5 and St.foliage_density <= 0.15
+		St.shadow_quality == 0 and not sun.shadow_enabled and vp.scaling_3d_scale <= 0.6 and St.view_distance <= 0.6 and St.foliage_density <= 0.15
 		and not St.post_fx and St.coat_quality == 0 and St.light_quality == 0 and pv.fps_cap == 0) and ok
 	# LOD bias reaches the world: a ranged node's visibility range shrinks with the view distance
 	var ranged: GeometryInstance3D = null
 	for g in main.find_children("*", "GeometryInstance3D", true, false):
-		if g.has_meta("q_vr") and g.get_meta("q_vr") is Vector4 and (g.get_meta("q_vr") as Vector4).y > 0.0:
+		if g.has_meta("q_vr") and g.get_meta("q_vr") is Vector4 and (g.get_meta("q_vr") as Vector4).y > 100.0:
 			ranged = g
 			break
 	ok = _check("view distance scales the visibility ranges (%s)" % (ranged.name if ranged != null else "none"),
-		ranged != null and is_equal_approx(ranged.visibility_range_end, (ranged.get_meta("q_vr") as Vector4).y * St.view_distance)) and ok
+		ranged != null and ranged.visibility_range_end < (ranged.get_meta("q_vr") as Vector4).y and ranged.visibility_range_end >= minf(40.0, (ranged.get_meta("q_vr") as Vector4).y) - 0.01) and ok
 	# a hand-picked value makes it Custom; picking the preset's value again lands back on it
 	st.set_value("tier", 2)
 	st.set_value("shadow_distance", 100.0)

@@ -166,22 +166,23 @@ func _init() -> void:
 	rv.custom_minimum_size = Vector2(110, 32)
 	rv.pressed.connect(confirm_revert)
 	confirm_bar.add_child(rv)
-	# footer: reset this tab, back
-	var foot := HBoxContainer.new()
-	foot.add_theme_constant_override("separation", 18)
-	foot.alignment = BoxContainer.ALIGNMENT_CENTER
-	outer.add_child(foot)
-	reset_button = S.button("Reset to defaults", 16)
-	reset_button.custom_minimum_size = Vector2(210, 36)
-	reset_button.pressed.connect(reset_tab)
-	foot.add_child(reset_button)
+	# footer: Back (a direct child of the column, like every panel's Back), then reset + the tab hint
 	back_button = S.button("Back", 18)
 	back_button.custom_minimum_size = Vector2(180, 36)
+	back_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	back_button.pressed.connect(func(): back.emit())
-	foot.add_child(back_button)
+	outer.add_child(back_button)
+	var foot := HBoxContainer.new()
+	foot.add_theme_constant_override("separation", 24)
+	foot.alignment = BoxContainer.ALIGNMENT_CENTER
+	outer.add_child(foot)
+	reset_button = S.button("Reset tab to defaults", 14)
+	reset_button.custom_minimum_size = Vector2(200, 28)
+	reset_button.pressed.connect(reset_tab)
+	foot.add_child(reset_button)
 	var hint := S.label("LB / RB  or  [ / ]   switch tab", 13, S.TEXT_DIM, 3)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	outer.add_child(hint)
+	hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	foot.add_child(hint)
 	_wire_focus()
 	visibility_changed.connect(_on_shown)
 	show_tab(0, false)
@@ -492,7 +493,7 @@ func fit_scale(vs: Vector2) -> float:
 func _layout(vs: Vector2) -> void:
 	custom_minimum_size.x = minf(980.0, vs.x - 24.0)
 	var chrome := get_combined_minimum_size().y - scroll.custom_minimum_size.y
-	scroll.custom_minimum_size.y = clampf(vs.y * 0.94 - chrome, 160.0, 560.0)
+	scroll.custom_minimum_size.y = clampf(vs.y * 0.94 - chrome, 160.0, 400.0) # <= 720p tall in all
 	size = Vector2.ZERO # shrink to the new minimum
 
 
