@@ -17,6 +17,7 @@ var record: Label
 var loadout_box: VBoxContainer
 var armoury_box: VBoxContainer
 var shop_box: VBoxContainer
+var rack_box: VBoxContainer # the Arsenal: one blade per weapon type
 var marks: Label
 var begin_button: Button
 
@@ -53,7 +54,7 @@ func _init() -> void:
 	left.add_child(_head("WORN INTO THE HUNT  (3 charms)"))
 	loadout_box = VBoxContainer.new()
 	left.add_child(loadout_box)
-	var note := S.label("Rank, Tithe, Vows, blades and vials start\nfresh every Hunt. Charms and %s stay.\nCharms you carry home join the armoury." % Cfg.META_NAME, 13, S.TEXT_DIM)
+	var note := S.label("Rank, Tithe, Vows, blades and vials start\nfresh every Hunt: you carry one blade from\nNia's rack. Charms and %s stay.\nCharms you carry home join the armoury." % Cfg.META_NAME, 13, S.TEXT_DIM)
 	left.add_child(note)
 	# right: armoury + shop
 	# the right column scrolls (QA2 #6): all 10 contacts reachable by wheel, drag or focus
@@ -67,6 +68,9 @@ func _init() -> void:
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right.add_theme_constant_override("separation", 4)
 	scroll.add_child(right)
+	right.add_child(_head("NIA'S RACK  ·  the blade you carry in"))
+	rack_box = VBoxContainer.new()
+	right.add_child(rack_box)
 	right.add_child(_head("THE ARMOURY  ·  click to wear / take off"))
 	armoury_box = VBoxContainer.new()
 	right.add_child(armoury_box)
@@ -105,9 +109,24 @@ func refresh() -> void:
 	if not last.is_empty():
 		record.text += "\nLast Hunt: %d boss%s, %d kills, +%d %s" % [int(last.get("bosses", 0)), "" if int(last.get("bosses", 0)) == 1 else "es", int(last.get("kills", 0)), int(last.get("earned", 0)), Cfg.META_NAME]
 	marks.text = "%d %s" % [d.sunmarks, Cfg.META_NAME]
-	for box in [loadout_box, armoury_box, shop_box]:
+	for box in [loadout_box, armoury_box, shop_box, rack_box]:
 		for c in box.get_children():
 			c.queue_free()
+	# the rack: owned blades to carry in (one is chosen), the rest for Sunmarks
+	for e in Meta.BLADE_RACK:
+		var inst := ItemDB.make(e.id)
+		var owned := Meta.owns_blade(e.id)
+		var chosen: bool = owned and String(d.start_blade) == e.id
+		var label := "%s%s   ·   %s" % ["[CARRIED]  " if chosen else "", ItemDB.display_name(inst), ItemDB.weapon_line(inst)]
+		if not owned:
+			label += "   —   %d %s" % [e.price, Cfg.META_NAME]
+		var rb := S.button(label, 14)
+		rb.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		rb.add_theme_color_override("font_color", S.GOLD if chosen else (S.TEXT if owned else S.TEXT_DIM))
+		rb.tooltip_text = ItemDB.describe(inst)
+		rb.disabled = not owned and d.sunmarks < e.price
+		rb.pressed.connect(_rack.bind(e.id))
+		rack_box.add_child(rb)
 	var worn := Meta.loadout_charms()
 	for i in worn.size():
 		var inst: Dictionary = worn[i]
@@ -148,6 +167,15 @@ func _describe(inst: Dictionary) -> String:
 func _toggle(i: int) -> void:
 	Meta.toggle_loadout(i)
 	Meta.save_meta()
+	refresh()
+
+
+func _rack(id: String) -> void:
+	if Meta.owns_blade(id):
+		Meta.choose_blade(id)
+		Meta.save_meta()
+	else:
+		Meta.buy_blade(id)
 	refresh()
 
 

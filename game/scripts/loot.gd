@@ -228,8 +228,20 @@ func spawn_item(inst: Dictionary, pos: Vector3) -> Dictionary:
 	var d := ItemDB.get_def(inst.id)
 	match d.kind:
 		"blade":
-			U.part(spin, U.box(Vector3(0.03, 0.07, 0.8)), glow, Vector3(0, 0, 0.15), Vector3(0.6, 0, 0))
-			U.part(spin, U.box(Vector3(0.18, 0.04, 0.04)), _wood_dark, Vector3(0, -0.1, -0.18), Vector3(0.6, 0, 0))
+			# the Arsenal: the real weapon, standing point-up in the beam (a glow bar under it reads at range)
+			var wv: Node3D = preload("res://scripts/items/weapon_visual.gd").build(inst, 0.014, true)
+			if wv != null:
+				var holder := Node3D.new()
+				holder.rotation = Vector3(-PI / 2.0, 0, 0.35)
+				holder.position.y = -0.35
+				spin.add_child(holder)
+				holder.add_child(wv)
+				var tip: float = preload("res://scripts/items/weapon_visual.gd").tip_length(inst)
+				holder.scale = Vector3.ONE * clampf(1.1 / maxf(tip, 0.4), 0.6, 1.4)
+				U.part(spin, U.box(Vector3(0.02, 0.02, 0.5)), glow, Vector3(0, -0.6, 0), Vector3(0, 0, 0))
+			else:
+				U.part(spin, U.box(Vector3(0.03, 0.07, 0.8)), glow, Vector3(0, 0, 0.15), Vector3(0.6, 0, 0))
+				U.part(spin, U.box(Vector3(0.18, 0.04, 0.04)), _wood_dark, Vector3(0, -0.1, -0.18), Vector3(0.6, 0, 0))
 		"charm":
 			var t := TorusMesh.new()
 			t.inner_radius = 0.09
@@ -242,7 +254,8 @@ func spawn_item(inst: Dictionary, pos: Vector3) -> Dictionary:
 		"flare":
 			U.part(spin, U.cyl(0.04, 0.04, 0.3), U.glow(Color(0.7, 0.5, 1.0), 3.0), Vector3.ZERO, Vector3(0, 0, 0.4))
 	for mi in spin.get_children():
-		(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if mi is GeometryInstance3D:
+			(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var entry := {"node": root, "inst": inst.duplicate(), "spin": spin, "phase": rng.randf() * TAU}
 	ground_items.append(entry)
 	Audio.on_loot_dropped(r, root.global_position) # AUDIO HOOK

@@ -194,6 +194,7 @@ func start() -> void:
 	prog.persist = false # a Hunt never writes the free-roam save
 	prog.reset()
 	main.inventory.charms = Meta.loadout_charms()
+	main.inventory.weapon = Meta.start_blade() # the blade chosen on Nia's rack (the Arsenal)
 	main.inventory.equipment_changed.emit()
 	main.inventory.changed.emit()
 	main.player.hp = main.player.max_hp

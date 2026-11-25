@@ -27,7 +27,7 @@ const MOVES := {
 		"dmg": 0.85, "reach": 2.9, "cd": 0.18, "lock": 0.18, "shake": 0.1, "stop": 0.04, "delay": true, "stamina_cost": 9.0},
 	"kt3": {"clip": "combo3", "from": 0.22, "to": 1.0, "hit": 0.37, "speed": 1.45, "lunge": 0.9,
 		"dmg": 1.7, "reach": 3.3, "cd": 0.34, "lock": 0.2, "shake": 0.24, "stop": 0.08, "delay": true, "stamina_cost": 13.0},
-	"kt_charged": {"clip": "quick_slash", "from": 0.1, "to": 1.0, "hit": 0.45, "speed": 1.1, "lunge": 2.0, "heavy": true,
+	"kt_charged": {"knock": true, "clip": "quick_slash", "from": 0.1, "to": 1.0, "hit": 0.45, "speed": 1.1, "lunge": 2.0, "heavy": true,
 		"dmg": 2.4, "reach": 3.6, "cd": 0.4, "lock": 0.55, "shake": 0.32, "stop": 0.11, "delay": true, "stamina_cost": 22.0},
 	# ------------------------------------------------------------ twin stakes: very fast, four hits
 	"dg1": {"clip": "combo1", "from": 0.45, "to": 0.8, "hit": 0.55, "speed": 1.9, "lunge": 0.45,
@@ -40,7 +40,7 @@ const MOVES := {
 		"dmg": 0.6, "reach": 2.6, "arc": 0.0, "cd": 0.32, "lock": 0.22, "shake": 0.18, "stop": 0.07, "delay": true, "stamina_cost": 10.0},
 	"dg_charged": {"clip": "dspin", "from": 0.1, "to": 1.65, "hit": 0.25, "speed": 1.4, "lunge": 1.9, "heavy": true,
 		"hits": [[0.25, 0.5], [0.65, 0.5], [1.15, 0.6], [1.35, 0.9]],
-		"dmg": 0.8, "reach": 2.6, "arc": -0.2, "cd": 0.4, "lock": 0.9, "shake": 0.22, "stop": 0.06, "delay": true, "stamina_cost": 20.0},
+		"dmg": 0.5, "reach": 2.6, "arc": -0.2, "cd": 0.4, "lock": 0.9, "shake": 0.22, "stop": 0.06, "delay": true, "stamina_cost": 20.0},
 	# ------------------------------------------------------------ greatsword: slow, heavy stagger
 	"gs1": {"clip": "heavy1", "from": 0.45, "to": 1.05, "hit": 0.65, "speed": 1.0, "lunge": 0.5, "poise": 1.2,
 		"dmg": 1.35, "reach": 3.4, "arc": 0.1, "cd": 0.32, "lock": 0.3, "shake": 0.2, "stop": 0.07, "delay": true, "stamina_cost": 16.0},
@@ -48,7 +48,7 @@ const MOVES := {
 		"dmg": 1.35, "reach": 3.4, "arc": 0.1, "cd": 0.32, "lock": 0.3, "shake": 0.2, "stop": 0.07, "delay": true, "stamina_cost": 16.0},
 	"gs3": {"clip": "hammer_slam", "from": 0.1, "to": 0.82, "hit": 0.5, "speed": 1.0, "lunge": 0.5, "poise": 1.5, "aoe": 2.2,
 		"dmg": 2.4, "reach": 3.6, "arc": 0.1, "cd": 0.5, "lock": 0.45, "shake": 0.38, "stop": 0.12, "delay": true, "stamina_cost": 24.0},
-	"gs_charged": {"clip": "charged", "from": 0.6, "to": 1.85, "hit": 1.2, "speed": 0.85, "lunge": 0.6, "heavy": true, "aoe": 2.4,
+	"gs_charged": {"knock": true, "clip": "charged", "from": 0.6, "to": 1.85, "hit": 1.2, "speed": 0.85, "lunge": 0.6, "heavy": true, "aoe": 2.4,
 		"dmg": 3.4, "reach": 3.8, "cd": 0.6, "lock": 1.0, "shake": 0.45, "stop": 0.14, "delay": true, "stamina_cost": 32.0},
 	# ------------------------------------------------------------ halberd: reach and thrusts
 	"hb1": {"clip": "thrust", "from": 0.25, "to": 0.9, "hit": 0.45, "speed": 1.45, "lunge": 0.8,
@@ -57,7 +57,7 @@ const MOVES := {
 		"dmg": 1.0, "reach": 4.0, "arc": -0.2, "cd": 0.24, "lock": 0.24, "shake": 0.14, "stop": 0.05, "delay": true, "stamina_cost": 13.0},
 	"hb3": {"clip": "thrust", "from": 0.2, "to": 1.1, "hit": 0.45, "speed": 1.25, "lunge": 1.4,
 		"dmg": 1.9, "reach": 4.6, "arc": 0.7, "cd": 0.4, "lock": 0.3, "shake": 0.26, "stop": 0.09, "delay": true, "stamina_cost": 17.0},
-	"hb_charged": {"clip": "thrust", "from": 0.1, "to": 1.1, "hit": 0.45, "speed": 0.95, "lunge": 2.4, "heavy": true,
+	"hb_charged": {"knock": true, "clip": "thrust", "from": 0.1, "to": 1.1, "hit": 0.45, "speed": 0.95, "lunge": 2.4, "heavy": true,
 		"dmg": 2.6, "reach": 4.8, "arc": 0.7, "cd": 0.5, "lock": 0.7, "shake": 0.34, "stop": 0.12, "delay": true, "stamina_cost": 26.0},
 	# ------------------------------------------------------------ scythe: wide sweeps
 	"sc1": {"clip": "axe_sweep", "from": 0.05, "to": 0.7, "hit": 0.33, "speed": 1.35, "lunge": 0.3,
@@ -65,10 +65,10 @@ const MOVES := {
 	"sc2": {"clip": "slash_back", "from": 0.2, "to": 0.68, "hit": 0.38, "speed": 1.4, "lunge": 0.45,
 		"dmg": 0.95, "reach": 3.7, "arc": -0.1, "cd": 0.22, "lock": 0.22, "shake": 0.12, "stop": 0.05, "delay": true, "stamina_cost": 12.0},
 	"sc3": {"clip": "axe_spin", "from": 0.2, "to": 1.4, "hit": 0.55, "speed": 1.35, "lunge": 0.5, "hits": [[0.55, 0.8], [0.83, 1.2]],
-		"dmg": 1.0, "reach": 3.9, "arc": -1.01, "cd": 0.4, "lock": 0.35, "shake": 0.24, "stop": 0.08, "delay": true, "stamina_cost": 18.0},
+		"dmg": 0.8, "reach": 3.9, "arc": -1.01, "cd": 0.4, "lock": 0.35, "shake": 0.24, "stop": 0.08, "delay": true, "stamina_cost": 18.0},
 	"sc_charged": {"clip": "axe_spin", "from": 0.1, "to": 1.45, "hit": 0.55, "speed": 1.1, "lunge": 0.6, "heavy": true,
 		"hits": [[0.55, 0.9], [0.83, 1.4]],
-		"dmg": 1.2, "reach": 4.0, "arc": -1.01, "cd": 0.5, "lock": 0.9, "shake": 0.32, "stop": 0.1, "delay": true, "stamina_cost": 26.0},
+		"dmg": 0.9, "reach": 4.0, "arc": -1.01, "cd": 0.5, "lock": 0.9, "shake": 0.32, "stop": 0.1, "delay": true, "stamina_cost": 26.0},
 	# ------------------------------------------------------------ war hammer: armour and wolf break
 	"hm1": {"clip": "heavy2", "from": 0.2, "to": 0.85, "hit": 0.42, "speed": 1.05, "lunge": 0.45, "poise": 1.2,
 		"dmg": 1.3, "reach": 2.9, "cd": 0.3, "lock": 0.3, "shake": 0.2, "stop": 0.07, "delay": true, "stamina_cost": 16.0},
@@ -76,7 +76,7 @@ const MOVES := {
 		"dmg": 1.3, "reach": 2.9, "cd": 0.3, "lock": 0.3, "shake": 0.2, "stop": 0.07, "delay": true, "stamina_cost": 16.0},
 	"hm3": {"clip": "hammer", "from": 0.75, "to": 1.57, "hit": 1.25, "speed": 1.2, "lunge": 0.5, "poise": 1.8, "aoe": 2.6,
 		"dmg": 2.6, "reach": 3.1, "cd": 0.55, "lock": 0.5, "shake": 0.45, "stop": 0.13, "delay": true, "stamina_cost": 26.0},
-	"hm_charged": {"clip": "hammer", "from": 0.3, "to": 1.57, "hit": 1.25, "speed": 1.05, "lunge": 0.5, "heavy": true, "poise": 2.0, "aoe": 3.2,
+	"hm_charged": {"knock": true, "clip": "hammer", "from": 0.3, "to": 1.57, "hit": 1.25, "speed": 1.05, "lunge": 0.5, "heavy": true, "poise": 2.0, "aoe": 3.2,
 		"dmg": 3.4, "reach": 3.2, "cd": 0.6, "lock": 1.1, "shake": 0.5, "stop": 0.15, "delay": true, "stamina_cost": 34.0},
 	# ------------------------------------------------------------ chain-whip: mid range lashes
 	"wh1": {"clip": "slash", "from": 0.12, "to": 0.62, "hit": 0.32, "speed": 1.5, "lunge": 0.2,
@@ -87,7 +87,7 @@ const MOVES := {
 		"dmg": 1.5, "reach": 5.2, "arc": -0.5, "cd": 0.38, "lock": 0.26, "shake": 0.2, "stop": 0.07, "delay": true, "stamina_cost": 15.0},
 	"wh_charged": {"clip": "axe_spin", "from": 0.2, "to": 1.4, "hit": 0.55, "speed": 1.2, "lunge": 0.3, "heavy": true,
 		"hits": [[0.55, 0.8], [0.83, 1.2]],
-		"dmg": 1.0, "reach": 5.0, "arc": -1.01, "cd": 0.5, "lock": 0.85, "shake": 0.28, "stop": 0.09, "delay": true, "stamina_cost": 22.0},
+		"dmg": 0.8, "reach": 5.0, "arc": -1.01, "cd": 0.5, "lock": 0.85, "shake": 0.28, "stop": 0.09, "delay": true, "stamina_cost": 22.0},
 
 	# ============================================================ special combo routes (arsenal.gd)
 	# tap, tap, HOLD: the chain's finisher

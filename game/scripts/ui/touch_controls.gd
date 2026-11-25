@@ -48,6 +48,7 @@ func _ready() -> void:
 	_add("parry", "PARRY", ["parry"], Vector2(-226, -196), 38.0)
 	_add("bite", "BITE", ["bite", "interact"], Vector2(-352, -64), 36.0)
 	_add("sprint", "RUN", ["sprint"], Vector2(-356, -170), 34.0, true)
+	_add("art", "ART", ["weapon_art"], Vector2(-196, -316), 36.0) # the Weapon Art / blood-chain (items/arsenal.gd)
 	_add("pause", "II", ["@pause"], Vector2(-46, 150), 26.0, false, "top")
 	_add("map", "MAP", ["hunt_map"], Vector2(-114, 150), 26.0, false, "top")
 	_add("coat", "COAT", ["inventory"], Vector2(-182, 150), 26.0, false, "top")

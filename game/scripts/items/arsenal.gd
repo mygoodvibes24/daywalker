@@ -61,6 +61,7 @@ var _press_t := -1.0 # seconds attack has been held since a press that may becom
 var _press_move := "" # the move that press started (dash / sprint / jump_cut)
 var _plunging := false
 var _plunge_move := ""
+var _plunge_air := 0.0
 var _phase_t := 0.0
 var _recent := {} # enemy -> msec of its last hit (shockwaves skip what the blade just hit)
 var _in_proc := false
@@ -192,13 +193,14 @@ func affinity_mult(e) -> float:
 	var aff := String(wtype.get("affinity", ""))
 	var kind = e.get("kind")
 	var wolf: bool = kind == 1 and (e.get("transformed") == true or e.has_method("parry_open"))
+	var k := 1.0 + _stat("affinity") # the Hallowed Edge Rite doubles it
 	match aff:
 		"silver":
-			return 1.35 if wolf else 1.0
+			return 1.0 + 0.35 * k if wolf else 1.0
 		"holy":
-			return 1.35 if kind == 0 else 1.0
+			return 1.0 + 0.35 * k if kind == 0 else 1.0
 		"fire":
-			return 1.2 if kind == 0 else 1.0
+			return 1.0 + 0.2 * k if kind == 0 else 1.0
 	return 1.0
 
 
@@ -272,9 +274,10 @@ func _route_holds(delta: float) -> void:
 func art_pressed() -> bool:
 	if player.dead or not _can_act():
 		return false
-	if chain_t > 0.0 and player.hp > ArsenalMoves.BLOOD_CHAIN_COST + 1.0:
+	var chain_cost := 0.0 if _stat("chain_free") > 0.0 else ArsenalMoves.BLOOD_CHAIN_COST # the Chain of Blood Rite
+	if chain_t > 0.0 and player.hp > chain_cost + 1.0:
 		chain_t = 0.0
-		player.hp -= ArsenalMoves.BLOOD_CHAIN_COST
+		player.hp -= chain_cost
 		perform(_route("chain"))
 		return true
 	var a := art()
@@ -403,7 +406,7 @@ func _schedule(m: Dictionary, rate: float, fx: String, target, extra_only: bool)
 		if extra_only and i == 0:
 			continue
 		_events.append({"t": hits[i][0], "kind": "strike", "mult": hits[i][1], "m": m, "fx": fx if i == 0 else "",
-			"target": target, "first": i == 0})
+			"target": target, "first": i == 0, "art": fx != ""})
 	if extra_only and m.has("aoe") and not hits.is_empty():
 		_events.append({"t": hits[0][0] + 0.01, "kind": "aoe", "m": m, "mult": float(m.dmg) * 0.5})
 
@@ -442,7 +445,7 @@ func _strike_event(ev: Dictionary) -> void:
 			Audio.play_at("boss_slam_impact", player.global_position + fwd * 2.0, -3.0) # AUDIO HOOK
 			return
 	var target = ev.target
-	var n := strike(m, mult, target)
+	var n := strike(m, mult, target, bool(ev.art))
 	if m.has("aoe") and ev.first:
 		n += _shockwave(m, mult * 0.6, float(m.aoe))
 	match String(ev.fx):
@@ -457,13 +460,13 @@ func _strike_event(ev: Dictionary) -> void:
 
 ## One strike of a move: everything in the cone (reach, arc) around Sol. Returns how many it hit.
 ## Staggered enemies are left for the bite / execution, except a move's own target (the riposte).
-func strike(m: Dictionary, mult: float, target = null) -> int:
+func strike(m: Dictionary, mult: float, target = null, is_art := false) -> int:
 	var p = player
 	var w: Dictionary = p.weapon_stats()
 	var fwd: Vector3 = p._forward()
 	var reach := float(m.reach) + float(w.reach)
 	var arc := float(m.get("arc", 0.3))
-	var dmg := float(w.dmg) * mult * p.damage_mult() * (1.0 + _stat("art_dmg") if String(m.get("clip", "")) != "" and _is_art(m) else 1.0)
+	var dmg: float = float(w.dmg) * mult * p.damage_mult() * ((1.0 + _stat("art_dmg")) if is_art else 1.0)
 	if m.has("crit"):
 		dmg *= float(m.crit)
 	var n := 0
@@ -473,7 +476,7 @@ func strike(m: Dictionary, mult: float, target = null) -> int:
 		var to: Vector3 = e.global_position - p.global_position
 		to.y = 0.0
 		var d := to.length()
-		var r := reach + (float(e.get("body_radius")) if e.get("body_radius") != null else 0.0)
+		var r: float = reach + (float(e.get("body_radius")) if e.get("body_radius") != null else 0.0)
 		if d < r and (d < 0.9 or fwd.dot(to / d) > arc):
 			_deal(e, dmg, to.normalized() if d > 0.01 else fwd, m)
 			n += 1
@@ -482,13 +485,6 @@ func strike(m: Dictionary, mult: float, target = null) -> int:
 		main.rumble(0.4, 0.5, 0.1)
 		main.set_slowmo(0.06, float(m.stop))
 	return n
-
-
-func _is_art(m: Dictionary) -> bool:
-	for a in ArsenalMoves.ARTS.values():
-		if ArsenalMoves.MOVES.get(a.move) == m:
-			return true
-	return false
 
 
 ## Damage one enemy from an Arsenal strike (through take_hit and the hit_enemy signal, like the blade).
@@ -556,7 +552,9 @@ func _plunge_tick() -> void:
 		return
 	player.velocity.y = minf(player.velocity.y, -20.0)
 	player.attack_cd = maxf(player.attack_cd, 0.2)
-	if player.is_on_floor():
+	_plunge_air += get_physics_process_delta_time()
+	if player.is_on_floor() or _plunge_air > 2.0:
+		_plunge_air = 0.0
 		_plunging = false
 		var m := SolMoves.move(_plunge_move)
 		if player.mod_anim != null:
@@ -696,7 +694,7 @@ func _on_hit(e, dmg: float) -> void:
 	_spray(e.global_position + Vector3(0, 1.15, 0), dir + Vector3(0, 0.4, 0), Color(0.55, 0.0, 0.03), 12)
 	if e.dead:
 		return
-	var m := SolMoves.move(player.move_name) if SolMoves.has_move(player.move_name) else {}
+	var m: Dictionary = SolMoves.move(player.move_name) if SolMoves.has_move(player.move_name) else {}
 	var b := float(wtype.get("bleed", 0.0)) * (1.0 + _stat("bleed"))
 	if b > 0.0:
 		_add_bleed(e, dmg * b)
@@ -752,6 +750,8 @@ func _add_poise(e, amount: float) -> void:
 	if v >= cap:
 		e.set_meta("poise", 0.0)
 		player._stagger_enemy(e, 2.2 if not boss else 1.5)
+		if _stat("break_dash") > 0.0: # the Shatterer Rite
+			player.dash_charges = minf(player.dash_charges + 1.0, player.MAX_DASH)
 		HFx.shockwave(main, e.global_position, 1.2, Color(1.0, 0.85, 0.4), 0.3)
 		Audio.play_at("parry_clang", e.global_position, -2.0, 0.1) # AUDIO HOOK
 		_show_title("STAGGER")
@@ -792,11 +792,18 @@ func _tick_status(delta: float) -> void:
 
 
 # ---------------------------------------------------------------- VFX: blood sprays (pooled)
-static func vfx_amount() -> float:
-	var v = Settings.get("vfx_amount") if Settings != null else null
-	var a := float(v) if v != null else 1.0
-	if int(Settings.quality) == 0:
-		a *= 0.5
+func vfx_amount() -> float:
+	var st := get_node_or_null("/root/Settings")
+	var a := 1.0
+	if st != null:
+		var v = st.get("vfx_amount")
+		if v == null and st.get_script() != null:
+			v = (st.get_script() as Script).get("vfx_amount") # a static var on the script
+		if v != null:
+			a = float(v)
+		var q = st.get_script().get("quality") if st.get_script() != null else null
+		if q != null and int(q) == 0:
+			a *= 0.5
 	return clampf(a, 0.0, 2.0)
 
 
@@ -982,8 +989,10 @@ func _update_hud() -> void:
 func _draw_hud() -> void:
 	var c := _hud_ctl
 	var sz := c.size
-	var touch: bool = Touch.get("active") == true if Engine.has_singleton("Touch") or c.get_tree().root.has_node("Touch") else false
-	var centre := Vector2(sz.x - 64.0, sz.y - 300.0) if touch else Vector2(sz.x - 70.0, sz.y - 70.0)
+	var tc := c.get_node_or_null("/root/Touch")
+	var touch: bool = tc != null and tc.get("active") == true
+	# bottom right, clear of the HUD; on touch the ART button itself sits there, so the ring moves left
+	var centre := Vector2(sz.x - 70.0, sz.y - 70.0)
 	if touch:
 		centre = Vector2(sz.x * 0.5 + 150.0, sz.y - 54.0)
 	var r := 26.0
@@ -1000,7 +1009,7 @@ func _draw_hud() -> void:
 	if chain_t > 0.0:
 		c.draw_arc(centre, r + 6.0, 0.0, TAU, 32, Color(1.0, 0.05, 0.1, 0.9), 2.0, true)
 	var font := ThemeDB.fallback_font
-	var key := "RB" if (main != null and main.hud != null and main.hud.using_pad) else "V"
+	var key: String = "RB" if (main != null and main.hud != null and main.hud.using_pad) else "V"
 	if touch:
 		key = "ART"
 	c.draw_string(font, centre + Vector2(-r, 6.0), key, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, 15, Color(1, 1, 1, 0.9 if ready else 0.5))

@@ -41,11 +41,32 @@ const RITES := {
 	"undercroft_heart": {"name": "Heart of the Undercroft", "sigil": "♥", "tag": "BODY",
 		"desc": "+40 max blood and +10% damage.",
 		"mods": {"max_hp": 40.0, "dmg": 0.1}},
+	# ---- the Arsenal (round 4): Rites that feed the weapon types (items/arsenal.gd reads the mods).
+	# "types": the weapon types a Rite resonates with; roll() always offers one that suits your blade.
+	"open_veins": {"name": "Open Veins", "sigil": "✚", "tag": "BLEED", "types": ["katana", "daggers", "scythe", "cleaver"],
+		"desc": "Bleed builds 80% faster, and every Hemorrhage you open heals you 10.",
+		"mods": {"bleed": 0.8, "bleed_heal": 10.0}},
+	"shatterer": {"name": "The Shatterer", "sigil": "✸", "tag": "STAGGER", "types": ["greatsword", "hammer", "halberd"],
+		"desc": "+60% stagger. Breaking an enemy's stance refunds a Blood Dash.",
+		"mods": {"poise": 0.6, "break_dash": 1.0}},
+	"crimson_arts": {"name": "Crimson Arts", "sigil": "✺", "tag": "WEAPON ART",
+		"types": ["longsword", "cleaver", "katana", "daggers", "greatsword", "halberd", "scythe", "hammer", "whip"],
+		"desc": "Your Weapon Art recharges 40% faster and strikes 25% harder.",
+		"mods": {"art_cd": 0.4, "art_dmg": 0.25}},
+	"chain_of_blood": {"name": "Chain of Blood", "sigil": "⛓", "tag": "BLOOD CHAIN",
+		"types": ["longsword", "katana", "daggers", "scythe", "whip"],
+		"desc": "The Blood Chain finisher costs no blood, and the last hit of every chain lands 30% harder.",
+		"mods": {"chain_free": 1.0, "finisher": 0.3}},
+	"hallowed_edge": {"name": "Hallowed Edge", "sigil": "☀", "tag": "AFFINITY",
+		"types": ["longsword", "daggers", "greatsword", "halberd", "hammer", "whip"],
+		"desc": "Your blade's affinity bites twice as deep: silver, holy and fire bonuses doubled.",
+		"mods": {"affinity": 1.0}},
 }
 
 
-## n Rites not in `taken`, in a random order.
-static func roll(taken: Array, n: int, rng: RandomNumberGenerator) -> Array:
+## n Rites not in `taken`, in a random order. With `weapon_type` (arsenal_data.gd), one Rite that
+## resonates with it (its "types") is always among the offer, if any is left.
+static func roll(taken: Array, n: int, rng: RandomNumberGenerator, weapon_type := "") -> Array:
 	var pool: Array = []
 	for id in RITES:
 		if not id in taken:
@@ -55,7 +76,18 @@ static func roll(taken: Array, n: int, rng: RandomNumberGenerator) -> Array:
 		var t = pool[k]
 		pool[k] = pool[s]
 		pool[s] = t
-	return pool.slice(0, mini(n, pool.size()))
+	var out: Array = pool.slice(0, mini(n, pool.size()))
+	if weapon_type != "" and not out.any(func(id): return weapon_type in RITES[id].get("types", [])):
+		for id in pool:
+			if weapon_type in RITES[id].get("types", []) and not id in out:
+				out[out.size() - 1] = id
+				break
+	return out
+
+
+## True if Rite `id` resonates with weapon type `t`.
+static func resonates(id: String, t: String) -> bool:
+	return t in RITES.get(id, {}).get("types", [])
 
 
 static func name_of(id: String) -> String:

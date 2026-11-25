@@ -131,7 +131,11 @@ func _card(i: int, id: String, r: Dictionary) -> Button:
 	var sigil := S.title(String(r.get("sigil", "✠")), 40, Color(0.95, 0.15, 0.18))
 	sigil.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sigil)
-	var tag := S.label(String(r.get("tag", "")), 13, S.GOLD_DIM)
+	var tag_text := String(r.get("tag", ""))
+	var ars = main.player.get("arsenal") if main != null and main.player != null else null
+	if ars != null and String(ars.tname) in r.get("types", []): # the Arsenal: suits the blade in hand
+		tag_text += "  ·  SUITS YOUR %s" % String(ars.wtype.get("label", "")).to_upper()
+	var tag := S.label(tag_text, 13, S.GOLD_DIM)
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tag)
 	var n := S.title(String(r.name), 26)

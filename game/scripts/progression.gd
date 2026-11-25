@@ -250,7 +250,8 @@ func _process(delta: float) -> void:
 # ---------------------------------------------------------------- Blood Rites (run-scoped)
 ## Offer three Rites not yet taken (fewer if the pool runs dry). Returns the offer.
 func offer_rites(n := 3) -> Array:
-	rite_choices = Rites.roll(rites, n, rng)
+	var wt: String = main.player.arsenal.tname if main != null and main.player != null and main.player.get("arsenal") != null else ""
+	rite_choices = Rites.roll(rites, n, rng, wt) # one Rite always suits the blade in hand (items/arsenal.gd)
 	return rite_choices
 
 

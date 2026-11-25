@@ -100,6 +100,7 @@ var visual: Node3D
 var coat: MeshInstance3D # primitive fallback only
 var arm_pivot: Node3D # swing driver; drawn directly only by the primitive fallback
 var mod_anim: SolModularAnim # clip blending for the modular model (null otherwise)
+var arsenal: Node # items/arsenal.gd: weapon types, Weapon Arts, special combos, bleed / stagger, trails
 
 
 func _ready() -> void:
@@ -114,6 +115,10 @@ func _ready() -> void:
 	add_child(col)
 	_build_body()
 	_setup_combat_input()
+	arsenal = preload("res://scripts/items/arsenal.gd").new()
+	arsenal.name = "Arsenal"
+	arsenal.player = self
+	add_child(arsenal)
 	pivot = Node3D.new()
 	pivot.position.y = 1.8 # a touch higher: reads the street and the lights better
 	add_child(pivot)
@@ -569,7 +574,8 @@ func weapon_stats() -> Dictionary:
 
 ## Extra damage against a kind of enemy (silver vs the Pack, sun-steel vs the Court).
 func _vs_mult(e) -> float:
-	return 1.0 + (stat("vs_vamp") if e.kind == 0 else stat("vs_wolf"))
+	var aff: float = arsenal.affinity_mult(e) if arsenal != null else 1.0 # silver / holy / fire (arsenal.gd)
+	return (1.0 + (stat("vs_vamp") if e.kind == 0 else stat("vs_wolf"))) * aff
 
 
 func _bite_mult() -> float:
@@ -590,6 +596,8 @@ func set_weapon_visual(item: Dictionary) -> void:
 			(c as Node3D).visible = false
 		weapon_visual = preload("res://scripts/items/weapon_visual.gd").build(item, 0.014, true)
 		grip.add_child(weapon_visual)
+		if arsenal != null:
+			arsenal.on_weapon_changed(item) # the left-hand twin, the whip chain, the trail
 		return
 	var blade := _find_blade_mesh()
 	if blade == null:
@@ -634,11 +642,12 @@ func _nearest_enemy(max_dist: float, staggered: int):
 
 
 func _attack() -> void:
-	combo = combo + 1 if (combo_t > 0.0 and combo < 3) else 1
+	var chain := WeaponVisual.combo_for(weapon_item)
+	combo = combo + 1 if (combo_t > 0.0 and combo < SolMoves.chain_len(chain)) else 1
 	combo_t = 0.7
-	move_name = SolMoves.combo_step(WeaponVisual.combo_for(weapon_item), combo)
+	move_name = SolMoves.combo_step(chain, combo)
 	var step := SolMoves.move(move_name)
-	attack_cd = 0.22 if combo < 3 else 0.4
+	attack_cd = float(step.cd) # 0.22, 0.22, 0.4 for the sword; each weapon type its own (arsenal_moves.gd)
 	swing_t = 0.22
 	_lunge(float(step.lunge), 0.08)
 	# soft-lock prefers fighting enemies, so you don't kill the one you meant to bite
@@ -668,8 +677,11 @@ func _combo_strike(name: String, n: int, target) -> void:
 	var m := SolMoves.move(name)
 	var fwd := _forward()
 	var w := weapon_stats() # PROGRESSION HOOK: blade damage and reach
-	var dmg: float = w.dmg * (1.0 if n < 3 else 2.0 * (1.0 + stat("finisher"))) * damage_mult()
-	var reach: float = (2.7 if n < 3 else 3.3) + w.reach
+	# the row's damage and reach (light 1 / 1 / 2 x, 2.7 / 2.7 / 3.3 m); the chain's last hit is the finisher
+	var last := n >= SolMoves.chain_len(WeaponVisual.combo_for(weapon_item))
+	var dmg: float = w.dmg * float(m.dmg) * ((1.0 + stat("finisher")) if last else 1.0) * damage_mult()
+	var reach: float = float(m.reach) + w.reach
+	var arc := float(m.get("arc", 0.3))
 	var hit := false
 	for e in main.enemies_root.get_children():
 		if e.dead or (e.staggered and e != target):
@@ -677,7 +689,7 @@ func _combo_strike(name: String, n: int, target) -> void:
 		var to: Vector3 = e.global_position - global_position
 		to.y = 0.0
 		var d := to.length()
-		if d < reach and (d < 0.9 or fwd.dot(to / d) > 0.3):
+		if d < reach and (d < 0.9 or fwd.dot(to / d) > arc):
 			var hd: float = dmg * _vs_mult(e)
 			e.take_hit(hd, to.normalized() if d > 0.01 else fwd)
 			hit_enemy.emit(e, hd)
@@ -731,6 +743,8 @@ func _setup_combat_input() -> void:
 ## running slash while sprinting, else the next step of the combo (held on, it becomes the charged slash).
 func _attack_pressed() -> void:
 	hold_t = -1.0
+	if arsenal != null and arsenal.attack_pressed():
+		return # the riposte, the jump cut (arsenal.gd)
 	var fin = _finisher_target()
 	if fin != null:
 		_finisher(fin)
@@ -773,13 +787,14 @@ func _special(name: String) -> void:
 	if mod_anim != null:
 		delay = mod_anim.play_move(m, w.spd)
 	_lunge(float(m.lunge), maxf(delay, 0.1))
-	if name == "charged" and pending.has("combo"):
+	var heavy: bool = name == "charged" or m.get("heavy", false) # every weapon type's held heavy (arsenal_moves.gd)
+	if heavy and pending.has("combo"):
 		pending = {} # the held press's light strike became this charge: one heavy hit (QA2 #10)
 	_flush_pending()
 	pending = {"t": delay, "move": name, "target": target}
-	attacked.emit(3 if name == "charged" else 1, _forward())
+	attacked.emit(3 if heavy else 1, _forward())
 	special_move.emit(name)
-	Audio.play("sword_swing", 1.0 if name == "charged" else -1.0, 0.1) # AUDIO HOOK
+	Audio.play("sword_swing", 1.0 if heavy else -1.0, 0.1) # AUDIO HOOK
 
 
 ## A staggered enemy close in front, nearer than any enemy still fighting: the execution target.
@@ -844,10 +859,12 @@ func _strike(name: String, target) -> void:
 		main.rumble(0.6, 0.9, 0.2)
 		main.set_slowmo(0.15, float(m.stop) * 2.0)
 		return
+	var heavy: bool = name == "charged" or m.get("heavy", false)
 	var dmg: float = w.dmg * float(m.dmg) * damage_mult()
-	if name == "charged":
+	if heavy:
 		dmg *= 1.0 + stat("finisher") # PROGRESSION HOOK: the heavy hit counts as a finisher
 	var reach: float = float(m.reach) + w.reach
+	var arc := float(m.get("arc", 0.3)) # the cone (arsenal_moves.gd: spins hit all round)
 	var hit := false
 	for e in main.enemies_root.get_children():
 		if e.dead or (e.staggered and e != target):
@@ -855,13 +872,13 @@ func _strike(name: String, target) -> void:
 		var to: Vector3 = e.global_position - global_position
 		to.y = 0.0
 		var d := to.length()
-		if d < reach and (d < 0.9 or fwd.dot(to / d) > 0.3):
+		if d < reach and (d < 0.9 or fwd.dot(to / d) > arc):
 			var hd: float = dmg * _vs_mult(e)
 			e.take_hit(hd, to.normalized() if d > 0.01 else fwd)
 			hit_enemy.emit(e, hd)
 			hit = true
-			Audio.play_at("sword_hit", e.global_position, 3.0 if name == "charged" else 0.0) # AUDIO HOOK
-			if name == "charged" and not e.dead:
+			Audio.play_at("sword_hit", e.global_position, 3.0 if heavy else 0.0) # AUDIO HOOK
+			if (name == "charged" or m.get("knock", false)) and not e.dead:
 				_stagger_enemy(e, 2.5) # the heavy hit knocks them reeling
 	if hit:
 		shake = maxf(shake, float(m.shake))
@@ -922,7 +939,12 @@ func _combat_tick(delta: float) -> void:
 		if Input.is_action_pressed("attack"):
 			hold_t += delta
 			if hold_t >= HEAVY_HOLD:
-				_special("charged")
+				# the weapon type's heavy; the third press of a chain held is the L-L-H finisher (arsenal.gd)
+				var hv: String = arsenal.heavy_move() if arsenal != null else "charged"
+				if hv.begins_with("@"):
+					arsenal.perform(hv.substr(1))
+				else:
+					_special(hv)
 		else:
 			hold_t = -1.0
 	if not pending.is_empty():
