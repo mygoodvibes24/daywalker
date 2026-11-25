@@ -2,6 +2,7 @@ extends RefCounted
 ## Cheap shared looks for the Hunt: fresnel auras, ground telegraphs, shockwaves and puffs.
 ## All unshaded + additive, no lights, shared materials where possible (web-friendly).
 
+const SettingsScript = preload("res://scripts/settings.gd")
 const U = preload("res://scripts/util.gd")
 
 const AURA_SHADER := """
@@ -120,6 +121,7 @@ static func _gy(p: Vector3) -> float:
 
 
 static func circle_telegraph(parent: Node, pos: Vector3, radius: float, seconds: float, c := Color(1.0, 0.1, 0.05)) -> Node3D:
+	c = SettingsScript.cb(c) # SETTINGS HOOK: colour-blind palette
 	var root := Node3D.new()
 	parent.add_child(root)
 	root.global_position = Vector3(pos.x, _gy(pos) + 0.12, pos.z) # TERRAIN HOOK
@@ -135,6 +137,7 @@ static func circle_telegraph(parent: Node, pos: Vector3, radius: float, seconds:
 
 ## A line telegraph from `from` along `dir` for `length` m, `width` wide.
 static func line_telegraph(parent: Node, from: Vector3, dir: Vector3, length: float, width: float, seconds: float, c := Color(1.0, 0.1, 0.1)) -> Node3D:
+	c = SettingsScript.cb(c) # SETTINGS HOOK: colour-blind palette
 	var root := Node3D.new()
 	parent.add_child(root)
 	root.global_position = Vector3(from.x, _gy(from) + 0.13, from.z) # TERRAIN HOOK

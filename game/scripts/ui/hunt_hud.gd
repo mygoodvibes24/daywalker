@@ -24,6 +24,7 @@ var map_hint: Label
 
 
 func _ready() -> void:
+	add_to_group("hud_fade") # SETTINGS HOOK: HUD opacity / high contrast (settings.gd)
 	layer = 5
 	root = Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)

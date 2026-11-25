@@ -17,6 +17,7 @@ func _initialize() -> void:
 	HD.seed_override = 4242
 	load("res://scripts/main.gd").started_once = true
 	var st = root.get_node_or_null("Settings")
+	load("res://scripts/settings.gd").uncapped = true # raw frame cost, no FPS cap
 	for a in args:
 		if a.begins_with("--tier=") and st != null and st.has_method("apply_tier_name"):
 			st.apply_tier_name(a.substr(7), false)

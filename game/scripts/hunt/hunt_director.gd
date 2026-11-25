@@ -423,7 +423,7 @@ func _tick_pois(delta: float) -> void:
 	var p = main.player
 	if p == null:
 		return
-	var budget := Cfg.MAX_ACTIVE_ENEMIES - living_enemies()
+	var budget := Settings.max_enemies(Cfg.MAX_ACTIVE_ENEMIES) - living_enemies() # SETTINGS HOOK: crowd density
 	if state in ["boss", "final_dusk", "deploy"]:
 		budget = 0
 	# nearest first, so the camp you're walking into wakes before a far one

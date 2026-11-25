@@ -43,6 +43,7 @@ const TIPS := {
 
 
 func _ready() -> void:
+	add_to_group("hud_fade") # SETTINGS HOOK: HUD opacity / high contrast (settings.gd)
 	root = Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -280,7 +281,7 @@ func _process(delta: float) -> void:
 	popup_label.modulate.a = clampf(popup_t * 2.0, 0.0, 1.0)
 	damage_t = maxf(damage_t - real_dt, 0.0)
 	var low := clampf(1.0 - p.hp / 35.0, 0.0, 1.0) * 0.18
-	vignette.color.a = maxf(damage_t * 0.8, low)
+	vignette.color.a = maxf(damage_t * 0.8 * Settings.flash_scale(), low) # SETTINGS HOOK: reduced flashing
 	frenzy_tint.color.a = lerpf(frenzy_tint.color.a, 0.22 if p.frenzy_t > 0.0 else 0.0, 6.0 * real_dt)
 	if debug_label != null:
 		_update_debug()
@@ -323,7 +324,7 @@ func _refresh_help() -> void:
 ## Context hints: the basic controls for the first 20 s of play (and for 8 s when the device
 ## changes), then one tip the first time something becomes possible (a bite, a rank), else nothing.
 func _update_hints(dt: float) -> void:
-	if _touch() and not using_pad:
+	if (_touch() and not using_pad) or not Settings.hints: # SETTINGS HOOK: control hints off
 		help_label.visible = false
 		return
 	help_label.visible = true

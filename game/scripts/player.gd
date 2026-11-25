@@ -253,7 +253,7 @@ func _physics_process(delta: float) -> void:
 	var dir := Basis(Vector3.UP, cam_yaw) * Vector3(inp.x, 0.0, inp.y)
 	if dir.length() > 1.0:
 		dir = dir.normalized()
-	sprinting = Input.is_action_pressed("sprint") and dir.length() > 0.1
+	sprinting = Settings.sprint_held(Input.is_action_pressed("sprint")) and dir.length() > 0.1 # SETTINGS HOOK: toggle sprint
 	var spd := SPRINT if sprinting else WALK
 	if speed_boost_t > 0.0:
 		spd *= 1.3
@@ -642,8 +642,8 @@ func _attack() -> void:
 	swing_t = 0.22
 	_lunge(float(step.lunge), 0.08)
 	# soft-lock prefers fighting enemies, so you don't kill the one you meant to bite
-	var target = _nearest_enemy(5.0, -1)
-	if target == null:
+	var target = _nearest_enemy(5.0, -1) if Settings.aim_assist else null # SETTINGS HOOK: aim assist
+	if target == null and Settings.aim_assist:
 		target = _nearest_enemy(5.0, 1)
 	if target != null:
 		var tt: Vector3 = target.global_position - global_position
@@ -1062,17 +1062,19 @@ func _process(delta: float) -> void:
 		cam_pitch = clampf(cam_pitch - curve.y * Settings.pad_pitch() * Settings.y_sign() * real_dt, -1.1, 0.35)
 	pivot.rotation = Vector3(cam_pitch, cam_yaw, 0.0)
 	if shake > 0.0:
-		camera.h_offset = randf_range(-1.0, 1.0) * shake * 0.25
-		camera.v_offset = randf_range(-1.0, 1.0) * shake * 0.25
+		var sk := shake * 0.25 * Settings.shake_scale() # SETTINGS HOOK: camera shake / reduced motion
+		camera.h_offset = randf_range(-1.0, 1.0) * sk
+		camera.v_offset = randf_range(-1.0, 1.0) * sk
 		shake = maxf(shake - delta * 1.6, 0.0)
 	else:
 		camera.h_offset = 0.0
 		camera.v_offset = 0.0
-	var target_fov := 70.0
+	var target_fov: float = Settings.fov # SETTINGS HOOK: field of view (the dash / sprint kicks ride on it)
+	var kick := 0.35 if Settings.reduce_motion else 1.0
 	if dash_t > 0.0:
-		target_fov = 90.0
+		target_fov += 20.0 * kick
 	elif sprinting:
-		target_fov = 78.0
+		target_fov += 8.0 * kick
 	camera.fov = lerpf(camera.fov, target_fov, 10.0 * delta)
 	# the execution: the camera arm pulls in tight, then eases back out
 	if finisher_t > 0.0:
