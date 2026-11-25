@@ -92,6 +92,8 @@ func _initialize() -> void:
 	ok = await _terrain_checks(main) and ok
 	ok = await _progression_checks(main) and ok
 	ok = await _coat_checks(main) and ok
+	ok = await _sheath_checks(main) and ok
+	ok = await _combat_r3_checks(main) and ok
 	ok = await _move_checks(main) and ok
 	ok = await _fall_checks(main) and ok
 	ok = await _special_checks(main) and ok
@@ -317,7 +319,7 @@ func _gameplay_checks(main) -> bool:
 	w.take_hit(40.0, Vector3.FORWARD)
 	ok = _check("civilian staggered by day", w.staggered) and ok
 	main.time_of_day = 0.9
-	for i in 3: await physics_frame
+	for i in 8: await physics_frame # (past the hit's 0.06 s victim hit-stop)
 	ok = _check("transform clears stagger", w.transformed and not w.staggered) and ok
 	w.transform_t = 0.0
 	main.time_of_day = 0.4
@@ -551,9 +553,267 @@ func _coat_checks(main) -> bool:
 
 ## The sword moves (scripts/sol_moves.gd): hold for the charged slash, attack out of a Blood Dash for
 ## the thrust, the execution on a staggered enemy, and a parry that turns a wind-up aside.
+## Round 3 Group B: lock-on, stamina, the Frenzy's cost, body-language tells (no floor decals), the
+## vampire's claw combo and backflip.
+func _combat_r3_checks(main) -> bool:
+	var p = main.player
+	var ok := true
+	var HFx = load("res://scripts/hunt/hunt_fx.gd")
+	main.clear_slowmo()
+	_clear_enemies(main)
+	main.time_of_day = 0.9 # night: vampires don't burn
+	p.dead = false
+	p.hp = p.max_hp
+	p.global_position = Vector3(10.0, 0.1, 10.0)
+	p.velocity = Vector3.ZERO
+	p.auto_sheathe = false
+	for i in 5: await physics_frame
+	# --- lock-on: acquires the enemy in front of the camera, switches, breaks on distance
+	var fwd: Vector3 = -p.camera.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var side := Vector3(-fwd.z, 0, fwd.x)
+	var a = _spawn(main, 0, p.global_position + fwd * 6.0 + Vector3(0, 0.4, 0))
+	var b = _spawn(main, 0, p.global_position + fwd * 6.0 + side * 3.0 + Vector3(0, 0.4, 0))
+	for e in [a, b]:
+		e.speed = 0.0
+		e.attack_cd = 99.0
+		e.special_cd = 99.0
+	for i in 3: await physics_frame
+	p.release_lock()
+	p.toggle_lock()
+	var first = p.lock_target
+	ok = _check("lock-on acquires the enemy in front (reticle %s)" % (p.lock_reticle != null and p.lock_reticle.visible), first == a and p.lock_reticle != null and p.lock_reticle.visible) and ok
+	for i in 20: await process_frame
+	var face_ok: bool = absf(wrapf(p.facing - atan2(a.global_position.x - p.global_position.x, a.global_position.z - p.global_position.z), -PI, PI)) < 0.2
+	var cam_f: Vector3 = -p.camera.global_transform.basis.z
+	var to_a: Vector3 = (a.global_position - p.camera.global_position).normalized()
+	ok = _check("locked: Sol faces the target and the camera looks at it (cam dot %.2f)" % cam_f.dot(to_a), face_ok and cam_f.dot(to_a) > 0.85) and ok
+	var side_sign := signf(p.camera.unproject_position(b.global_position).x - p.camera.unproject_position(a.global_position).x)
+	p.switch_lock(side_sign)
+	ok = _check("a flick switches the lock to the next target on that side", p.lock_target == b) and ok
+	p.lock_flick(-side_sign * 200.0)
+	ok = _check("a mouse flick the other way switches back", p.lock_target == a) and ok
+	a.global_position = p.global_position + fwd * 40.0
+	for i in 5: await physics_frame
+	ok = _check("the lock breaks when the target is out of range", p.lock_target == null and not p.lock_reticle.visible) and ok
+	_clear_enemies(main)
+	# --- stamina: drains on actions, comes back fast; spent out, he can't dash until it recovers
+	p.frenzy_t = 0.0
+	p.stamina = p.max_stamina()
+	p.exhausted = false
+	var s0: float = p.stamina
+	var c0: float = p.dash_charges
+	p.dash_charges = 3.0
+	Input.action_press("dash") # (an action pressed from a script reads as just-pressed on the next physics frame)
+	for i in 2: await physics_frame
+	Input.action_release("dash")
+	var after_dash: float = p.stamina
+	for i in 70: await physics_frame
+	ok = _check("a dash costs stamina and it comes back fast (%.0f -> %.0f -> %.0f)" % [s0, after_dash, p.stamina], after_dash < s0 - 10.0 and p.stamina >= p.max_stamina() - 0.5) and ok
+	p.spend_stamina(999.0)
+	var ch: float = p.dash_charges
+	Input.action_press("dash")
+	for i in 2: await physics_frame
+	Input.action_release("dash")
+	var blocked: bool = p.exhausted and p.dash_charges == ch
+	for i in 150: await physics_frame
+	ok = _check("exhausted: no dash until stamina recovers (recovered %s, %.0f)" % [not p.exhausted, p.stamina], blocked and not p.exhausted) and ok
+	ok = _check("every sword move has a stamina cost field", (func():
+		var SM = load("res://scripts/sol_moves.gd")
+		for k in SM.MOVES:
+			if not SM.MOVES[k].has("stamina"):
+				return false
+		return SM.stamina_cost("light1") > 0.0 and SM.stamina_cost("charged") > SM.stamina_cost("light1")).call()) and ok
+	p.dash_charges = c0
+	# --- Frenzy costs blood and makes him take more damage
+	p.hp = 80.0
+	p.frenzy_t = 0.0
+	p.invuln_t = 0.0
+	p.dash_t = 0.0
+	p.take_damage(10.0, null) # the same blow without Frenzy (charms and Vows may already scale it)
+	var calm_took: float = 80.0 - p.hp
+	p.hp = 80.0
+	p.frenzy_t = 3.0
+	for i in 60: await physics_frame
+	var drained: float = 80.0 - p.hp
+	var hp1: float = p.hp
+	p.invuln_t = 0.0
+	p.dash_t = 0.0
+	p.take_damage(10.0, null)
+	var took: float = hp1 - p.hp
+	p.frenzy_t = 0.0
+	p.hp = p.max_hp
+	p.invuln_t = 0.0
+	ok = _check("Frenzy costs: blood drains (%.1f in 1 s) and blows land harder (%.1f vs %.1f)" % [drained, took, calm_took], drained > 1.5 and took > calm_took * 1.15) and ok
+	# --- tells, not decals: a vampire's swipe, lunge and claw and a wolf's swipe make no floor decal
+	HFx.decals = 0
+	var v = _spawn(main, 0, p.global_position + fwd * 1.3 + Vector3(0, 0.4, 0))
+	for i in 3: await physics_frame
+	v.claw_cd = 99.0
+	v.special_cd = 99.0
+	v.attack_cd = 0.0
+	for i in 60: await physics_frame
+	var swiped: bool = v.glints > 0
+	main.clear_slowmo()
+	p.hp = p.max_hp
+	# the claw string: both rakes land (or get dodged), on the claw clip
+	p.global_position = Vector3(10.0, 0.1, 10.0) # (the swipe may have knocked him back)
+	p.velocity = Vector3.ZERO
+	v.global_position = p.global_position + fwd * 1.3
+	var to: Vector3 = p.global_position - v.global_position
+	to.y = 0.0
+	v._cancel_special()
+	v._start_claw(to, to.length())
+	var claw_clip: String = v.anim_state
+	var rakes := 0
+	for i in 140:
+		await physics_frame
+		p.global_position = Vector3(10.0, 0.1, 10.0)
+		p.invuln_t = 0.0
+		rakes = maxi(rakes, v.claw_hit)
+		if v.special == "":
+			break
+	main.clear_slowmo()
+	ok = _check("the vampire's claw combo: two rakes on claw_combo (clip %s, rakes %d, hp %.0f)" % [claw_clip, rakes, p.hp], (v.anim == null or claw_clip == "claw_combo") and rakes == 2 and p.hp < p.max_hp) and ok
+	p.hp = p.max_hp
+	# the backflip: Sol winds a charged slash close by, the vampire flips out of it, untouchable
+	v._cancel_special()
+	v.global_position = p.global_position + fwd * 2.5
+	var d0: float = v.global_position.distance_to(p.global_position)
+	var flipped := false
+	var iframes := false
+	for i in 120:
+		await physics_frame
+		p.hold_t = 0.3 # holding attack (the charge)
+		p.global_position = Vector3(10.0, 0.1, 10.0)
+		if not flipped and v.special != "flip":
+			v.flip_cd = 0.0
+		flipped = flipped or v.special == "flip"
+		iframes = iframes or v.evading()
+		if flipped and v.special == "":
+			break
+	p.hold_t = -1.0
+	var hp_v: float = v.hp
+	var d1: float = v.global_position.distance_to(p.global_position)
+	ok = _check("the vampire backflips out of a charge (flip %s, i-frames %s, %.1f -> %.1f m)" % [flipped, iframes, d0, d1], flipped and iframes and d1 > d0 + 1.5 and (v.anim == null or v.anim.has_animation("backflip"))) and ok
+	# wolf swipe: a growl and an eye glint, no decal
+	_clear_enemies(main)
+	main.night_count = 3
+	var w = _spawn(main, 1, p.global_position + fwd * 1.6 + Vector3(0, 0.4, 0))
+	for i in 10: await physics_frame
+	w.transform_t = 0.0
+	w.special_cd = 99.0
+	w.attack_cd = 0.0
+	for i in 90: await physics_frame
+	main.clear_slowmo()
+	ok = _check("tells, not decals: swipes, lunge-free claw and wolf swipe glint (vamp %s, wolf %d) with %d floor decals" % [swiped, w.glints, HFx.decals], swiped and w.glints > 0 and HFx.decals == 0) and ok
+	# hit feedback: a rim (not a white flash), a victim hit-stop and a recoil away from the blade
+	w.max_hp = 1e6
+	w.hp = 1e6
+	w.take_hit(10.0, fwd)
+	var rim: float = 0.0
+	if w.body_mesh != null and w.body_mesh.material_overlay == w.fx_mat:
+		rim = float(w.fx_mat.get_shader_parameter("rim"))
+	await physics_frame
+	await physics_frame
+	if w.body_mesh != null and w.body_mesh.material_overlay == w.fx_mat:
+		rim = maxf(rim, float(w.fx_mat.get_shader_parameter("rim")))
+	ok = _check("hit feedback: rim %.2f, hit-stop %.2f s, recoil %.2f" % [rim, w.HITSTOP, w.recoil_v.length() + w.recoil.length()], (w.body_mesh == null or rim > 0.3) and w.hitstop_t >= 0.0 and (w.recoil.length() + w.recoil_v.length()) > 0.05) and ok
+	# pooled VFX: a flurry of hits reuses the blood emitters and glints (no node per hit)
+	var s0_sprays: int = HFx.sprays
+	for i in 20:
+		w.take_hit(5.0, fwd)
+		w._cue()
+		await physics_frame
+	ok = _check("blood spray and glints are pooled (%d sprays on %d emitters, %d glints)" % [HFx.sprays - s0_sprays, HFx._sprays.size(), HFx._glints.size()],
+		HFx.sprays - s0_sprays >= 20 and HFx._sprays.size() <= HFx.BLOOD_POOL and HFx._glints.size() <= HFx.GLINT_POOL) and ok
+	ok = _check("settings hooks read settings.gd (a missing key falls back)", HFx.opt("invert_y", 7) is bool and HFx.opt("no_such_setting_x", 7) == 7) and ok
+	_clear_enemies(main)
+	p.hp = p.max_hp
+	p.stamina = p.max_stamina()
+	main.clear_slowmo()
+	return ok
+
+
+## Round 3 (owner's playtest): the sword rides on Sol's back when calm, he draws on attack, and puts it
+## away again after SHEATHE_AFTER s of calm; weapon swaps work in both places.
+func _sheath_checks(main) -> bool:
+	var p = main.player
+	var ok := true
+	main.clear_slowmo()
+	_clear_enemies(main)
+	p.dead = false
+	p.hp = p.max_hp
+	p.global_position = Vector3(10.0, 0.1, 10.0)
+	p.velocity = Vector3.ZERO
+	for i in 5: await physics_frame
+	if p.sheath == null:
+		return _check("the modular Sol has a back scabbard", false)
+	p.sheath.sheathe(true)
+	await physics_frame
+	var open_ok: bool = p.sheath.open_hand == null or (p.sheath.open_hand.visible and not p.sheath.fist.visible)
+	ok = _check("calm: the sword is on his back, hand empty (scabbard parts %d)" % p.sheath.scabbard.get_child_count(), p.sword_on_back() and open_ok and p.sheath.scabbard.get_child_count() >= 2 and not p.mod_anim.armed) and ok
+	# attack: the draw, and the first swing chains out of it
+	p.attack_cd = 0.0
+	p.attack_block_until = 0
+	p.attack_buffer_t = p.ATTACK_BUFFER
+	var waited := 0.0
+	var swung := false
+	for i in 40:
+		await physics_frame
+		waited += 1.0 / Engine.physics_ticks_per_second
+		if p.move_name != "" and p.swing_t > 0.0:
+			swung = true
+			break
+	for i in 20: await physics_frame
+	ok = _check("attack draws the sword and swings out of the draw (%.2f s to the swing)" % waited, swung and waited < 0.3 and p.sword_in_hand() and p.mod_anim.armed) and ok
+	# calm again: it goes back after the timeout
+	p.calm_t = p.SHEATHE_AFTER - 0.2
+	for i in 60: await physics_frame
+	ok = _check("after %.0f s of calm the sword is sheathed again" % p.SHEATHE_AFTER, p.sword_on_back()) and ok
+	# weapon swaps in both states (the heavy cleaver family too)
+	var keep: Dictionary = p.weapon_item
+	p.set_weapon_visual({"id": "foundry_cleaver", "r": 0})
+	await process_frame
+	var on_back_ok: bool = p.weapon_visual != null and p.weapon_visual.get_parent() == p.sheath.carrier and p.sword_on_back()
+	p.draw_sword()
+	for i in 30: await physics_frame
+	var in_hand_ok: bool = p.sword_in_hand() and p.weapon_visual.get_parent() == p.sheath.carrier and p.weapon_visual.is_visible_in_tree()
+	ok = _check("a cleaver swapped in on his back draws into his hand", on_back_ok and in_hand_ok) and ok
+	# per-weapon mounts: a kukri rides the left hip, an item's own "mount" field (a tuned preset) wins,
+	# and every preset sheathes and draws
+	p.sheath.sheathe(true)
+	p.set_weapon_visual({"id": "pine_kukri", "r": 0})
+	await process_frame
+	ok = _check("a kukri mounts on the hip (%s on %s)" % [p.sheath.mount_name, p.sheath.mount_att.bone_name], p.sheath.mount_name == "hip" and p.sheath.mount_att.bone_name == "Hips" and p.sword_on_back()) and ok
+	var SS = load("res://scripts/sol_sheath.gd")
+	var all_ok := true
+	for mname in SS.MOUNTS:
+		p.sheath.sheathe(true)
+		p.set_weapon_visual({"id": "marrow_silver", "r": 0, "mount": {"preset": mname, "reach": 0.12}})
+		await process_frame
+		var hilt_ok: bool = p.sheath.carrier.global_position.distance_to(p.global_position + Vector3(0, 1.2, 0)) < 1.0
+		p.draw_sword()
+		for i in 30: await physics_frame
+		var drew: bool = p.sword_in_hand()
+		p.sheath.sheathe()
+		for i in 40: await physics_frame
+		if not (hilt_ok and drew and p.sword_on_back() and p.sheath.mount_name == mname and is_equal_approx(p.sheath.reach_t, 0.12)):
+			all_ok = false
+			print("    mount ", mname, " hilt ", hilt_ok, " drew ", drew, " back ", p.sword_on_back())
+	ok = _check("every weapon mount preset (%s) sheathes on its bone and draws" % ", ".join(SS.MOUNTS.keys()), all_ok) and ok
+	p.set_weapon_visual(keep)
+	p.auto_sheathe = false # the move checks below want the sword out
+	return ok
+
+
 func _move_checks(main) -> bool:
 	var p = main.player
 	var ok := true
+	if p.sheath != null:
+		p.sheath.draw(true)
+		p.auto_sheathe = false
 	main.clear_slowmo()
 	_clear_enemies(main)
 	main.time_of_day = 0.9 # night: vampires don't burn
@@ -742,12 +1002,12 @@ func _move_checks(main) -> bool:
 			p.global_position = Vector3(10.0, 0.1, 10.0) # Sol stands his ground
 			if e.special.begins_with(name):
 				if not started:
-					tele = e.telegraph != null and is_instance_valid(e.telegraph)
+					tele = e.tell_total > 0.0 and e.telegraph == null # the body tells it (clip wind-up on the slow-in curve), no floor decal
 				started = true
 			elif started:
 				break
 		main.clear_slowmo()
-		ok = _check("%s %s: telegraphed %s, landed (hp %.0f)" % ["vampire" if kind == 0 else "wolf", name, tele, p.hp], started and tele and p.hp < p.max_hp) and ok
+		ok = _check("%s %s: body tell %s (no decal), landed (hp %.0f)" % ["vampire" if kind == 0 else "wolf", name, tele, p.hp], started and tele and p.hp < p.max_hp) and ok
 		_clear_enemies(main)
 		for i in 3: await physics_frame
 	p.hp = p.max_hp
