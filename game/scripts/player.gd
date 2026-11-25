@@ -721,7 +721,7 @@ func set_weapon_visual(item: Dictionary) -> void:
 		weapon_visual = preload("res://scripts/items/weapon_visual.gd").build(item, 0.014, true)
 		grip.add_child(weapon_visual)
 		if sheath != null:
-			sheath.fit_scabbard() # a cleaver, a rapier: the scabbard fits the new blade
+			sheath.use_item(item) # its mount (back, belt: sol_sheath.gd MOUNTS) and a scabbard that fits it
 		return
 	var blade := _find_blade_mesh()
 	if blade == null:

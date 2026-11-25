@@ -17,18 +17,39 @@ extends RefCounted
 ## the SwordWrist modifier rests (sol_modular_anim.gd `armed`). Nothing runs per frame when idle.
 
 const DrawIK = preload("res://scripts/sol_draw_ik.gd")
-const REACH := 0.15
-const PULL := 0.14
+const ItemDB = preload("res://scripts/items/item_db.gd")
 const STOW := 0.24
 const LET_GO := 0.2
 const SPINE_BONE := "Spine02"
-## The sword on the back, skeleton space at rest: where the grip sits (behind the right shoulder,
-## out from the coat's back by BACK_GAP) and where the blade points (down and across toward the
-## left hip; +X is Sol's left).
-const GRIP_X := -0.16
-const GRIP_Y := 1.72
+## WEAPON MOUNTS (the per-weapon field the Arsenal sets). Where a sheathed weapon rides, in Sol's
+## skeleton space at rest (+X is his left, +Y up, +Z forward). The carried weapon's own frame is the
+## hand's grip frame: blade along +Z from the grip, flat facing +-X.
+##   bone      the bone it rides (Spine02 for the back, Hips for a belt)
+##   grip      where the grip sits; with "surface": "back" its z is BACK_GAP out from the coat's back
+##   dir       where the blade points (normalised for you)
+##   flat      the direction the blade's flat faces (made perpendicular to dir)
+##   pole      the elbow direction of the reach (sol_draw_ik.gd), from the shoulder
+##   reach / pull   seconds: the hand to the grip, then the weapon out into the fist (~0.3 s total)
+##   scabbard  false: no sheath drawn (an axe or a hammer hangs bare)
+## An item picks one with `"mount": "<preset>"` in its item_db.gd def, or tunes one with a Dictionary
+## (`{"preset": "back", "grip": Vector3(...)}`: missing keys come from the preset). Without one, the
+## family default (FAMILY_MOUNT), else "back".
+const MOUNTS := {
+	# over the right shoulder, the blade down across the back toward the left hip
+	"back": {"bone": "Spine02", "grip": Vector3(-0.16, 1.72, 0.0), "surface": "back", "dir": Vector3(0.45, -0.89, 0.0),
+		"flat": Vector3(0, 0, -1), "pole": Vector3(-0.55, 0.75, -0.25), "reach": 0.15, "pull": 0.14, "scabbard": true},
+	# a long or great blade: steeper, the grip higher behind the shoulder so the tip clears the calves
+	"back_great": {"bone": "Spine02", "grip": Vector3(-0.13, 1.8, 0.0), "surface": "back", "dir": Vector3(0.28, -0.96, 0.0),
+		"flat": Vector3(0, 0, -1), "pole": Vector3(-0.5, 0.85, -0.25), "reach": 0.17, "pull": 0.17, "scabbard": true},
+	# a short blade on the left hip, worn for the cross-draw: grip forward, blade back and down
+	"hip": {"bone": "Hips", "grip": Vector3(0.25, 1.0, 0.12), "dir": Vector3(0.08, -0.4, -0.91),
+		"flat": Vector3(1, 0, 0), "pole": Vector3(-0.6, -0.1, 0.45), "reach": 0.13, "pull": 0.12, "scabbard": true},
+	# a knife or a dagger at the right hip, blade down (a quick back-hand draw)
+	"hip_right": {"bone": "Hips", "grip": Vector3(-0.25, 1.02, -0.02), "dir": Vector3(-0.08, -0.97, -0.22),
+		"flat": Vector3(1, 0, 0), "pole": Vector3(-0.7, -0.2, -0.2), "reach": 0.1, "pull": 0.1, "scabbard": true},
+}
+const FAMILY_MOUNT := {"kukri": "hip", "longblade": "back_great"}
 const BACK_GAP := 0.043
-const BLADE_DIR := Vector3(0.45, -0.89, 0.0)
 static var _back_z := 0.0 # the coat's back surface (measured once from the coat mesh)
 
 var skel: Skeleton3D
@@ -39,6 +60,11 @@ var scabbard: Node3D
 var ik: Node
 var fist: Node3D
 var open_hand: Node3D
+var mount_att: BoneAttachment3D
+var mount: Dictionary = MOUNTS.back
+var mount_name := "back"
+var reach_t := 0.15 # the current mount's reach / pull times
+var pull_t := 0.14
 var drawn := true # the sword is in the hand (or on its way there)
 var phase := "" # "" | reach | pull | stow | let_go
 var t := 0.0
@@ -60,21 +86,16 @@ func setup(model: Node3D) -> bool:
 	for c in hand_socket.get_children():
 		if c != carrier:
 			c.reparent(carrier, false)
-	# the back mount
-	var att := BoneAttachment3D.new()
-	att.name = "BackMount"
-	att.bone_name = SPINE_BONE
-	skel.add_child(att)
+	# the mount (back or belt; set_mount moves it per weapon)
+	mount_att = BoneAttachment3D.new()
+	mount_att.name = "BackMount"
+	mount_att.bone_name = SPINE_BONE
+	skel.add_child(mount_att)
 	back_socket = Node3D.new()
 	back_socket.name = "BackSocket"
-	att.add_child(back_socket)
+	mount_att.add_child(back_socket)
 	if _back_z == 0.0:
 		_back_z = _measure_back(model)
-	var z := BLADE_DIR.normalized()
-	var x := Vector3(0, 0, -1) # the blade's flat lies against the back
-	x = (x - z * x.dot(z)).normalized()
-	var want := Transform3D(Basis(x, z.cross(x), z), Vector3(GRIP_X, GRIP_Y, _back_z - BACK_GAP))
-	back_socket.transform = skel.get_bone_global_rest(skel.find_bone(SPINE_BONE)).affine_inverse() * want
 	scabbard = Node3D.new()
 	scabbard.name = "Scabbard"
 	back_socket.add_child(scabbard)
@@ -85,8 +106,68 @@ func setup(model: Node3D) -> bool:
 	var wrist := skel.get_node_or_null("SwordWrist")
 	if wrist != null:
 		skel.move_child(ik, wrist.get_index()) # reach first, then the wrist (resting while it reaches)
+	set_mount(MOUNTS.back, "back")
 	fit_scabbard()
 	return true
+
+
+## The mount an item's weapon rides on when sheathed (see MOUNTS).
+static func mount_for(item: Dictionary) -> Dictionary:
+	var m = _mount_field(item)
+	if m is Dictionary:
+		var base: Dictionary = MOUNTS.get(m.get("preset", "back"), MOUNTS.back).duplicate()
+		base.merge(m, true)
+		return base
+	return MOUNTS.get(m, MOUNTS.back)
+
+
+## The preset name an item mounts on ("back", "hip", ...; a tuned Dictionary reports its preset).
+static func mount_name_for(item: Dictionary) -> String:
+	var m = _mount_field(item)
+	if m is Dictionary:
+		m = m.get("preset", "back")
+	return str(m) if MOUNTS.has(m) else "back"
+
+
+static func _mount_field(item: Dictionary):
+	if item.is_empty():
+		return "back"
+	if item.has("mount"):
+		return item.mount # an instance may carry its own (a test, a one-off)
+	var d: Dictionary = ItemDB.get_def(item.get("id", "marrow_silver"))
+	return d.get("mount", FAMILY_MOUNT.get(d.get("family", ""), "back"))
+
+
+## Move the sheath to mount `m` (a MOUNTS entry, or an item's tuned one). A sheathed weapon follows.
+func set_mount(m: Dictionary, mname := "") -> void:
+	mount = m
+	mount_name = mname
+	var bone: String = m.get("bone", SPINE_BONE)
+	if skel.find_bone(bone) < 0:
+		bone = SPINE_BONE
+	mount_att.bone_name = bone
+	var z: Vector3 = Vector3(m.get("dir", Vector3(0, -1, 0))).normalized()
+	var x: Vector3 = m.get("flat", Vector3(0, 0, -1))
+	x = x - z * x.dot(z)
+	if x.length() < 0.01:
+		x = Vector3(1, 0, 0) - z * z.x
+	x = x.normalized()
+	var g: Vector3 = m.get("grip", Vector3(-0.16, 1.72, 0.0))
+	if m.get("surface", "") == "back":
+		g.z = _back_z - BACK_GAP
+	var want := Transform3D(Basis(x, z.cross(x), z), g)
+	back_socket.transform = skel.get_bone_global_rest(skel.find_bone(bone)).affine_inverse() * want
+	reach_t = float(m.get("reach", 0.15))
+	pull_t = float(m.get("pull", 0.14))
+	if ik != null:
+		ik.pole = m.get("pole", Vector3(-0.55, 0.75, -0.25))
+	scabbard.visible = bool(m.get("scabbard", true))
+
+
+## A new weapon is in the carrier: move to its mount and refit the scabbard around it.
+func use_item(item: Dictionary) -> void:
+	set_mount(mount_for(item), mount_name_for(item))
+	fit_scabbard()
 
 
 ## The coat's back at shoulder-blade height (skeleton space z), from the coat's rest mesh.
@@ -189,7 +270,7 @@ func busy() -> bool:
 ## Pull the sword. Returns the seconds until it is in the hand (0 = already there).
 func draw(instant := false) -> float:
 	if drawn and phase != "stow" and phase != "let_go":
-		return maxf(REACH - t, 0.0) if phase == "reach" else 0.0
+		return maxf(reach_t - t, 0.0) if phase == "reach" else 0.0
 	if instant:
 		_to_hand()
 		return 0.0
@@ -197,11 +278,11 @@ func draw(instant := false) -> float:
 	if phase == "stow":
 		# changed his mind mid-stow: the blade is still in hand, carry it straight back
 		phase = "pull"
-		t = PULL * 0.5
+		t = pull_t * 0.5
 		return 0.0
 	phase = "reach"
 	t = 0.0
-	return REACH
+	return reach_t
 
 
 func sheathe(instant := false) -> void:
@@ -232,19 +313,19 @@ func tick(delta: float) -> void:
 	t += delta
 	match phase:
 		"reach":
-			var k := clampf(t / REACH, 0.0, 1.0)
+			var k := clampf(t / reach_t, 0.0, 1.0)
 			ik.weight = k * k * (3.0 - 2.0 * k)
 			ik.orient = 0.6
 			ik.target = _hand_target()
-			if t >= REACH:
+			if t >= reach_t:
 				_grab()
 		"pull":
-			var k := clampf(t / PULL, 0.0, 1.0)
+			var k := clampf(t / pull_t, 0.0, 1.0)
 			ik.weight = 1.0 - k * k * (3.0 - 2.0 * k)
 			ik.target = _hand_target()
 			var s := k * k * (3.0 - 2.0 * k)
 			carrier.global_transform = back_socket.global_transform.interpolate_with(hand_socket.global_transform, s)
-			if t >= PULL:
+			if t >= pull_t:
 				_to_hand()
 		"stow":
 			var k := clampf(t / STOW, 0.0, 1.0)

@@ -318,7 +318,7 @@ func _gameplay_checks(main) -> bool:
 	w.take_hit(40.0, Vector3.FORWARD)
 	ok = _check("civilian staggered by day", w.staggered) and ok
 	main.time_of_day = 0.9
-	for i in 3: await physics_frame
+	for i in 8: await physics_frame # (past the hit's 0.06 s victim hit-stop)
 	ok = _check("transform clears stagger", w.transformed and not w.staggered) and ok
 	w.transform_t = 0.0
 	main.time_of_day = 0.4
@@ -604,8 +604,8 @@ func _combat_r3_checks(main) -> bool:
 	var s0: float = p.stamina
 	var c0: float = p.dash_charges
 	p.dash_charges = 3.0
-	Input.action_press("dash")
-	await physics_frame
+	Input.action_press("dash") # (an action pressed from a script reads as just-pressed on the next physics frame)
+	for i in 2: await physics_frame
 	Input.action_release("dash")
 	var after_dash: float = p.stamina
 	for i in 70: await physics_frame
@@ -613,7 +613,7 @@ func _combat_r3_checks(main) -> bool:
 	p.spend_stamina(999.0)
 	var ch: float = p.dash_charges
 	Input.action_press("dash")
-	await physics_frame
+	for i in 2: await physics_frame
 	Input.action_release("dash")
 	var blocked: bool = p.exhausted and p.dash_charges == ch
 	for i in 150: await physics_frame
@@ -627,6 +627,12 @@ func _combat_r3_checks(main) -> bool:
 	p.dash_charges = c0
 	# --- Frenzy costs blood and makes him take more damage
 	p.hp = 80.0
+	p.frenzy_t = 0.0
+	p.invuln_t = 0.0
+	p.dash_t = 0.0
+	p.take_damage(10.0, null) # the same blow without Frenzy (charms and Vows may already scale it)
+	var calm_took: float = 80.0 - p.hp
+	p.hp = 80.0
 	p.frenzy_t = 3.0
 	for i in 60: await physics_frame
 	var drained: float = 80.0 - p.hp
@@ -638,7 +644,7 @@ func _combat_r3_checks(main) -> bool:
 	p.frenzy_t = 0.0
 	p.hp = p.max_hp
 	p.invuln_t = 0.0
-	ok = _check("Frenzy costs: blood drains (%.1f in 1 s) and blows land harder (%.1f from 10)" % [drained, took], drained > 1.5 and took > 11.0) and ok
+	ok = _check("Frenzy costs: blood drains (%.1f in 1 s) and blows land harder (%.1f vs %.1f)" % [drained, took, calm_took], drained > 1.5 and took > calm_took * 1.15) and ok
 	# --- tells, not decals: a vampire's swipe, lunge and claw and a wolf's swipe make no floor decal
 	HFx.decals = 0
 	var v = _spawn(main, 0, p.global_position + fwd * 1.3 + Vector3(0, 0.4, 0))
@@ -763,6 +769,28 @@ func _sheath_checks(main) -> bool:
 	for i in 30: await physics_frame
 	var in_hand_ok: bool = p.sword_in_hand() and p.weapon_visual.get_parent() == p.sheath.carrier and p.weapon_visual.is_visible_in_tree()
 	ok = _check("a cleaver swapped in on his back draws into his hand", on_back_ok and in_hand_ok) and ok
+	# per-weapon mounts: a kukri rides the left hip, an item's own "mount" field (a tuned preset) wins,
+	# and every preset sheathes and draws
+	p.sheath.sheathe(true)
+	p.set_weapon_visual({"id": "pine_kukri", "r": 0})
+	await process_frame
+	ok = _check("a kukri mounts on the hip (%s on %s)" % [p.sheath.mount_name, p.sheath.mount_att.bone_name], p.sheath.mount_name == "hip" and p.sheath.mount_att.bone_name == "Hips" and p.sword_on_back()) and ok
+	var SS = load("res://scripts/sol_sheath.gd")
+	var all_ok := true
+	for mname in SS.MOUNTS:
+		p.sheath.sheathe(true)
+		p.set_weapon_visual({"id": "marrow_silver", "r": 0, "mount": {"preset": mname, "reach": 0.12}})
+		await process_frame
+		var hilt_ok: bool = p.sheath.carrier.global_position.distance_to(p.global_position + Vector3(0, 1.2, 0)) < 1.0
+		p.draw_sword()
+		for i in 30: await physics_frame
+		var drew: bool = p.sword_in_hand()
+		p.sheath.sheathe()
+		for i in 40: await physics_frame
+		if not (hilt_ok and drew and p.sword_on_back() and p.sheath.mount_name == mname and is_equal_approx(p.sheath.reach_t, 0.12)):
+			all_ok = false
+			print("    mount ", mname, " hilt ", hilt_ok, " drew ", drew, " back ", p.sword_on_back())
+	ok = _check("every weapon mount preset (%s) sheathes on its bone and draws" % ", ".join(SS.MOUNTS.keys()), all_ok) and ok
 	p.set_weapon_visual(keep)
 	p.auto_sheathe = false # the move checks below want the sword out
 	return ok
