@@ -93,6 +93,7 @@ func _initialize() -> void:
 	ok = await _progression_checks(main) and ok
 	ok = await _coat_checks(main) and ok
 	ok = await _move_checks(main) and ok
+	ok = await load("res://tests/arsenal_checks.gd").new().run(self, main, _check) and ok # the Arsenal (round 4)
 	ok = await _fall_checks(main) and ok
 	ok = await _special_checks(main) and ok
 	ok = await _audio_checks(main) and ok
