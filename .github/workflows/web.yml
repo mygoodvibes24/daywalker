@@ -68,10 +68,12 @@ jobs:
           npm init -y > /dev/null
           npm install --no-audit --no-fund playwright@1.48.2
           npx playwright install --with-deps chromium
-      - name: Web render check (the Hunt must draw the city, not just sky + HUD)
+      - name: Web render + audio check (the Hunt must draw the city and be audible after a click)
         # Loads the export in headless Chromium (SwiftShader WebGL2) with ?autohunt and fails
         # if the screen centre is near-uniform. Guards the Godot 4.3 nothreads web culling bug
         # (threaded_cull_minimum_instances.web in project.godot) and any similar regression.
+        # Then clicks once (autoplay policy on) and fails if the Web Audio output stays silent
+        # or the bus graph has a cycle (the "no sound at all on the web" bug).
         timeout-minutes: 8
         run: |
           (cd build/web && python3 -m http.server 8060 > /dev/null 2>&1 &)

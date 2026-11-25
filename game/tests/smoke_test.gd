@@ -1069,6 +1069,26 @@ func _menu_checks(main) -> bool:
 	St.mouse_sensitivity = keep[3]; St.pad_sensitivity = keep[4]; St.invert_y = keep[5]; St.volume = keep[6]
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	ok = _check("audio buses exist", AudioServer.get_bus_index("Music") >= 0 and AudioServer.get_bus_index("SFX") >= 0) and ok
+	# WEB AUDIO FIX: the buses must come from the startup bus layout. Buses added at runtime with
+	# AudioServer.add_bus() desync Godot 4.3's Web Audio bus mirror into a send cycle that the
+	# browser silences (no sound at all on the web). See settings.gd ensure_buses().
+	var bl_path := str(ProjectSettings.get_setting("audio/buses/default_bus_layout", ""))
+	var bl = load(bl_path) if ResourceLoader.exists(bl_path) else null
+	var bl_ok: bool = bl is AudioBusLayout
+	if bl_ok:
+		var want := ["Music", "SFX", "Voice"]
+		for k in want.size():
+			bl_ok = bl_ok and bl.get("bus/%d/name" % (k + 1)) == StringName(want[k]) and bl.get("bus/%d/send" % (k + 1)) == &"Master"
+	ok = _check("web audio: Music/SFX/Voice come from the startup bus layout", bl_ok) and ok
+	var routes_ok := true
+	for b in ["Music", "SFX", "Voice"]:
+		var bi := AudioServer.get_bus_index(b)
+		routes_ok = routes_ok and bi > 0 and AudioServer.get_bus_send(bi) == &"Master"
+	ok = _check("web audio: every bus sends to Master", routes_ok) and ok
+	var no_add_bus := true
+	for f in ["res://scripts/settings.gd", "res://scripts/audio/audio.gd", "res://scripts/audio/dialogue.gd"]:
+		no_add_bus = no_add_bus and not FileAccess.get_file_as_string(f).contains("AudioServer.add_bus(")
+	ok = _check("web audio: no runtime AudioServer.add_bus() (breaks the Web Audio buses)", no_add_bus) and ok
 
 	# the main menu scene loads, builds the lair and its screens
 	main.queue_free()
