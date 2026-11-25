@@ -561,7 +561,7 @@ func _perched(c: Crow, dt: float, pp: Vector3, scare: float, scan: bool) -> void
 			c.yaw += rng.randf_range(-1.6, 1.6)
 			c.idle_t = rng.randf_range(0.8, 2.5)
 		elif roll < 0.9:
-			c.spread = 0.35 # a ruffle
+			c.spread = 0.14 # a ruffle (more and the half-open wings poke out like sticks)
 			c.idle_t = rng.randf_range(1.0, 3.0)
 		else:
 			# keep an eye on Sol when he is about
@@ -577,7 +577,7 @@ func _perched(c: Crow, dt: float, pp: Vector3, scare: float, scan: bool) -> void
 		c.hop -= dt
 		var u := 1.0 - maxf(c.hop, 0.0) / 0.28
 		c.pos = c.hop_from.lerp(c.hop_to, u) + Vector3(0, sin(u * PI) * 0.09, 0)
-		c.spread = maxf(c.spread, 0.25 * sin(u * PI))
+		c.spread = maxf(c.spread, 0.12 * sin(u * PI))
 
 
 func _take_off(c: Crow, pp: Vector3) -> void:
@@ -715,7 +715,7 @@ func _ambient(dt: float, pp: Vector3) -> void:
 				best = c
 	if best != null:
 		best.head_pitch = -0.5
-		best.spread = 0.3
+		best.spread = 0.14
 		_sound(_caw_streams[rng.randi() % _caw_streams.size()], best.pos, -9.0)
 
 

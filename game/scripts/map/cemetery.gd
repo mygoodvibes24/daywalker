@@ -512,8 +512,8 @@ static func _dig_site(c, s: Ctx) -> void:
 	c.box(wood, p + Vector3(0, 0.82, -HOLE.y - 0.45), Vector3(0.5, 0.07, 0.05), Color(0.45, 0.35, 0.24))
 	Crows.add_perch(c, p + Vector3(0, 1.1, -HOLE.y - 0.45), PI)
 	# a lantern on the ground at the head of the grave
-	var flame := Kit.lantern(c, p + Vector3(-0.85, 0.0, -HOLE.y - 0.5), 0.3)
-	var lights: Array = [[_lamp_light(c, flame + Vector3(0, 0.15, 0), 7.0), 1.6]]
+	var flame := Kit.lantern(c, p + Vector3(0.95, 0.0, -HOLE.y - 0.3), 0.3) # between the cut and the spoil heap
+	var lights: Array = [[_lamp_light(c, flame + Vector3(0, 0.35, 0), 6.5), 2.3]]
 	lights.append_array(c.get_meta("gy_shed_lights", []))
 	c.halo_xfs.append(Transform3D(Basis().scaled(Vector3(0.45, 0.45, 0.45)), flame))
 	# the hole is fenced off by an invisible steep ridge: Sol can't walk in, fall through or

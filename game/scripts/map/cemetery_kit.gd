@@ -89,7 +89,7 @@ void fragment() {
 	vec2 uv = UV * 0.42 + cust.zw * 3.7;
 	vec3 a = texture(alb, uv).rgb;
 	float l = dot(a, vec3(0.333));
-	vec3 base = mix(vec3(l), a, 0.35) * COLOR.rgb * (0.75 + cust.y * 0.6);
+	vec3 base = mix(vec3(l), a, 0.35) * COLOR.rgb * (0.95 + cust.y * 0.6);
 	base *= mix(vec3(0.95, 0.97, 1.03), vec3(1.05, 1.0, 0.92), cust.z);
 	float up = clamp(ln.y, 0.0, 1.0);
 	float m = cust.x * (up * 0.7 + 0.45 - lp.y * 0.35 + (l - 0.5) * 2.2);
@@ -603,7 +603,7 @@ static func dirt_heap(c, bt, p: Vector3, size: Vector3, yaw: float, seed_: int) 
 			var nrm := (d - a).cross(bb - e).normalized()
 			if nrm.y < 0.0:
 				nrm = -nrm
-			var col := Color(0.55, 0.48, 0.42) * (0.85 + 0.15 * r.randf())
+			var col := Color(0.68, 0.55, 0.44) * (0.85 + 0.15 * r.randf())
 			bt.quad(a, bb, d, e, nrm, col, Vector2(u0 * 4.0, v0 * 2.0), Vector2(u1 * 4.0, v1 * 2.0))
 
 
