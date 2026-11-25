@@ -1303,6 +1303,12 @@ func _set_inside(on: bool) -> void:
 		if street != null:
 			env.tonemap_exposure = street.tonemap_exposure
 		p.camera.environment = env
+		# weak phones (Settings quality Low): three lights instead of seven, no glow pass; the
+		# baked candle light carries the room
+		var low: bool = Settings.quality <= 0
+		for i in lights.size():
+			lights[i].visible = not low or i in [1, 2, 4]
+		env.glow_enabled = not low
 		var tw := create_tween()
 		tw.tween_property(env, "tonemap_exposure", 1.6 * Settings.brightness, 0.8)
 	else:
