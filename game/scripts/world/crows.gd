@@ -368,7 +368,7 @@ func _caw(k: int) -> AudioStreamWAV:
 	var rate := 22050
 	var r := RandomNumberGenerator.new()
 	r.seed = 501 + k
-	var n_caws := [1, 2, 3][k]
+	var n_caws: int = [1, 2, 3][k]
 	var one := 0.3
 	var gap := 0.14
 	var total := int((n_caws * (one + gap) + 0.1) * rate)

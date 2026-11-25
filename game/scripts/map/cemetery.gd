@@ -606,7 +606,7 @@ static func _yard(c, s: Ctx) -> void:
 	while k <= SHED_SIZE.y:
 		for sx in [-1.0, 1.0]:
 			var bz := p.z - hz + k
-			var skip := sx < 0.0 and ((bz > p.z - 1.0 and bz < p.z + 0.1) or (bz > p.z + 0.8 and bz < p.z + 1.8))
+			var skip: bool = sx < 0.0 and ((bz > p.z - 1.0 and bz < p.z + 0.1) or (bz > p.z + 0.8 and bz < p.z + 1.8))
 			if not skip:
 				c.box(wood, Vector3(p.x + sx * (hx + 0.01), (y0 + y1) * 0.5, bz), Vector3(0.04, wh, 0.07), dark)
 		k += 0.5
@@ -772,28 +772,28 @@ static func _gates(c) -> void:
 	var col := Color(0.05, 0.048, 0.045)
 	for z in [Z0, Z1]:
 		for ax in AVENUES_X:
-			var main := z == Z0 and ax == 0.0
+			var main: bool = z == Z0 and ax == 0.0
 			c.ck = c._chunk_of(ax, z)
 			var met = c._b("metal")
 			var inward := 1.0 if z == Z0 else -1.0
 			for side in [-1.0, 1.0]:
 				var hinge := Vector3(ax + side * 3.1, 0, z)
-				var open := (1.25 if main else 1.0 + absf(ax) * 0.004) * side * inward
+				var open: float = (1.25 if main else 1.0 + absf(ax) * 0.004) * side * inward
 				var b := Basis(Vector3.UP, open)
 				var w := 3.0
 				var h := 2.5 if main else 2.2
-				var o := -side
+				var o: float = -side
 				for y in [0.15, 1.0, h - 0.15]:
 					c.box(met, hinge + b * Vector3(o * w * 0.5, y, 0), Vector3(w, 0.05, 0.05), col, b)
 				var n := 19
 				for i in n + 1:
-					var bx := o * w * float(i) / n
+					var bx: float = o * w * float(i) / n
 					var bh := h + 0.12 * sin(PI * float(i) / n) * (2.0 if main else 1.0)
 					c.box(met, hinge + b * Vector3(bx, bh * 0.5, 0), Vector3(0.025, bh, 0.025), col, b, 12)
 					c.cyl(met, hinge + b * Vector3(bx, bh, 0), 0.035, 0.0, 0.12, 3, col, false)
 				# scrollwork rings between the lower rails
 				for i in 4:
-					var cx := o * w * (0.15 + i * 0.23)
+					var cx: float = o * w * (0.15 + i * 0.23)
 					c.cyl(met, hinge + b * Vector3(cx, 0.58, 0), 0.16, 0.16, 0.03, 8, col, false, b * Basis(Vector3.RIGHT, PI * 0.5))
 			if main:
 				# the arch over the piers: two curved bars, a nameplate and a cross
@@ -801,7 +801,7 @@ static func _gates(c) -> void:
 				var prev_b := Vector3.ZERO
 				for i in 13:
 					var t := float(i) / 12.0
-					var x := ax - 3.6 + 7.2 * t
+					var x: float = ax - 3.6 + 7.2 * t
 					var y := 3.4 + sin(t * PI) * 1.6
 					var pa := Vector3(x, y, z)
 					var pb := Vector3(x, y - 0.35, z)

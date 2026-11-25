@@ -871,6 +871,11 @@ func _audio_checks(main) -> bool:
 	var bad := []
 	for id in dlg.lines:
 		var l: Dictionary = dlg.lines[id]
+		if str(l.audio) == "" and l.get("category", "") == "npc":
+			# text-only ambient NPC lines (the groundskeeper): subtitle, no voice file yet
+			if float(l.duration) <= 0.0 or not dlg.speakers.has(l.speaker):
+				bad.append(id)
+			continue
 		var s = load(l.audio) if ResourceLoader.exists(l.audio) else null
 		if s == null or s.get_length() < 0.3 or float(l.duration) <= 0.0 or not dlg.speakers.has(l.speaker):
 			bad.append(id)
