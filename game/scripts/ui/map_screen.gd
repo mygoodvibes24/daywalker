@@ -69,11 +69,31 @@ func is_open() -> bool:
 
 func open() -> void:
 	panel.visible = true
+	_world_far(true)
 
 
 func close() -> void:
 	if panel != null:
 		panel.visible = false
+	_world_far(false)
+
+
+## Frame budget (Group C): behind the dimmed map only the street around Sol is worth drawing,
+## so the camera's far plane closes in while the map is up (the map-open view cost 1,000+ draws).
+const MAP_OPEN_FAR := 45.0
+var _saved_far := 0.0
+
+
+func _world_far(on: bool) -> void:
+	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+	if cam == null:
+		return
+	if on and _saved_far <= 0.0:
+		_saved_far = cam.far
+		cam.far = MAP_OPEN_FAR
+	elif not on and _saved_far > 0.0:
+		cam.far = _saved_far
+		_saved_far = 0.0
 
 
 func toggle() -> void:

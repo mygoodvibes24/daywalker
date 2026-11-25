@@ -8,6 +8,7 @@ const U = preload("res://scripts/util.gd")
 static var M := {}
 ## POI and deploy-point dressing is hidden beyond this (the map's fog swallows it by then).
 const DRESSING_RANGE := 75.0
+const LABEL_RANGE := 110.0
 
 
 static func mats() -> Dictionary:
@@ -70,6 +71,7 @@ static func label(parent: Node3D, text: String, c: Color, y := 4.0) -> Label3D:
 	l.pixel_size = 0.008
 	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	l.position = Vector3(0, y, 0)
+	l.visibility_range_end = LABEL_RANGE # frame budget: the compass and map carry it further
 	parent.add_child(l)
 	return l
 

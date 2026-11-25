@@ -8,12 +8,22 @@ extends RefCounted
 ## the same pass (up to 8 per object), so lights cost no extra draws here. Triangles are counted
 ## at LOD 0, so they are an upper bound for imported meshes (which drop LODs with distance).
 ## Calibrated against RenderingServer's counters on the native Compatibility renderer at the
-## probe spots (see docs/qa or the Group C report): it tracks them within about 15-20%.
+## probe spots (Group C, round 3): real draws ~= estimate + 35-75 (the HUD, the sky and the post
+## passes it doesn't model); triangles are LOD-0 for the builders' meshes and a flat share of
+## LOD 0 for imported ones beyond a few metres, so they run high.
 
 const ASPECT := 16.0 / 9.0
 const NEAR := 0.05
 
 static var _tri_cache := {}
+const LOD_NEAR := 12.0
+const LOD_FAR_SHARE := 0.15
+
+
+## Imported (.glb / .scn) meshes have LODs; the builders' ArrayMeshes don't.
+static func _imported(m: Mesh) -> bool:
+	var rp := m.resource_path
+	return rp.contains(".glb") or rp.contains(".scn") or rp.contains(".res") or rp.contains(".tscn")
 
 
 static func mesh_tris(mesh: Mesh) -> int:
@@ -119,12 +129,14 @@ static func estimate(root: Node, xf: Transform3D, fov := 70.0, far := 4000.0, sh
 		var gi := n as GeometryInstance3D
 		var surf := 0
 		var t := 0
+		var imported := false
 		if gi is MeshInstance3D:
 			var m: Mesh = (gi as MeshInstance3D).mesh
 			if m == null:
 				continue
 			surf = mesh_surfaces(m)
 			t = mesh_tris(m)
+			imported = _imported(m)
 		elif gi is MultiMeshInstance3D:
 			var mm: MultiMesh = (gi as MultiMeshInstance3D).multimesh
 			if mm == null or mm.mesh == null:
@@ -134,16 +146,22 @@ static func estimate(root: Node, xf: Transform3D, fov := 70.0, far := 4000.0, sh
 				continue
 			surf = mesh_surfaces(mm.mesh)
 			t = mesh_tris(mm.mesh) * cnt
+			imported = _imported(mm.mesh)
 		elif gi is GPUParticles3D or gi is CPUParticles3D:
 			surf = 1
 			t = int(gi.get("amount")) * 2
 		else:
 			surf = 1 # Label3D, Sprite3D, decals...
 			t = 2
-		var aabb: AABB = gi.global_transform * gi.get_aabb()
+		var local_aabb: AABB = gi.get_aabb()
+		if gi.has_meta("bounds"):
+			local_aabb = gi.get_meta("bounds") # MultiMeshes (map/world_quality.gd tag_bounds)
+		var aabb: AABB = gi.global_transform * local_aabb
 		var d := cam.distance_to(aabb.get_center())
 		if not _range_ok(gi, d):
 			continue
+		if imported and (d > LOD_NEAR or gi is MultiMeshInstance3D):
+			t = int(t * LOD_FAR_SHARE) # imported meshes carry generated LODs (mesh_lod_threshold 4 on web)
 		var casts := gi.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var only_shadow := gi.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
 		var key := ""

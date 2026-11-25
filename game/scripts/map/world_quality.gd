@@ -74,3 +74,16 @@ static func shadow_quality() -> int:
 static func range_scale() -> float:
 	var table: Array = VIEW_WEB if is_web() else VIEW_CINEMATIC
 	return view_distance() / float(table[HIGH])
+
+
+## Records a MultiMesh's bounds as node metadata (the headless frame-budget estimate can't read
+## instance transforms back from the dummy renderer). Call after filling the MultiMesh.
+static func tag_bounds(mmi: MultiMeshInstance3D, xfs: Array) -> void:
+	var mm := mmi.multimesh
+	if mm == null or mm.mesh == null or xfs.is_empty():
+		return
+	var mb := mm.mesh.get_aabb()
+	var out: AABB = (xfs[0] as Transform3D) * mb
+	for k in range(1, xfs.size()):
+		out = out.merge((xfs[k] as Transform3D) * mb)
+	mmi.set_meta("bounds", out)

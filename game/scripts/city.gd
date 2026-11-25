@@ -169,6 +169,7 @@ func _b(mat: String) -> Batch:
 
 const CHUNK := 80.0 # main geometry is merged per 80 m cell...
 const MAIN_RANGE := 115.0
+const HLOD_RANGE := 230.0 # HLOD boxes are dropped beyond this (scaled by the view distance)
 ## Web tier (Compatibility, phones): main chunks hand over to their HLOD boxes sooner and the
 ## detail chunks drop sooner (the frame-cost budget: <= 300 draws, <= 400k triangles).
 var main_range := MAIN_RANGE
@@ -1367,12 +1368,70 @@ func build() -> void:
 	_build_walls()
 	_collect_grid_spots()
 	_settle_on_terrain()
+	_register_quality()
 
 
 ## Ground height at (x, z): the one API everything placed on the map uses (terrain.gd).
 ## The paved plates (the Quarter, the Mile, the cemetery, the docks) are level at 0.
 func height_at(x: float, z: float) -> float:
 	return Terrain.height_at(x, z)
+
+
+# ---------------------------------------------------------------- quality tiers and frame budget
+## The web budget is <= 350 draws and <= 600k triangles from any spot at the default tier
+## (tests/frame_budget.gd guards it in the smoke test). Every visibility range authored here is
+## for the High tier; apply_quality() rescales them to Settings' view distance, thins the
+## foliage and street clutter MultiMeshes, and re-runs whenever Settings changes.
+const WQ = preload("res://scripts/map/world_quality.gd")
+const LABEL_RANGE := 60.0 # neon blade-sign lettering and other world text
+const PARTICLE_RANGE := 55.0 # steam from grates, fireflies
+## MultiMeshes with no colliders under them, thinned by foliage_density (the near pines and
+## cypress keep every tree: their trunks are solid, so they only shorten their range).
+const FOLIAGE_THIN := ["PineCards", "CypressCards", "PineBush", "BayouBush"]
+const PROPS_THIN := ["Glb_trash"]
+var _q_ranges: Array = [] # [GeometryInstance3D, begin, end]
+var _q_foliage: Array = [] # MultiMeshes thinned by foliage_density
+var _q_props: Array = [] # ... and by prop_density
+
+
+func _register_quality() -> void:
+	for n in find_children("*", "GeometryInstance3D", true, false):
+		var gi := n as GeometryInstance3D
+		if gi.visibility_range_end <= 0.0:
+			if gi is Label3D:
+				gi.visibility_range_end = LABEL_RANGE
+			elif gi is CPUParticles3D or gi is GPUParticles3D:
+				gi.visibility_range_end = PARTICLE_RANGE
+		if gi.visibility_range_end > 0.0 or gi.visibility_range_begin > 0.0:
+			_q_ranges.append([gi, gi.visibility_range_begin, gi.visibility_range_end])
+		if gi is MultiMeshInstance3D and (gi as MultiMeshInstance3D).multimesh != null:
+			var nm := String(gi.name)
+			for pre in FOLIAGE_THIN:
+				if nm.begins_with(pre):
+					_q_foliage.append((gi as MultiMeshInstance3D).multimesh)
+			for pre in PROPS_THIN:
+				if nm.begins_with(pre):
+					_q_props.append((gi as MultiMeshInstance3D).multimesh)
+	apply_quality()
+	var st := get_node_or_null("/root/Settings")
+	if st != null and st.has_signal("changed") and not st.is_connected("changed", apply_quality):
+		st.connect("changed", apply_quality)
+
+
+func apply_quality() -> void:
+	var k := WQ.range_scale()
+	for e in _q_ranges:
+		var gi: GeometryInstance3D = e[0]
+		if not is_instance_valid(gi):
+			continue
+		gi.visibility_range_begin = e[1] * k
+		gi.visibility_range_end = e[2] * k
+	var fd := WQ.foliage_density()
+	for mm: MultiMesh in _q_foliage:
+		mm.visible_instance_count = -1 if fd >= 0.999 else ceili(mm.instance_count * fd)
+	var pd := WQ.prop_density()
+	for mm: MultiMesh in _q_props:
+		mm.visible_instance_count = -1 if pd >= 0.999 else ceili(mm.instance_count * pd)
 
 
 ## Spawn points, POI anchors and loot caches collected flat by the builders sit on the ground.
@@ -1485,6 +1544,8 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 		if prefix != "" and parts[0] != prefix:
 			continue
 		var casts: bool = CASTS.get(parts[1], false)
+		if parts[0].begins_with("H"):
+			casts = false # frame budget: HLOD boxes never cast, so walls and roofs share one instance
 		var group := parts[0] + ("|cast" if casts else "|nocast")
 		if not by_chunk.has(group):
 			by_chunk[group] = []
@@ -1536,6 +1597,9 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 			"H":
 				mi.visibility_range_begin = main_range
 				mi.visibility_range_begin_margin = 10.0
+				# frame budget: beyond this the fog has swallowed a block (landmarks, "M", stay)
+				mi.visibility_range_end = HLOD_RANGE
+				mi.visibility_range_end_margin = 20.0
 				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		(parent if parent else self).add_child(mi)
 
@@ -3206,6 +3270,7 @@ func _build_props() -> void:
 				mmi.material_override = entry[1]
 				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if big and entry[2] else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 				mmi.visibility_range_end = (100.0 if kind == "lamp" else 80.0) * (0.7 if web_tier else 1.0)
+				WQ.tag_bounds(mmi, idx.map(func(i): return xfs[i]))
 				add_child(mmi)
 	# warm halos round every lantern: camera-facing quads in one MultiMesh
 	if not halo_xfs.is_empty():
@@ -3240,8 +3305,15 @@ func _glb_multimeshes(kind: String, glb: Dictionary, xfs: Array) -> void:
 			cells[key] = []
 		cells[key].append(xf)
 	var big: bool = kind == "sedan" or kind == "dumpster"
+	var shuf := RandomNumberGenerator.new()
+	shuf.seed = hash(kind)
 	for key in cells.keys():
 		var list: Array = cells[key]
+		for k in range(list.size() - 1, 0, -1): # shuffled: the prop density setting thins a prefix
+			var j := shuf.randi_range(0, k)
+			var tmp = list[k]
+			list[k] = list[j]
+			list[j] = tmp
 		for part in glb.meshes:
 			var mm := MultiMesh.new()
 			mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -3255,6 +3327,7 @@ func _glb_multimeshes(kind: String, glb: Dictionary, xfs: Array) -> void:
 			mmi.multimesh = mm
 			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if big else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			mmi.visibility_range_end = 55.0 if big else 40.0
+			WQ.tag_bounds(mmi, list.map(func(xf): return Transform3D(xf.basis.orthonormalized(), xf.origin) * part[1]))
 			add_child(mmi)
 	print("city props: %d x %s (generated model)" % [xfs.size(), kind])
 
@@ -3590,8 +3663,16 @@ func scatter_mm(name: String, mesh: Mesh, xfs: Array, cell: float, range_begin :
 		if not cells.has(key):
 			cells[key] = []
 		cells[key].append(k)
+	var shuf := RandomNumberGenerator.new()
+	shuf.seed = hash(name)
 	for key in cells.keys():
 		var idx: Array = cells[key]
+		# shuffled, so any prefix (MultiMesh.visible_instance_count) is an even thinning
+		for k in range(idx.size() - 1, 0, -1):
+			var j := shuf.randi_range(0, k)
+			var tmp = idx[k]
+			idx[k] = idx[j]
+			idx[j] = tmp
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.use_colors = not cols.is_empty()
@@ -3615,6 +3696,7 @@ func scatter_mm(name: String, mesh: Mesh, xfs: Array, cell: float, range_begin :
 		if range_end > 0.0:
 			mmi.visibility_range_end = range_end
 			mmi.visibility_range_end_margin = 8.0
+		WQ.tag_bounds(mmi, idx.map(func(i): return xfs[i]))
 		add_child(mmi)
 
 

@@ -1434,6 +1434,62 @@ func _micro_checks(m) -> bool:
 	return ok
 
 
+## Group C frame budget (web tier: <= 350 draws, <= 600k triangles anywhere). The dummy
+## renderer reports no stats, so tests/frame_budget.gd estimates them from the scene. Calibrated
+## against the native Compatibility probe: real draws ~= estimate + 30-75 (the HUD, the sky and
+## the post passes it doesn't model), and its triangles run high (real ~= 0.4-0.8x). The spots are the worst ones from the round-2 critic and QA: the tank-farm
+## deploy, the boss arenas, the lake, the docks yard, the Velvet Mile, the Quarter and the bayou.
+const BUDGET_SPOTS := [
+	["tank farm", Vector3(-130, 0, -200)], ["Pier Nine arena", Vector3(-172, 0, 172)],
+	["Palm Square arena", Vector3(150, 0, 120)], ["Drowned Lawn arena", Vector3(185, 0, -132)],
+	["the Hollow arena", Vector3(10, 0, -122)], ["lake shore", Vector3(60, 0, -200)],
+	["docks yard", Vector3(-170, 0, -60)], ["Velvet Mile", Vector3(150, 0, 100)],
+	["Old Quarter street", Vector3(-30, 0, 50)], ["bayou", Vector3(185, 0, -105)],
+	["the plaza", Vector3(0, 0, 30)],
+]
+const BUDGET_EST_DRAWS := 280
+const BUDGET_EST_TRIS := 900000
+
+
+func _budget_checks(m) -> bool:
+	var FB = load("res://tests/frame_budget.gd")
+	var T = load("res://scripts/map/terrain.gd")
+	var worst := {"draws": 0, "tris": 0, "at": ""}
+	for spot in BUDGET_SPOTS:
+		var pos: Vector3 = spot[1]
+		pos.y = T.height_at(pos.x, pos.z)
+		for k in 4:
+			var yaw := k * PI * 0.5
+			var b := Basis(Vector3.UP, yaw)
+			var xf := Transform3D(b * Basis(Vector3.RIGHT, -0.12), pos + Vector3(0, 2.0, 0) + b * Vector3(0, 0.5, 4.2))
+			var r: Dictionary = FB.estimate(m, xf, 70.0, m.player.camera.far, m.sun.directional_shadow_max_distance)
+			if r.draws > worst.draws:
+				worst.draws = r.draws
+				worst.at = "%s, yaw %d" % [spot[0], k * 90]
+			worst.tris = maxi(worst.tris, r.tris)
+	var ok := _check("frame budget: worst estimated view %d draws at %s (<= %d, i.e. <= 350 real)" % [worst.draws, worst.at, BUDGET_EST_DRAWS], worst.draws <= BUDGET_EST_DRAWS)
+	ok = _check("frame budget: worst estimated view %dk LOD-0 triangles (<= %dk, i.e. <= 600k real)" % [worst.tris / 1000, BUDGET_EST_TRIS / 1000], worst.tris <= BUDGET_EST_TRIS) and ok
+	# the map screen pulls the camera's far plane in
+	m.hunt.map_screen.open()
+	var cam_far: float = m.player.camera.far
+	m.hunt.map_screen.close()
+	ok = _check("the map screen pulls the world's far plane in (%.0f m while open, %.0f m after)" % [cam_far, m.player.camera.far], cam_far <= 60.0 and m.player.camera.far >= 300.0) and ok
+	# HLOD boxes: one instance per cell, dropped at a range
+	var hl := 0
+	var hl_ranged := 0
+	var hl_cast := 0
+	for n in m.city.get_children():
+		var nm := String(n.name)
+		if nm.begins_with("Chunk_H"):
+			hl += 1
+			if (n as GeometryInstance3D).visibility_range_end > 0.0:
+				hl_ranged += 1
+			if nm.ends_with("_cast"):
+				hl_cast += 1
+	ok = _check("HLOD boxes are one instance per cell and stop at a range (%d cells, %d ranged)" % [hl, hl_ranged], hl > 0 and hl == hl_ranged and hl_cast == 0) and ok
+	return ok
+
+
 func _start_hunt():
 	var MainScript = load("res://scripts/main.gd")
 	MainScript.started_once = true
@@ -1485,6 +1541,7 @@ func _hunt_checks() -> bool:
 			chasing += 1
 	ok = _check("nothing chases you at the start (%d enemies, %d near, %d moving, %d roamers)" % [m0.living_enemies(), near, chasing, h0.roamers.size()],
 		near == 0 and chasing == 0 and h0.roamers.is_empty() and h0.state == "explore") and ok
+	ok = _budget_checks(m0) and ok
 	# stragglers appear out of sight and stand idle until Sol comes close
 	h0.phase_t = Cfg.ROAM_GRACE + 1.0
 	h0.roam_t = 0.0
