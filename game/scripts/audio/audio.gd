@@ -86,6 +86,7 @@ var _thunder_t := 25.0
 var _calm_t := 99.0
 var _poll_t := 0.0
 var _step_t := 0.0
+var _unlock_poll_t := 0.0
 var _last_play := {} # name -> msec, to stop machine-gun repeats
 
 
@@ -131,6 +132,15 @@ func unlock() -> void:
 func _input(event: InputEvent) -> void:
 	if not unlocked and event.is_pressed() and (event is InputEventKey or event is InputEventMouseButton or event is InputEventJoypadButton or event is InputEventScreenTouch):
 		unlock()
+
+
+## Web: the touch controls consume ScreenTouch events in play before this autoload's _input
+## sees them, so also ask the browser directly. The page shell (web/shell.html) tracks the
+## engine's AudioContexts and resumes them on any gesture; once one runs, audio is allowed.
+func _web_context_running() -> bool:
+	if not OS.has_feature("web") or not Engine.has_singleton("JavaScriptBridge"):
+		return false
+	return bool(JavaScriptBridge.eval("(window.dwAudioContexts || []).some(function (c) { return c.state === 'running'; })", true))
 
 
 # ---------------------------------------------------------------- streams
@@ -381,6 +391,12 @@ func on_boss_died(id: String, pos: Vector3) -> void:
 
 func _process(delta: float) -> void:
 	var real_dt := delta / maxf(Engine.time_scale, 0.01)
+	if not unlocked:
+		_unlock_poll_t -= real_dt
+		if _unlock_poll_t <= 0.0:
+			_unlock_poll_t = 0.25
+			if _web_context_running():
+				unlock()
 	_ambience(real_dt)
 	if not _world_ok():
 		return
