@@ -75,6 +75,14 @@ static func add_perch(host: Node, pos: Vector3, yaw: float = INF) -> void:
 	host.set_meta(META, list)
 
 
+## Register a callable (no arguments, returns [[pos, yaw], ...]) that the flock calls once the
+## host is fully built, for perches that only exist after the build (lamps, rooftops).
+static func add_provider(host: Node, f: Callable) -> void:
+	var list: Array = host.get_meta(META + "_providers", [])
+	list.append(f)
+	host.set_meta(META + "_providers", list)
+
+
 ## Create the flock under host (once). It settles on its perches on the next frame.
 static func spawn(host: Node3D) -> Node3D:
 	var n: Node3D = host.get_node_or_null("Crows")
@@ -100,7 +108,10 @@ func _ready() -> void:
 func _setup() -> void:
 	_ready_done = true
 	var host := get_parent()
-	for p in host.get_meta(META, []):
+	var all: Array = host.get_meta(META, []).duplicate()
+	for f: Callable in host.get_meta(META + "_providers", []):
+		all.append_array(f.call())
+	for p in all:
 		perches.append({"pos": p[0], "yaw": rng.randf() * TAU if p[1] == INF else p[1], "busy": false})
 	# about half the perches start taken, the rest are landing spots
 	var order := range(perches.size())
