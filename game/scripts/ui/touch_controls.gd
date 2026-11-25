@@ -48,6 +48,7 @@ func _ready() -> void:
 	_add("parry", "PARRY", ["parry"], Vector2(-226, -196), 38.0)
 	_add("bite", "BITE", ["bite", "interact"], Vector2(-352, -64), 36.0)
 	_add("sprint", "RUN", ["sprint"], Vector2(-356, -170), 34.0, true)
+	_add("lock", "LOCK", ["lock_on"], Vector2(-200, -306), 30.0) # lock-on; a swipe on the right side switches target
 	_add("pause", "II", ["@pause"], Vector2(-46, 150), 26.0, false, "top")
 	_add("map", "MAP", ["hunt_map"], Vector2(-114, 150), 26.0, false, "top")
 	_add("coat", "COAT", ["inventory"], Vector2(-182, 150), 26.0, false, "top")
@@ -133,6 +134,9 @@ func _input(event: InputEvent) -> void:
 			_stick_to(d.position)
 		elif d.index == look_finger and _main != null:
 			var pl = _main.player
+			if pl.get("lock_target") != null:
+				pl.lock_flick(d.relative.x * 1.5) # locked on: a swipe switches target
+				return
 			pl.cam_yaw -= d.relative.x * LOOK_SPEED * Settings.mouse_sensitivity
 			pl.cam_pitch = clampf(pl.cam_pitch - d.relative.y * LOOK_SPEED * Settings.mouse_sensitivity * Settings.y_sign(), -1.1, 0.35)
 
@@ -242,7 +246,7 @@ func _draw_pad() -> void:
 	var pressed_ids := held.values()
 	for b in buttons:
 		var c := _button_center(b)
-		var on: bool = b.id in pressed_ids or (b.toggle and sprint_on)
+		var on: bool = b.id in pressed_ids or (b.toggle and sprint_on) or (b.id == "lock" and _main != null and _main.player.get("lock_target") != null)
 		var r: float = b.r
 		pad.draw_circle(c, r, Color(0.55, 0.04, 0.07, 0.75) if on else Color(INK.r, INK.g, INK.b, 0.5))
 		pad.draw_arc(c, r, 0.0, TAU, 40, Color(GOLD.r, GOLD.g, GOLD.b, 0.95 if on else 0.6), 2.0, true)

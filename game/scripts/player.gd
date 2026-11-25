@@ -104,6 +104,32 @@ var coat: MeshInstance3D # primitive fallback only
 var arm_pivot: Node3D # swing driver; drawn directly only by the primitive fallback
 var mod_anim: SolModularAnim # clip blending for the modular model (null otherwise)
 var sheath: SolSheath # the back scabbard and the draw (null on the older bodies: always in hand)
+# ---- stamina (round 3, G4): light and fast. Dashes, sprinting, swings and the parry spend it; it comes
+# back after STAMINA_DELAY at stamina_regen/s. Spent to zero he is EXHAUSTED: no sprint, dash or swing
+# until it is back to EXHAUST_RECOVER, refilling slower. A move's cost is its sol_moves.gd "stamina".
+# BLOOD RITE / PROGRESSION HOOKS: stamina_max and stamina_regen are plain fields a boon may raise, and
+# stat("stamina") / stat("stamina_regen") / stat("stamina_cost") add on top (see max_stamina()).
+var stamina_max := 100.0
+var stamina_regen := 65.0 # per second
+var stamina := 100.0
+var exhausted := false
+var _stamina_wait := 0.0
+const STAMINA_DELAY := 0.4
+const EXHAUST_DELAY := 0.9
+const EXHAUST_RECOVER := 30.0
+const DASH_STAMINA := 16.0
+const SPRINT_STAMINA := 9.0 # per second at a sprint
+# ---- Frenzy (round 3, G3): no longer free. While it runs: x frenzy_dmg_mult damage, +25% speed and no
+# stamina cost, but blood drains frenzy_drain/s (never below FRENZY_FLOOR of max), he takes
+# frenzy_dmg_taken more damage, and the beast won't stop to bite; every blow that lands gives back
+# FRENZY_LEECH. Parries and executions feed the hunger (FRENZY_FEED), so it is earned by fighting well.
+# BLOOD RITE HOOKS: frenzy_drain, frenzy_dmg_taken and frenzy_dmg_mult are fields a boon may change.
+var frenzy_drain := 2.5
+var frenzy_dmg_taken := 0.25
+var frenzy_dmg_mult := 2.0
+const FRENZY_FLOOR := 0.12
+const FRENZY_LEECH := 1.5
+const FRENZY_FEED := {"parry": 8.0, "finisher": 6.0}
 var calm_t := 0.0 # seconds without combat (enemies near, swings, blows)
 var auto_sheathe := true # false: keep the sword out (tests)
 var _threat_t := 0.0
@@ -269,7 +295,9 @@ func _physics_process(delta: float) -> void:
 	var dir := Basis(Vector3.UP, cam_yaw) * Vector3(inp.x, 0.0, inp.y)
 	if dir.length() > 1.0:
 		dir = dir.normalized()
-	sprinting = Input.is_action_pressed("sprint") and dir.length() > 0.1
+	sprinting = Input.is_action_pressed("sprint") and dir.length() > 0.1 and (not exhausted or frenzy_t > 0.0)
+	if sprinting and frenzy_t <= 0.0 and walk_vel.length() > WALK:
+		_drain_stamina(SPRINT_STAMINA * delta, 0.25)
 	_lock_tick(delta)
 	var spd := SPRINT if sprinting else WALK
 	if lock_target != null and not sprinting:
@@ -282,7 +310,7 @@ func _physics_process(delta: float) -> void:
 
 	# Blood Dash (recharges faster in sunlight)
 	dash_charges = minf(dash_charges + delta / (0.7 if day else 1.1) * (1.0 + stat("dash_rate")), MAX_DASH) # PROGRESSION HOOK
-	if Input.is_action_just_pressed("dash") and dash_charges >= 1.0 and bite_t <= 0.0:
+	if Input.is_action_just_pressed("dash") and dash_charges >= 1.0 and bite_t <= 0.0 and spend_stamina(DASH_STAMINA):
 		dash_charges -= 1.0
 		dash_t = DASH_TIME
 		since_dash = 0.0
@@ -346,19 +374,20 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("attack") and Time.get_ticks_msec() >= attack_block_until:
 		attack_buffer_t = ATTACK_BUFFER
 	if attack_buffer_t > 0.0:
-		if attack_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0 and _sword_ready():
+		if attack_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0 and (not exhausted or frenzy_t > 0.0) and _sword_ready():
 			attack_buffer_t = 0.0
 			_attack_pressed()
 			if hold_t >= 0.0 and not Input.is_action_pressed("attack"):
 				hold_t = -1.0 # a buffered tap, not a hold
 		elif sheath == null or not sheath.busy():
 			attack_buffer_t = maxf(attack_buffer_t - delta, 0.0) # (the draw holds the press until the grab)
-	if Input.is_action_just_pressed("parry") and parry_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0:
+	if Input.is_action_just_pressed("parry") and parry_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0 \
+			and spend_stamina(SolMoves.stamina_cost("parry")):
 		draw_sword()
 		_parry()
 	var bite_target = _nearest_enemy(BITE_RANGE, 1)
 	bite_ready = bite_target != null
-	if Input.is_action_just_pressed("bite") and bite_t <= 0.0 and bite_target != null:
+	if Input.is_action_just_pressed("bite") and bite_t <= 0.0 and bite_target != null and frenzy_t <= 0.0:
 		_bite(bite_target)
 	var near_lair: bool = global_position.distance_to(main.lair_pos) < 3.5
 	if Input.is_action_just_pressed("drink") and near_lair:
@@ -617,9 +646,13 @@ func _timers(delta: float) -> void:
 	if burn_t > 0.0:
 		burn_t -= delta
 		hp -= 3.0 * delta
+	_stamina_tick(delta)
 	if frenzy_t > 0.0:
 		frenzy_t -= delta
-		hp = minf(hp + 3.0 * delta, max_hp)
+		# the cost: blood drains while the beast is loose (it never kills on its own)
+		var floor_hp := max_hp * FRENZY_FLOOR
+		if hp > floor_hp:
+			hp = maxf(hp - frenzy_drain * delta, floor_hp)
 		if frenzy_t <= 0.0:
 			hunger = 55.0
 			main.hud.popup("The frenzy fades...")
@@ -639,7 +672,7 @@ func damage_mult() -> float:
 	if hunger >= 60.0:
 		m *= 1.25
 	if frenzy_t > 0.0:
-		m *= 2.0
+		m *= frenzy_dmg_mult
 	# PROGRESSION HOOK: rank, Vows and charms
 	m *= 1.0 + stat("dmg")
 	if main != null and not main.is_day():
@@ -732,16 +765,25 @@ func _nearest_enemy(max_dist: float, staggered: int):
 	return best
 
 
+## Who a swing turns to: the lock-on target when it is in reach, else the nearest fighting enemy.
+func _swing_target():
+	if lock_target != null and _lock_valid(lock_target) and lock_target.global_position.distance_to(global_position) < 6.0 \
+			and lock_target.get("staggered") != true:
+		return lock_target
+	return _nearest_enemy(5.0, -1)
+
+
 func _attack() -> void:
 	combo = combo + 1 if (combo_t > 0.0 and combo < 3) else 1
 	combo_t = 0.7
 	move_name = SolMoves.combo_step(WeaponVisual.combo_for(weapon_item), combo)
 	var step := SolMoves.move(move_name)
+	spend_stamina(SolMoves.stamina_cost(move_name))
 	attack_cd = 0.22 if combo < 3 else 0.4
 	swing_t = 0.22
 	_lunge(float(step.lunge), 0.08)
 	# soft-lock prefers fighting enemies, so you don't kill the one you meant to bite
-	var target = _nearest_enemy(5.0, -1)
+	var target = _swing_target()
 	if target == null:
 		target = _nearest_enemy(5.0, 1)
 	if target != null:
@@ -780,6 +822,7 @@ func _combo_strike(name: String, n: int, target) -> void:
 			var hd: float = dmg * _vs_mult(e)
 			e.take_hit(hd, to.normalized() if d > 0.01 else fwd)
 			hit_enemy.emit(e, hd)
+			_on_blow_landed()
 			Audio.play_at("sword_hit", e.global_position, 0.0 if n < 3 else 3.0) # AUDIO HOOK
 			hit = true
 	if hit:
@@ -1086,11 +1129,12 @@ func _combo_chain() -> String:
 ## The charged / dash / sprint moves: play the clip now, strike on its strike frame.
 func _special(name: String) -> void:
 	var m := SolMoves.move(name)
+	spend_stamina(SolMoves.stamina_cost(name))
 	move_name = name
 	combo = 0
 	combo_t = 0.0
 	hold_t = -1.0
-	var target = _nearest_enemy(5.0, -1)
+	var target = _swing_target()
 	if target != null:
 		var tt: Vector3 = target.global_position - global_position
 		facing = atan2(tt.x, tt.z)
@@ -1170,6 +1214,8 @@ func _strike(name: String, target) -> void:
 			target.execution_death(fwd) # thrown back along Sol's cut, with a blood burst
 		Audio.play_at("sword_hit", target.global_position, 4.0) # AUDIO HOOK
 		hit_enemy.emit(target, fd)
+		_on_blow_landed()
+		add_hunger(float(FRENZY_FEED.finisher)) # an execution feeds the beast
 		shake = maxf(shake, float(m.shake))
 		main.rumble(0.6, 0.9, 0.2)
 		main.set_slowmo(0.15, float(m.stop) * 2.0)
@@ -1189,6 +1235,7 @@ func _strike(name: String, target) -> void:
 			var hd: float = dmg * _vs_mult(e)
 			e.take_hit(hd, to.normalized() if d > 0.01 else fwd)
 			hit_enemy.emit(e, hd)
+			_on_blow_landed()
 			hit = true
 			Audio.play_at("sword_hit", e.global_position, 3.0 if name == "charged" else 0.0) # AUDIO HOOK
 			if name == "charged" and not e.dead:
@@ -1221,6 +1268,7 @@ func _parry_success(e) -> void:
 	main.rumble(0.6, 0.4, 0.15)
 	main.set_slowmo(0.25, 0.45)
 	main.hud.popup("PARRY")
+	add_hunger(float(FRENZY_FEED.parry)) # a clean parry feeds the beast
 	parried.emit(e)
 	Audio.play_at("sword_hit", e.global_position, 2.0, 0.15) # AUDIO HOOK
 
@@ -1252,7 +1300,10 @@ func _combat_tick(delta: float) -> void:
 		if Input.is_action_pressed("attack"):
 			hold_t += delta
 			if hold_t >= HEAVY_HOLD:
-				_special("charged")
+				if exhausted and frenzy_t <= 0.0:
+					hold_t = -1.0 # no breath left for the heavy cut: the light one stands
+				else:
+					_special("charged")
 		else:
 			hold_t = -1.0
 	if not pending.is_empty():
@@ -1333,6 +1384,47 @@ func heal(v: float) -> void:
 	hp = minf(hp + v, max_hp)
 
 
+# ---------------------------------------------------------------- stamina
+func max_stamina() -> float:
+	return maxf(stamina_max + stat("stamina"), 20.0) # PROGRESSION / BLOOD RITE HOOK
+
+
+## Spend `cost` for an action. False (and nothing spent) while exhausted. Frenzy pays nothing.
+func spend_stamina(cost: float) -> bool:
+	if frenzy_t > 0.0 or cost <= 0.0:
+		return true
+	if exhausted:
+		return false
+	_drain_stamina(cost * maxf(1.0 + stat("stamina_cost"), 0.2), STAMINA_DELAY) # PROGRESSION HOOK
+	return true
+
+
+func _drain_stamina(v: float, wait: float) -> void:
+	stamina -= v
+	_stamina_wait = maxf(_stamina_wait, wait)
+	if stamina <= 0.0:
+		stamina = 0.0
+		exhausted = true
+		_stamina_wait = EXHAUST_DELAY
+
+
+func _stamina_tick(delta: float) -> void:
+	var top := max_stamina()
+	if _stamina_wait > 0.0:
+		_stamina_wait -= delta
+	elif stamina < top:
+		stamina = minf(stamina + stamina_regen * (1.0 + stat("stamina_regen")) * (0.65 if exhausted else 1.0) * delta, top)
+	if exhausted and stamina >= EXHAUST_RECOVER:
+		exhausted = false
+	stamina = minf(stamina, top)
+
+
+## A blow landed: Frenzy feeds on it.
+func _on_blow_landed() -> void:
+	if frenzy_t > 0.0:
+		heal(FRENZY_LEECH)
+
+
 func add_hunger(v: float) -> void:
 	hunger = minf(hunger + v, 100.0)
 	if hunger >= 100.0 and frenzy_t <= 0.0:
@@ -1353,7 +1445,7 @@ func take_damage(amount: float, _src) -> void:
 		_parry_success(_src) # the strike landed inside the parry window: turned aside
 		return
 	if frenzy_t > 0.0:
-		amount *= 0.5
+		amount *= 1.0 + frenzy_dmg_taken # the beast doesn't guard
 	amount *= maxf(1.0 + stat("dmg_taken"), 0.2) # PROGRESSION HOOK
 	hp -= amount
 	hurt.emit(amount, _src)
