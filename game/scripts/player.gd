@@ -122,7 +122,7 @@ const DASH_STAMINA := 16.0
 const SPRINT_STAMINA := 9.0 # per second at a sprint
 # ---- Frenzy (round 3, G3): no longer free. While it runs: x frenzy_dmg_mult damage, +25% speed and no
 # stamina cost, but blood drains frenzy_drain/s (never below FRENZY_FLOOR of max), he takes
-# frenzy_dmg_taken more damage, and the beast won't stop to bite; every blow that lands gives back
+# frenzy_dmg_taken more damage, and the beast neither parries nor stops to bite; every blow that lands gives back
 # FRENZY_LEECH. Parries and executions feed the hunger (FRENZY_FEED), so it is earned by fighting well.
 # BLOOD RITE HOOKS: frenzy_drain, frenzy_dmg_taken and frenzy_dmg_mult are fields a boon may change.
 var frenzy_drain := 2.5
@@ -396,7 +396,7 @@ func _physics_process(delta: float) -> void:
 				hold_t = -1.0 # a buffered tap, not a hold
 		elif sheath == null or not sheath.busy():
 			attack_buffer_t = maxf(attack_buffer_t - delta, 0.0) # (the draw holds the press until the grab)
-	if Input.is_action_just_pressed("parry") and parry_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0 \
+	if Input.is_action_just_pressed("parry") and parry_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0 and frenzy_t <= 0.0 \
 			and spend_stamina(SolMoves.stamina_cost("parry")):
 		draw_sword()
 		_parry()

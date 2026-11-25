@@ -261,7 +261,7 @@ func _process(delta: float) -> void:
 	hunger_fill.bg_color = Color(0.45, 0.1, 0.55).lerp(Color(1.0, 0.05, 0.1), p.hunger / 100.0)
 	var form := "DAYWALKER  (sunlight heals you)" if main.daylight() > 0.3 else "DAYWALKER"
 	if p.frenzy_t > 0.0:
-		form = "FRENZY  %.0fs" % p.frenzy_t
+		form = "FRENZY  %.0fs  (blood burns, no guard)" % p.frenzy_t
 	elif p.hunger >= 60.0:
 		form = "NIGHTBORN  (+25% damage)"
 	elif p.hunger >= 30.0:
