@@ -22,7 +22,7 @@ var rng := RandomNumberGenerator.new()
 var motes: Array = [] # [{node, value, vel, t, home}]
 var ground_items: Array = [] # [{node, inst, spin, base_y}]
 ## Cache boxes and coffins are drawn only this close (frame budget).
-const CACHE_RANGE := 55.0
+const CACHE_DRAW_RANGE := 55.0
 var caches: Array = [] # [{node, lid, glow, pos, opened, type}]
 var death_marker: Node3D
 var prompt_text := ""
@@ -362,7 +362,7 @@ func _build_caches() -> void:
 				(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 				# frame budget: ~30 caches x 5 parts were all drawn from anywhere on the map;
 				# the mote above each (and the compass) still finds them from afar
-				(mi as MeshInstance3D).visibility_range_end = CACHE_RANGE
+				(mi as MeshInstance3D).visibility_range_end = CACHE_DRAW_RANGE
 				(mi as MeshInstance3D).visibility_range_end_margin = 5.0
 		caches.append({"node": root, "lid": lid, "glow": glow, "pos": s.pos, "opened": false, "coffin": coffin})
 
