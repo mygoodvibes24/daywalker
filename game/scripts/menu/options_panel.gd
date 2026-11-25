@@ -126,7 +126,7 @@ func _init() -> void:
 	scroll = ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.follow_focus = true
-	scroll.custom_minimum_size = Vector2(0, 420)
+	scroll.custom_minimum_size = Vector2(0, 360) # resized to the screen in _layout
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	outer.add_child(scroll)
 	var stack := MarginContainer.new()

@@ -17,6 +17,8 @@ const FxScript = preload("res://scripts/fx.gd")
 const InventoryUI = preload("res://scripts/ui/inventory_ui.gd")
 const LevelupUI = preload("res://scripts/ui/levelup_ui.gd")
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
+const Prewarm = preload("res://scripts/prewarm.gd") # PERF: first-use hitches (loads + shader compiles)
+const BenchScript = preload("res://scripts/bench.gd") # PERF: ?bench / --bench benchmark route
 
 const DAY_LENGTH := 240.0 # seconds for one full day/night cycle
 const LAIR_MAX := 3
@@ -67,6 +69,8 @@ func _ready() -> void:
 	if "--night" in OS.get_cmdline_user_args() or _url_flag("night"):
 		time_of_day = 0.74 # debug: start right before nightfall
 	_setup_input()
+	if BenchScript.wanted() and HuntDirector.seed_override < 0:
+		HuntDirector.seed_override = 4242 # PERF: the benchmark always runs the same Hunt
 	_build_environment()
 	_build_city()
 	_build_lair()
@@ -92,6 +96,11 @@ func _ready() -> void:
 	add_child(pause_menu)
 	_update_lighting()
 	Input.joy_connection_changed.connect(_on_joy_changed)
+	Prewarm.run(self) # PERF: load every body / clip / sound now and compile shaders behind a card
+	if BenchScript.wanted() and get_node_or_null("/root/Bench") == null and get_parent().get_node_or_null("Bench") == null:
+		var b = BenchScript.new()
+		b.main = self
+		add_child(b)
 	if started_once:
 		start_game()
 	else:

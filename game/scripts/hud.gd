@@ -250,6 +250,32 @@ func _process(delta: float) -> void:
 	hp_bar.value = p.hp
 	hunger_bar.value = p.hunger
 	hunger_fill.bg_color = Color(0.45, 0.1, 0.55).lerp(Color(1.0, 0.05, 0.1), p.hunger / 100.0)
+	# PERF: the text lines are formatted 10 times a second, not every frame
+	_text_t -= real_dt
+	if _text_t <= 0.0:
+		_text_t = 0.1
+		_update_texts(p)
+
+	announce_t = maxf(announce_t - real_dt, 0.0)
+	announce_label.modulate.a = clampf(announce_t, 0.0, 1.0)
+	popup_t = maxf(popup_t - real_dt, 0.0)
+	popup_label.modulate.a = clampf(popup_t * 2.0, 0.0, 1.0)
+	damage_t = maxf(damage_t - real_dt, 0.0)
+	var low := clampf(1.0 - p.hp / 35.0, 0.0, 1.0) * 0.18
+	vignette.color.a = maxf(damage_t * 0.8 * Settings.flash_scale(), low) # SETTINGS HOOK: reduced flashing
+	frenzy_tint.color.a = lerpf(frenzy_tint.color.a, 0.22 if p.frenzy_t > 0.0 else 0.0, 6.0 * real_dt)
+	if debug_label != null:
+		_update_debug()
+	if started:
+		_update_hints(real_dt)
+	lock_label.visible = OS.has_feature("web") and started and not _touch() and not using_pad \
+		and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not get_tree().paused and not main.game_over and not main.menu_open()
+
+
+var _text_t := 0.0
+
+
+func _update_texts(p) -> void:
 	var form := "DAYWALKER  (sunlight heals you)" if main.daylight() > 0.3 else "DAYWALKER"
 	if p.frenzy_t > 0.0:
 		form = "FRENZY  %.0fs" % p.frenzy_t
@@ -274,21 +300,6 @@ func _process(delta: float) -> void:
 		tithe_label.text = "RANK %d     TITHE %d" % [main.progression.level, main.progression.tithe]
 		if main.progression.can_level():
 			tithe_label.text += "   ·  a rank awaits at " + ("a chapel" if main.get("hunt") != null else "the Undercroft")
-
-	announce_t = maxf(announce_t - real_dt, 0.0)
-	announce_label.modulate.a = clampf(announce_t, 0.0, 1.0)
-	popup_t = maxf(popup_t - real_dt, 0.0)
-	popup_label.modulate.a = clampf(popup_t * 2.0, 0.0, 1.0)
-	damage_t = maxf(damage_t - real_dt, 0.0)
-	var low := clampf(1.0 - p.hp / 35.0, 0.0, 1.0) * 0.18
-	vignette.color.a = maxf(damage_t * 0.8 * Settings.flash_scale(), low) # SETTINGS HOOK: reduced flashing
-	frenzy_tint.color.a = lerpf(frenzy_tint.color.a, 0.22 if p.frenzy_t > 0.0 else 0.0, 6.0 * real_dt)
-	if debug_label != null:
-		_update_debug()
-	if started:
-		_update_hints(real_dt)
-	lock_label.visible = OS.has_feature("web") and started and not _touch() and not using_pad \
-		and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not get_tree().paused and not main.game_over and not main.menu_open()
 
 
 func _update_debug() -> void:

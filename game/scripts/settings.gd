@@ -408,6 +408,11 @@ func world() -> Node:
 		return cs
 	if is_instance_valid(_world_root) and _world_root.is_inside_tree():
 		return _world_root
+	var root := get_tree().root
+	for i in range(root.get_child_count() - 1, -1, -1):
+		var c := root.get_child(i)
+		if not ProjectSettings.has_setting("autoload/" + c.name) and c.name != "Bench":
+			return c
 	return null
 
 

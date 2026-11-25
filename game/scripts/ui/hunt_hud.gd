@@ -159,6 +159,19 @@ func _process(delta: float) -> void:
 	root.visible = show
 	if not show:
 		return
+	# PERF: the text lines are formatted 10 times a second, not every frame
+	_text_t -= real_dt
+	if _text_t <= 0.0:
+		_text_t = 0.1
+		_update_texts()
+	tint.color.a = lerpf(tint.color.a, director.outside_amount * (0.32 + 0.08 * sin(Time.get_ticks_msec() * 0.008)), minf(8.0 * real_dt, 1.0))
+	_boss_bar(real_dt)
+
+
+var _text_t := 0.0
+
+
+func _update_texts() -> void:
 	phase.text = director.phase_label()
 	revive_label.text = ("REVIVES  %d" % director.revives) if director.revives > 0 else "NO REVIVES LEFT"
 	var cleared := 0
@@ -172,7 +185,9 @@ func _process(delta: float) -> void:
 	prompt.text = director.prompt
 	map_hint.text = "[Back] map" if main.hud.using_pad else "[M] map"
 	map_hint.visible = main.hud.using_pad or not main.hud._touch() # touch has its own MAP button
-	tint.color.a = lerpf(tint.color.a, director.outside_amount * (0.32 + 0.08 * sin(Time.get_ticks_msec() * 0.008)), minf(8.0 * real_dt, 1.0))
+
+
+func _boss_bar(real_dt: float) -> void:
 	var b = director.boss if director.boss != null and is_instance_valid(director.boss) and not director.boss.dead else director.engaged_boss
 	if b != null and is_instance_valid(b) and not b.dead and (b == director.boss or b.global_position.distance_to(main.player.global_position) < 45.0):
 		boss_box.visible = true

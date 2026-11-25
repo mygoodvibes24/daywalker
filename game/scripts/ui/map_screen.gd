@@ -69,6 +69,7 @@ func is_open() -> bool:
 
 func open() -> void:
 	panel.visible = true
+	_redraw_t = 0.0
 
 
 func close() -> void:
@@ -94,8 +95,16 @@ func _input(event: InputEvent) -> void:
 	toggle()
 
 
-func _process(_delta: float) -> void:
+var _redraw_t := 0.0
+
+
+## PERF: the map redraws 10 times a second while open (it drew every frame).
+func _process(delta: float) -> void:
 	if panel.visible:
+		_redraw_t -= delta / maxf(Engine.time_scale, 0.01)
+		if _redraw_t > 0.0:
+			return
+		_redraw_t = 0.1
 		_layout()
 		canvas.queue_redraw()
 		deco.queue_redraw()

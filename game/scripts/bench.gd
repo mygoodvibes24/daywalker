@@ -178,7 +178,11 @@ func _end_frame(now: int) -> void:
 		for k in _fb:
 			_sum[k] = int(_sum.get(k, 0)) + _fb[k]
 		if _worst.size() < 5 or ms > _worst[-1][0]:
-			_worst.append([ms, _fb.duplicate()])
+			var fb := _fb.duplicate()
+			fb["mon_nav"] = int(Performance.get_monitor(Performance.TIME_NAVIGATION_PROCESS) * 1e6)
+			fb["mon_phys"] = int(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1e6)
+			fb["nodes"] = int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)) * 1000
+			_worst.append([ms, fb])
 			_worst.sort_custom(func(a, b): return a[0] > b[0])
 			if _worst.size() > 5:
 				_worst.resize(5)
