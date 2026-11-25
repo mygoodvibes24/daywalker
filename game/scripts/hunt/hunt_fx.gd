@@ -129,12 +129,14 @@ static func _gy(p: Vector3) -> float:
 
 static func circle_telegraph(parent: Node, pos: Vector3, radius: float, seconds: float, c := Color(1.0, 0.1, 0.05)) -> Node3D:
 	decals += 1
+	c = tell_color(c)
 	var root := Node3D.new()
 	parent.add_child(root)
 	root.global_position = Vector3(pos.x, _gy(pos) + 0.12, pos.z) # TERRAIN HOOK
-	var edge := _mi(root, ring_mesh(), flat(Color(c.r, c.g, c.b, 0.9)))
+	# round 3: faint (boss area attacks only; the body is the tell), never a raid marker
+	var edge := _mi(root, ring_mesh(), flat(Color(c.r, c.g, c.b, 0.38)))
 	edge.scale = Vector3(radius, 1.0, radius)
-	var fill := _mi(root, disc_mesh(), flat(Color(c.r * 0.45, c.g * 0.45, c.b * 0.45, 0.28)))
+	var fill := _mi(root, disc_mesh(), flat(Color(c.r * 0.35, c.g * 0.35, c.b * 0.35, 0.12)))
 	fill.scale = Vector3(0.05, 1.0, 0.05)
 	var tw := root.create_tween()
 	tw.tween_property(fill, "scale", Vector3(radius, 1.0, radius), maxf(seconds, 0.05))
@@ -145,11 +147,12 @@ static func circle_telegraph(parent: Node, pos: Vector3, radius: float, seconds:
 ## A line telegraph from `from` along `dir` for `length` m, `width` wide.
 static func line_telegraph(parent: Node, from: Vector3, dir: Vector3, length: float, width: float, seconds: float, c := Color(1.0, 0.1, 0.1)) -> Node3D:
 	decals += 1
+	c = tell_color(c)
 	var root := Node3D.new()
 	parent.add_child(root)
 	root.global_position = Vector3(from.x, _gy(from) + 0.13, from.z) # TERRAIN HOOK
 	root.rotation.y = atan2(dir.x, dir.z)
-	var bar := _mi(root, box_mesh(), flat(Color(c.r, c.g, c.b, 0.55)))
+	var bar := _mi(root, box_mesh(), flat(Color(c.r * 0.6, c.g * 0.6, c.b * 0.6, 0.2))) # faint (bosses only)
 	bar.scale = Vector3(width, 0.02, 0.1)
 	bar.position.z = 0.05
 	var tw := root.create_tween()
