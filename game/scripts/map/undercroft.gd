@@ -227,14 +227,16 @@ shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 uniform vec4 tint : source_color = vec4(1.0, 0.55, 0.22, 1.0);
 uniform float strength = 0.32;
+varying float seed;
 void vertex() {
+	seed = float(INSTANCE_ID);
 	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0] * length(MODEL_MATRIX[0].xyz), INV_VIEW_MATRIX[1] * length(MODEL_MATRIX[1].xyz), INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
 }
 void fragment() {
 	float d = length(UV - 0.5) * 2.0;
 	float a = pow(clamp(1.0 - d, 0.0, 1.0), 2.6);
 	ALBEDO = tint.rgb;
-	ALPHA = a * strength * (0.9 + 0.1 * sin(TIME * 7.0 + float(INSTANCE_ID)));
+	ALPHA = a * strength * (0.9 + 0.1 * sin(TIME * 7.0 + seed));
 }
 """
 
@@ -636,7 +638,7 @@ func _build_tunnel() -> void:
 	# colliders: floor ramp, walls, ceiling
 	_col_quad(Vector3(-W, -3.4, 2.6), Vector3(W, -3.4, 2.6), Vector3(W, -3.4, 5.0), Vector3(-W, -3.4, 5.0))
 	_col_quad(Vector3(-W, -3.4, 5.0), Vector3(W, -3.4, 5.0), Vector3(W, LAND_Y, 12.0), Vector3(-W, LAND_Y, 12.0))
-	_col_quad(Vector3(-W, LAND_Y, 12.0), Vector3(W, LAND_Y, 12.0), Vector3(W, LAND_Y, 14.3), Vector3(-W, LAND_Y, 14.3))
+	_col_quad(Vector3(-W, LAND_Y, 12.0), Vector3(W, LAND_Y, 12.0), Vector3(W, LAND_Y, 14.0), Vector3(-W, LAND_Y, 14.0)) # meets the grand stair ramp flush (a lip there stops Sol coming back up)
 	for s in segs:
 		var za := 2.6 + (14.2 - 2.6) * s / segs
 		var zb := 2.6 + (14.2 - 2.6) * (s + 1) / segs
@@ -885,7 +887,7 @@ func _walls(sc: Color) -> void:
 				var zb := z0 + (z1 - z0) * (s + 1) / segs
 				var ta := YS + rise * _pointed((za - cz) / hz)
 				var tb := YS + rise * _pointed((zb - cz) / hz)
-				var opening := sx > 0.0 and zb > 31.0 and za < 35.0
+				var opening: bool = sx > 0.0 and zb > 31.0 and za < 35.0
 				var y_lo := BED if not opening else -5.6
 				var tex := "brick" if (sx > 0.0 or iz == 0) else "stone"
 				G(tex, band(cz)).quad(Vector3(x, y_lo, za), Vector3(x, y_lo, zb), Vector3(x, tb, zb), Vector3(x, ta, za), Vector3(-sx, 0, 0), wc, 1.2)
@@ -1024,7 +1026,7 @@ func _subway() -> void:
 	var bc := Color(0.62, 0.55, 0.5)
 	br.quad(Vector3(x0, rail_y, z0), Vector3(x1, rail_y, z0), Vector3(x1, rail_y, z1), Vector3(x0, rail_y, z1), Vector3.UP, bc * 0.6, 1.0)
 	for sz in [-1.0, 1.0]:
-		var z := cz + sz * hw
+		var z: float = cz + sz * hw
 		br.quad(Vector3(x0, rail_y, z), Vector3(x1, rail_y, z), Vector3(x1, -5.6, z), Vector3(x0, -5.6, z), Vector3(0, 0, -sz), bc, 1.0)
 	var facets := 8
 	for q in facets:
@@ -1058,7 +1060,7 @@ func _subway() -> void:
 	# the gate: iron bars and two rails across
 	var bars := 13
 	for k in bars:
-		var z := z0 + 0.15 + (z1 - z0 - 0.3) * k / (bars - 1)
+		var z: float = z0 + 0.15 + (z1 - z0 - 0.3) * k / (bars - 1)
 		var top := -5.6 + 1.6 * sqrt(maxf(1.0 - pow((z - cz) / hw, 2.0), 0.0)) - 0.05
 		ir.beam(Vector3(x0 + 0.05, BED, z), Vector3(x0 + 0.05, top, z), 0.05, 0.05, Color.WHITE)
 	for y in [-8.2, -6.6]:
@@ -1262,10 +1264,12 @@ func _process(delta: float) -> void:
 		want = false
 	if want != inside:
 		_set_inside(want)
-	# Sol's ground for loot, motes and telegraphs (terrain.gd's UNDERCROFT HOOK)
-	var in_hall := HALL.grow(0.5).has_point(Vector2(pp.x, pp.z)) and pp.y < -6.0
-	Terrain.under_rect = HALL.grow(1.0) if in_hall else Rect2()
-	Terrain.under_y = Y
+	# Sol's ground for loot, motes, telegraphs and the kill plane (terrain.gd's UNDERCROFT HOOK):
+	# while he is below the street anywhere in the tunnel or the crypt, the ground there is the
+	# floor he walks on
+	var below := pp.y < -3.0 and ZONE.has_point(Vector2(pp.x, pp.z))
+	Terrain.under_rect = ZONE if below else Rect2()
+	Terrain.under_y = floor_at(pp.z)
 	if inside:
 		for i in lights.size():
 			var f := 0.88 + 0.08 * sin(_t * (7.0 + i) + i * 2.1) + 0.04 * sin(_t * 17.0 + i)
@@ -1305,6 +1309,17 @@ func _set_inside(on: bool) -> void:
 		Terrain.under_rect = Rect2()
 
 
+## The walking floor at z (the tunnel's stair, the landing, the grand stair, the crypt).
+func floor_at(z: float) -> float:
+	if z < 12.0:
+		return _tunnel_floor(z)
+	if z < 14.0:
+		return LAND_Y
+	if z < 18.5:
+		return _grand_y(z)
+	return Y
+
+
 ## Is this point (world) down in the crypt or its tunnel? (for other systems and the tests)
 func contains(p: Vector3) -> bool:
 	return p.y < -2.0 and ZONE.has_point(Vector2(p.x, p.z))
@@ -1312,26 +1327,35 @@ func contains(p: Vector3) -> bool:
 
 # ---------------------------------------------------------------- the rival
 func _rival_tick(p) -> void:
+	var pp: Vector3 = p.global_position
+	var down := contains(pp) or inside
+	var in_hall: bool = HALL.has_point(Vector2(pp.x, pp.z)) and pp.y < -6.0
+	var alive := rival != null and is_instance_valid(rival)
+	# Sol left the crypt: the duel waits for him. The rival (or his body) is taken off the board so
+	# the street pays nothing for him and the fall sweep never drags him up; he is back at his post,
+	# at full blood, when Sol comes down again.
+	if not down:
+		if alive and not rival.is_queued_for_deletion():
+			main.release_attack_token(rival)
+			rival.queue_free()
+		rival = null
+		_died_inside = false
+		return
 	if rival_dead:
 		return
-	var in_hall := HALL.has_point(Vector2(p.global_position.x, p.global_position.z)) and p.global_position.y < -6.0
-	if (rival == null or not is_instance_valid(rival)) and (inside or in_hall) and main.enemies_root != null:
+	if not alive and main.enemies_root != null:
 		spawn_rival()
-	if rival == null or not is_instance_valid(rival):
+	if rival == null or rival.dead:
 		return
-	if rival.dead:
-		return
-	# Sol left the crypt: the duel waits for him (full health, back at his post)
-	if not inside and not in_hall and rival.state != "wait":
-		rival.reset_to(RIVAL_HOME)
-	# Sol fell down here: when he rises (a Hunt revive brings him back up top), wake him at the
-	# stair's foot and let the rival take his place again
+	# Sol fell down here: when he rises (a revive puts him back up top, or here), wake him at the
+	# stair's foot and send the rival back to his post
 	if p.dead and in_hall:
 		_died_inside = true
 	elif _died_inside and not p.dead:
 		_died_inside = false
-		p.global_position = START + Vector3(0, 0.2, 0)
-		p.velocity = Vector3.ZERO
+		if contains(p.global_position):
+			p.global_position = START + Vector3(0, 0.2, 0)
+			p.velocity = Vector3.ZERO
 		rival.reset_to(RIVAL_HOME)
 
 
@@ -1357,7 +1381,7 @@ func _on_rival_died(r) -> void:
 	# the loot: his blade the first time, a Hallowed-or-better find after that
 	var ItemDB = load("res://scripts/items/item_db.gd")
 	var pos: Vector3 = r.global_position
-	var first := int(record.rival_kills) == 1 or not record.get("blade_taken", false)
+	var first: bool = int(record.rival_kills) == 1 or not record.get("blade_taken", false)
 	var inst: Dictionary
 	if first:
 		inst = ItemDB.make("crowes_penance", 3)
