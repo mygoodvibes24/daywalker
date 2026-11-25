@@ -7,6 +7,7 @@ const SOL_MODULAR := "res://assets/characters/sol/sol_modular.scn"
 const SolModularAnim = preload("res://scripts/sol_modular_anim.gd")
 const SolMoves = preload("res://scripts/sol_moves.gd") # the sword moves as data (clips, timing, damage)
 const WeaponVisual = preload("res://scripts/items/weapon_visual.gd")
+const HFx = preload("res://scripts/hunt/hunt_fx.gd") # settings hooks (shake, sprint toggle)
 const SolSheath = preload("res://scripts/sol_sheath.gd") # the sword on his back: draw / sheathe
 const SHEATHE_AFTER := 7.0 # seconds of calm (no enemy near, no blows) before he puts the sword away
 const THREAT_RANGE := 6.0 # an enemy winding up this close makes him draw
@@ -133,6 +134,9 @@ const FRENZY_FEED := {"parry": 8.0, "finisher": 6.0}
 var calm_t := 0.0 # seconds without combat (enemies near, swings, blows)
 var auto_sheathe := true # false: keep the sword out (tests)
 var _threat_t := 0.0
+var _sprint_toggle := false
+var _sprint_toggle_t := 0.0
+var _sprint_latched := false
 
 
 func _ready() -> void:
@@ -295,7 +299,18 @@ func _physics_process(delta: float) -> void:
 	var dir := Basis(Vector3.UP, cam_yaw) * Vector3(inp.x, 0.0, inp.y)
 	if dir.length() > 1.0:
 		dir = dir.normalized()
-	sprinting = Input.is_action_pressed("sprint") and dir.length() > 0.1 and (not exhausted or frenzy_t > 0.0)
+	var sprint_held := Input.is_action_pressed("sprint")
+	if _sprint_toggle_t <= 0.0:
+		_sprint_toggle_t = 1.0
+		_sprint_toggle = bool(HFx.opt("toggle_sprint", false)) # settings: tap to toggle (polled 1/s)
+	_sprint_toggle_t -= delta
+	if _sprint_toggle:
+		if Input.is_action_just_pressed("sprint"):
+			_sprint_latched = not _sprint_latched
+		if dir.length() <= 0.1 or exhausted:
+			_sprint_latched = false # stopping (or running out of breath) ends the run
+		sprint_held = _sprint_latched
+	sprinting = sprint_held and dir.length() > 0.1 and (not exhausted or frenzy_t > 0.0)
 	if sprinting and frenzy_t <= 0.0 and walk_vel.length() > WALK:
 		_drain_stamina(SPRINT_STAMINA * delta, 0.25)
 	_lock_tick(delta)
@@ -1486,8 +1501,9 @@ func _process(delta: float) -> void:
 		cam_pitch = clampf(cam_pitch - curve.y * Settings.pad_pitch() * Settings.y_sign() * real_dt, -1.1, 0.35)
 	pivot.rotation = Vector3(cam_pitch, cam_yaw, 0.0)
 	if shake > 0.0:
-		camera.h_offset = randf_range(-1.0, 1.0) * shake * 0.25
-		camera.v_offset = randf_range(-1.0, 1.0) * shake * 0.25
+		var sk := shake * 0.25 * HFx.shake_scale() # settings: reduced camera shake
+		camera.h_offset = randf_range(-1.0, 1.0) * sk
+		camera.v_offset = randf_range(-1.0, 1.0) * sk
 		shake = maxf(shake - delta * 1.6, 0.0)
 	else:
 		camera.h_offset = 0.0

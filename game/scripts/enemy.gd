@@ -168,6 +168,7 @@ var clip_t := 0.0 # clip-time position of a special that runs on its clip (claw,
 var hitstop_t := 0.0
 var recoil := Vector2.ZERO # (pitch, roll) kick away from the blade, springing back
 var recoil_v := Vector2.ZERO
+var _soft_flash := false # settings: reduced flashing (read on each hit)
 # health bar over an engaged enemy (red at the stagger threshold)
 var hp_bar: MeshInstance3D
 var hp_bar_mat: ShaderMaterial
@@ -1195,6 +1196,8 @@ func _animate(delta: float, spd: float) -> void:
 	if not burning:
 		visual.rotation.z = recoil.y
 	var rim := clampf(flash_t / RIM_TIME, 0.0, 1.0)
+	if rim > 0.0 and _soft_flash:
+		rim *= 0.45 # settings: reduced flashing
 	if transform_t <= 0.0:
 		var c := body_color
 		if burning:
@@ -1231,6 +1234,7 @@ func _recoil_tick(delta: float) -> void:
 
 func _hit_feedback(amount: float, dir: Vector3) -> void:
 	flash_t = RIM_TIME
+	_soft_flash = bool(HFx.opt("reduce_flashing", false))
 	hitstop_t = HITSTOP
 	var d := Vector3(dir.x, 0, dir.z)
 	if d.length() < 0.01:

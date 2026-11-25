@@ -235,8 +235,45 @@ static func soft_ground_cue(parent: Node, pos: Vector3, radius: float, seconds: 
 	return root
 
 
+# ---------------------------------------------------------------- accessibility hooks
+## An optional setting from scripts/settings.gd (static vars), or `def` while that setting doesn't
+## exist yet. Combat reads these (the Performance agent's settings page adds them):
+##   reduce_shake (bool) / camera_shake (0..1)   scale on camera shake
+##   reduce_flashing (bool)                       softer hit rim, smaller glints
+##   colorblind (int: 0 off, 1 deuteranopia/protanopia, 2 tritanopia)   tell colours
+##   toggle_sprint (bool)                         tap sprint to toggle instead of holding it
+static func opt(key: String, def):
+	var sc = load("res://scripts/settings.gd")
+	if sc == null:
+		return def
+	var v = sc.get(key)
+	return def if v == null else v
+
+
+## The shake multiplier the settings ask for.
+static func shake_scale() -> float:
+	return clampf(float(opt("camera_shake", 1.0)), 0.0, 1.0) * (0.3 if bool(opt("reduce_shake", false)) else 1.0)
+
+
+## A tell's colour under the colour-blind setting: reds and oranges move to hues that stay apart
+## from the night palette (1: red-green blindness -> blue/white; 2: blue-yellow -> magenta/white).
+static func tell_color(c: Color) -> Color:
+	match int(opt("colorblind", 0)):
+		1:
+			return Color(0.35, 0.65, 1.0).lerp(Color.WHITE, clampf(c.g, 0.0, 1.0) * 0.5)
+		2:
+			return Color(1.0, 0.3, 0.75).lerp(Color.WHITE, clampf(c.g, 0.0, 1.0) * 0.5)
+	return c
+
+
 ## A brief star glint (an eye or a blade catching the light): an additive billboard that pops up
 ## and fades out over `seconds`, parented to `parent` (a bone attachment, so it follows the head).
+## Pooled (GLINT_POOL quads, reused oldest-first): no allocation per tell.
+const GLINT_POOL := 8
+static var _glints: Array[MeshInstance3D] = []
+static var _glint_next := 0
+
+
 static func glint(parent: Node3D, local_pos: Vector3, c := Color(1.0, 0.25, 0.15), size := 0.22, seconds := 0.22) -> MeshInstance3D:
 	if parent == null or not parent.is_inside_tree():
 		return null
@@ -249,27 +286,52 @@ static func glint(parent: Node3D, local_pos: Vector3, c := Color(1.0, 0.25, 0.15
 		_glint_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 		_glint_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 		_glint_mat.no_depth_test = true
-		_glint_mat.vertex_color_use_as_albedo = false
 		_glint_mat.albedo_texture = _star_texture()
 		_glint_mat.render_priority = 3
-	var mi := MeshInstance3D.new()
-	mi.mesh = _glint_mesh
-	var m := _glint_mat.duplicate() as StandardMaterial3D
+	var mi: MeshInstance3D = null
+	if _glints.size() < GLINT_POOL:
+		mi = MeshInstance3D.new()
+		mi.mesh = _glint_mesh
+		mi.material_override = _glint_mat.duplicate()
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_glints.append(mi)
+	else:
+		for i in GLINT_POOL: # the next live one (a freed parent takes its glint with it)
+			var k := (_glint_next + i) % GLINT_POOL
+			if not is_instance_valid(_glints[k]):
+				_glints[k] = MeshInstance3D.new()
+				_glints[k].mesh = _glint_mesh
+				_glints[k].material_override = _glint_mat.duplicate()
+				_glints[k].cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi = _glints[k]
+			_glint_next = (k + 1) % GLINT_POOL
+			break
+	if mi.has_meta("tw"):
+		var old = mi.get_meta("tw")
+		if old is Tween and (old as Tween).is_valid():
+			(old as Tween).kill()
+	if mi.get_parent() != parent:
+		if mi.get_parent() != null:
+			mi.get_parent().remove_child(mi)
+		parent.add_child(mi)
+	var m := mi.material_override as StandardMaterial3D
+	c = tell_color(c)
+	if bool(opt("reduce_flashing", false)):
+		size *= 0.6
 	m.albedo_color = Color(c.r, c.g, c.b, 1.0)
-	mi.material_override = m
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(mi)
+	mi.visible = true
 	mi.position = local_pos
 	# undo the parent's scale (a 1.35x boss, a centimetre skeleton) so the glint keeps its size
 	var gs := parent.global_transform.basis.get_scale()
 	var inv := 1.0 / maxf(gs.x, 0.001)
 	mi.scale = Vector3.ONE * size * 0.2 * inv
-	mi.rotation.z = randf() * 0.6
+	mi.rotation = Vector3(0, 0, randf() * 0.6)
 	var tw := mi.create_tween()
+	mi.set_meta("tw", tw)
 	tw.tween_property(mi, "scale", Vector3.ONE * size * inv, seconds * 0.3).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	tw.parallel().tween_property(mi, "rotation:z", mi.rotation.z + 0.5, seconds)
 	tw.tween_property(m, "albedo_color:a", 0.0, seconds * 0.7)
-	tw.tween_callback(mi.queue_free)
+	tw.tween_callback(mi.hide)
 	return mi
 
 
@@ -289,8 +351,18 @@ static func _star_texture() -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
-## A short, directional spurt of dark blood at a blade contact: ~12 droplets thrown along `dir`
-## (and up), falling under gravity, shrinking out. CPU particles (web-safe), one shot, self-freeing.
+## A short, directional spurt of dark blood at a blade contact: droplets thrown along `dir` (and up),
+## falling under gravity, shrinking out. CPU particles (web-safe), one shot, from a pool of
+## BLOOD_POOL emitters reused oldest-first (no node, curve or gradient allocated per hit).
+## `amount` scales the burst: 12 is a light cut, 18+ a heavy one (it picks the emitter size).
+const BLOOD_POOL := 6
+static var _sprays: Array[CPUParticles3D] = []
+static var _spray_next := 0
+static var _blood_curve: Curve
+static var _blood_ramp: Gradient
+static var sprays := 0 # bursts fired (smoke test)
+
+
 static func blood_spray(parent: Node, pos: Vector3, dir: Vector3, amount := 12, force := 1.0) -> void:
 	if parent == null or not parent.is_inside_tree():
 		return
@@ -304,37 +376,56 @@ static func blood_spray(parent: Node, pos: Vector3, dir: Vector3, amount := 12, 
 		_blood_mat.vertex_color_use_as_albedo = true
 		_blood_mat.albedo_texture = _drop_texture()
 		_blood_mesh.material = _blood_mat
-	var p := CPUParticles3D.new()
-	p.mesh = _blood_mesh
-	p.amount = amount
-	p.one_shot = true
-	p.explosiveness = 0.92
-	p.lifetime = 0.55
-	p.local_coords = false
+		_blood_curve = Curve.new()
+		_blood_curve.add_point(Vector2(0.0, 1.0))
+		_blood_curve.add_point(Vector2(1.0, 0.2))
+		_blood_ramp = Gradient.new()
+		_blood_ramp.set_color(0, Color(0.55, 0.0, 0.02, 1.0))
+		_blood_ramp.set_color(1, Color(0.22, 0.0, 0.01, 0.0))
+	var p: CPUParticles3D = null
+	for i in _sprays.size(): # drop emitters whose parent left the tree (a new Hunt, a district swap)
+		if not is_instance_valid(_sprays[i]) or not _sprays[i].is_inside_tree():
+			if is_instance_valid(_sprays[i]):
+				_sprays[i].queue_free()
+			_sprays.remove_at(i)
+			_spray_next = 0
+			break
+	if _sprays.size() < BLOOD_POOL:
+		p = CPUParticles3D.new()
+		p.mesh = _blood_mesh
+		p.amount = 18
+		p.one_shot = true
+		p.explosiveness = 0.92
+		p.lifetime = 0.55
+		p.local_coords = false
+		p.spread = 24.0
+		p.gravity = Vector3(0, -14.0, 0)
+		p.damping_min = 1.0
+		p.damping_max = 3.0
+		p.scale_amount_min = 0.6
+		p.scale_amount_max = 1.6
+		p.scale_amount_curve = _blood_curve
+		p.color_ramp = _blood_ramp
+		p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		p.emitting = false
+		parent.add_child(p)
+		_sprays.append(p)
+	else:
+		p = _sprays[_spray_next % _sprays.size()]
+		_spray_next = (_spray_next + 1) % _sprays.size()
+	sprays += 1
 	var d := Vector3(dir.x, 0.0, dir.z)
 	d = d.normalized() if d.length() > 0.01 else Vector3.FORWARD
 	p.direction = (d + Vector3.UP * 0.55).normalized()
-	p.spread = 24.0
 	p.initial_velocity_min = 3.0 * force
 	p.initial_velocity_max = 6.5 * force
-	p.gravity = Vector3(0, -14.0, 0)
-	p.damping_min = 1.0
-	p.damping_max = 3.0
-	p.scale_amount_min = 0.6
-	p.scale_amount_max = 1.6
-	var sc := Curve.new()
-	sc.add_point(Vector2(0.0, 1.0))
-	sc.add_point(Vector2(1.0, 0.2))
-	p.scale_amount_curve = sc
-	var g := Gradient.new()
-	g.set_color(0, Color(0.55, 0.0, 0.02, 1.0))
-	g.set_color(1, Color(0.22, 0.0, 0.01, 0.0))
-	p.color_ramp = g
-	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(p)
+	# a light cut throws fewer, smaller drops; the emitter keeps its size (no reallocation)
+	var k := clampf(float(amount) / 18.0, 0.4, 1.0)
+	p.scale_amount_min = 0.6 * k
+	p.scale_amount_max = 1.6 * k
 	p.global_position = pos
+	p.restart()
 	p.emitting = true
-	p.get_tree().create_timer(p.lifetime + 0.2, false).timeout.connect(p.queue_free)
 
 
 static func _drop_texture() -> ImageTexture:

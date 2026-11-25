@@ -657,6 +657,8 @@ func _combat_r3_checks(main) -> bool:
 	main.clear_slowmo()
 	p.hp = p.max_hp
 	# the claw string: both rakes land (or get dodged), on the claw clip
+	p.global_position = Vector3(10.0, 0.1, 10.0) # (the swipe may have knocked him back)
+	p.velocity = Vector3.ZERO
 	v.global_position = p.global_position + fwd * 1.3
 	var to: Vector3 = p.global_position - v.global_position
 	to.y = 0.0
@@ -717,6 +719,15 @@ func _combat_r3_checks(main) -> bool:
 	if w.body_mesh != null and w.body_mesh.material_overlay == w.fx_mat:
 		rim = maxf(rim, float(w.fx_mat.get_shader_parameter("rim")))
 	ok = _check("hit feedback: rim %.2f, hit-stop %.2f s, recoil %.2f" % [rim, w.HITSTOP, w.recoil_v.length() + w.recoil.length()], (w.body_mesh == null or rim > 0.3) and w.hitstop_t >= 0.0 and (w.recoil.length() + w.recoil_v.length()) > 0.05) and ok
+	# pooled VFX: a flurry of hits reuses the blood emitters and glints (no node per hit)
+	var s0_sprays: int = HFx.sprays
+	for i in 20:
+		w.take_hit(5.0, fwd)
+		w._cue()
+		await physics_frame
+	ok = _check("blood spray and glints are pooled (%d sprays on %d emitters, %d glints)" % [HFx.sprays - s0_sprays, HFx._sprays.size(), HFx._glints.size()],
+		HFx.sprays - s0_sprays >= 20 and HFx._sprays.size() <= HFx.BLOOD_POOL and HFx._glints.size() <= HFx.GLINT_POOL) and ok
+	ok = _check("settings hooks read settings.gd (a missing key falls back)", HFx.opt("invert_y", 7) is bool and HFx.opt("no_such_setting_x", 7) == 7) and ok
 	_clear_enemies(main)
 	p.hp = p.max_hp
 	p.stamina = p.max_stamina()
