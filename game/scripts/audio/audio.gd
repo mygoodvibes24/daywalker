@@ -87,6 +87,7 @@ var _calm_t := 99.0
 var _poll_t := 0.0
 var _step_t := 0.0
 var _unlock_poll_t := 0.0
+var _music_check_t := 0.0
 var _last_play := {} # name -> msec, to stop machine-gun repeats
 
 
@@ -397,6 +398,8 @@ func _process(delta: float) -> void:
 			_unlock_poll_t = 0.25
 			if _web_context_running():
 				unlock()
+	else:
+		_music_watchdog(real_dt)
 	_ambience(real_dt)
 	if not _world_ok():
 		return
@@ -414,6 +417,22 @@ func _process(delta: float) -> void:
 		_calm_t = 0.0 if engaged else _calm_t + 0.4
 		_update_context()
 	_footsteps(real_dt)
+
+
+## Retry the music: if the track for the current context is not playing (it was started
+## before the browser let audio run, or the OS interrupted the page), start it again.
+func _music_watchdog(dt: float) -> void:
+	_music_check_t -= dt
+	if _music_check_t > 0.0:
+		return
+	_music_check_t = 1.5
+	if not MUSIC.has(context) or _music[_music_cur].playing:
+		return
+	if _music_tween != null and _music_tween.is_running():
+		return
+	var want := context
+	context = ""
+	set_music(want, 0.8)
 
 
 func _footsteps(dt: float) -> void:
