@@ -21,6 +21,11 @@ func is_combat() -> bool:
 	return true
 
 
+## Members standing on the street for this site: none (the rival lives down in the crypt).
+func total_alive() -> int:
+	return 0
+
+
 func distance_to(p: Vector3) -> float:
 	return Vector2(global_position.x - p.x, global_position.z - p.z).length()
 

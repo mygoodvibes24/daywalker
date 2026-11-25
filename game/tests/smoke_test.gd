@@ -1522,7 +1522,7 @@ func _micro_checks(m) -> bool:
 	for mp in h.micros:
 		types[mp.type] = mp
 		for poi in h.pois:
-			if mp.distance_to(poi.global_position) < Cfg.MICRO_CLEAR - 0.5:
+			if poi.type != "undercroft" and mp.distance_to(poi.global_position) < Cfg.MICRO_CLEAR - 0.5:
 				spaced = false
 	ok = _check("micro-POIs fill the roads between the sites (%d, types %s)" % [h.micros.size(), ", ".join(types.keys())], h.micros.size() >= 8 and types.size() == 4) and ok
 	ok = _check("micro-POIs keep clear of the big sites", spaced) and ok
@@ -1669,13 +1669,15 @@ func _hunt_checks() -> bool:
 	var with_enemies := 0
 	var types := {}
 	for poi in h.pois:
+		if poi.type == "undercroft":
+			continue # the Undercroft Depths: registered on the plaza well, not a generated site
 		types[poi.type] = true
 		if poi.is_combat() and poi.total_alive() > 0:
 			with_enemies += 1
 	ok = _check("POIs generated (%d, %d types, %d with enemies)" % [h.pois.size(), types.size(), with_enemies], h.pois.size() >= 10 and types.size() == 6 and with_enemies >= 6) and ok
 	var far_ok := true
 	for poi in h.pois:
-		if Vector2(poi.global_position.x, poi.global_position.z).length() < 20.0:
+		if poi.type != "undercroft" and Vector2(poi.global_position.x, poi.global_position.z).length() < 20.0:
 			far_ok = false
 	ok = _check("POIs stay off the plaza", far_ok) and ok
 	ok = await _modifier_checks(m) and ok
