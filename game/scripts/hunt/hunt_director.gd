@@ -825,9 +825,13 @@ func _apply_modifier() -> void:
 		main.atmo.fog_scale = base_fog * float(mod.get("fog", 1.0))
 
 
-## How close Sol can come before an idle camp or straggler notices him (the Fog shortens it).
+## How close Sol can come before an idle camp or straggler notices him (the Fog shortens it, and so
+## does a crouch: player.gd detect_mult).
 func aggro_range() -> float:
-	return Cfg.AGGRO_RANGE * float(modifier().get("aggro", 1.0))
+	var stealth := 1.0
+	if main != null and main.player != null and main.player.has_method("detect_mult"):
+		stealth = main.player.detect_mult()
+	return Cfg.AGGRO_RANGE * float(modifier().get("aggro", 1.0)) * stealth
 
 
 # ---------------------------------------------------------------- the Blood Rite

@@ -94,6 +94,7 @@ static var colorblind := 0 # index into COLORBLIND
 static var reduce_flashing := false
 static var reduce_motion := false
 static var toggle_sprint := false
+static var hold_crouch := false # crouch while the key is held (default: tap to toggle; player.gd)
 static var high_contrast := false
 static var large_text := false
 # ---------------------------------------------------------------- state
@@ -119,7 +120,7 @@ const SPEC := {
 	"touch_opacity": ["controls", "f", 0.2, 1.0],
 	"subtitles": ["audio", "b"], "mute_unfocused": ["audio", "b"],
 	"subtitle_size": ["access", "i", 0, 3], "subtitle_bg": ["access", "b"], "colorblind": ["access", "i", 0, 3],
-	"reduce_flashing": ["access", "b"], "reduce_motion": ["access", "b"], "toggle_sprint": ["access", "b"],
+	"reduce_flashing": ["access", "b"], "reduce_motion": ["access", "b"], "toggle_sprint": ["access", "b"], "hold_crouch": ["access", "b"],
 	"high_contrast": ["access", "b"], "large_text": ["access", "b"],
 	"probed": ["graphics", "b"],
 }

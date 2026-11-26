@@ -58,7 +58,7 @@ const CUTS := {
 	# crouched hold after 1.8 s is cut off
 	"double_spin": [["dspin", 0.2, 1.9, false], ["dspin_a", 0.25, 1.1, false], ["dspin_b", 1.0, 1.85, false]],
 }
-const LOOPED := ["idle", "run", "sprint", "stance"]
+const LOOPED := ["idle", "run", "sprint", "stance", "walk", "crouch_idle", "crouch_walk"] # (the last three: clips to buy, see docs/animation_reference/README.md)
 ## Sol's standing idle: Idle_02 (a calm, grounded breathing stance, 1.9 s loop) replaced the rig's own
 ## look-around idle in round 2. The old one stays in the library as "idle_look", played only as an
 ## occasional long-idle fidget (scripts/sol_modular_anim.gd).

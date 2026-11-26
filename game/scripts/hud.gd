@@ -29,12 +29,13 @@ var damage_t := 0.0
 var help_t := 20.0 # the basic controls show for the first 20 s of play, then only context tips
 var tip_t := 0.0
 var tips_seen := {}
+var stance_label: Label # CROUCHED / WALKING (player.gd crouch and walk toggle)
 var lock_label: Label # desktop web: "Click to take the hunt" while the pointer isn't locked
 var started := false
 var using_pad := false
 var debug_label: Label # ?debug / --debug: camera, player and draw-call overlay (R2-A, W1)
-const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)   LMB combo (hold: charged)   RMB / K dash   C parry   Q / MMB lock-on\nM map   TAB the Coat   1 / 2 quick-use   ESC pause"
-const PAD_HELP := "L-stick move   LT sprint   A jump (x2)   X / RT combo (hold: charged)   B dash   L3 parry   R3 lock-on\nBACK map   START the Coat   LB / RB quick-use"
+const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)   LMB combo (hold: charged)   RMB / K dash   C parry   Q / MMB lock-on\nX crouch   ALT / Z walk   M map   TAB the Coat   1 / 2 quick-use   ESC pause"
+const PAD_HELP := "L-stick move (tilt to walk)   LT sprint   A jump (x2)   X / RT combo (hold: charged)   B dash   L3 parry   R3 lock-on\nD-pad down crouch   BACK map   START the Coat   LB / RB quick-use"
 const ROAM_KEYS := "\nF drink at the Undercroft   T rain" # free roam (debug) only
 const ROAM_PAD := "\nLB drink at the Undercroft"
 ## one-shot tips, shown the first time the action becomes possible: [keyboard, pad]
@@ -100,6 +101,10 @@ func _ready() -> void:
 	_pin(help_label, 0.0, 1.0, Rect2(24, -84, 900, 74))
 	help_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	_refresh_help()
+
+	stance_label = _centered(18, Color(0.85, 0.78, 0.6))
+	stance_label.anchor_top = 0.86
+	stance_label.anchor_bottom = 0.86
 
 	lock_label = _centered(22, Color(1, 0.85, 0.75))
 	lock_label.text = "CLICK TO TAKE THE HUNT"
@@ -304,6 +309,12 @@ func _update_texts(p) -> void:
 	clock_label.text = "%s  %s" % [phase, main.clock_text()]
 	info_label.text = "Kills  %d\nNights survived  %d\nBlood bank  %d / %d" % [main.kills, main.night_count, main.lair_stock, main.LAIR_MAX]
 	prompt_label.text = p.prompt_text
+	if p.get("crouched"):
+		stance_label.text = "CROUCHED  ·  enemies notice you later"
+	elif p.get("walk_mode"):
+		stance_label.text = "WALKING"
+	else:
+		stance_label.text = ""
 	if main.progression != null: # PROGRESSION HOOK
 		var lp: String = main.loot.prompt_text
 		prompt_label.text = lp if prompt_label.text == "" else (prompt_label.text + ("\n" + lp if lp != "" else ""))

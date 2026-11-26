@@ -2,7 +2,8 @@ extends RefCounted
 ## Animation for the modular Sol (res://assets/characters/sol/sol_modular.scn).
 ## Builds an AnimationTree over the scene's clip library:
 ##
-##   loco (BlendSpace1D idle 0 / run 7.5 / sprint 13 m/s) --+
+##   loco (BlendSpace1D idle 0 / walk 1.1 / run 4.6-7.5 / sprint 13 m/s) --+
+##   crouch_loco (crouch_idle / crouch_walk; only once those clips are installed) -- crouch (Blend2)
 ##   stance (combat idle, looped) ----------------------- combat (Blend2: near enemies, standing)
 ##   jump (re-seeked on take-off) ----------------------- air (Blend2)
 ##   actA: clip -> seek -> speed ------------------------ actA (OneShot)   sword moves alternate between
@@ -14,9 +15,18 @@ extends RefCounted
 ## plays that stretch of the clip in the next free slot. The tree runs on the physics tick, so the
 ## coat simulation (process priority 100) always sees this frame's pose. A SwordWrist modifier on the
 ## skeleton keeps the blade from pointing at the sky in locomotion; it is eased off during moves.
+##
+## Round 3 (locomotion): the walk is a real blend point (the bought "walk" clip, Casual_Walk; without it
+## sol_locomotion.gd bakes a stand-in from the run); ArmPose (sol_arm_pose.gd) lets the empty right arm
+## hang and swing while the sword is sheathed; Crouch (sol_crouch_pose.gd) bends the pose into a
+## crouch until "crouch_idle" / "crouch_walk" clips exist. Skeleton modifier order:
+## Strafe, Crouch, ArmPose, DrawIK (sol_sheath.gd), SwordWrist.
 
 const SolMoves = preload("res://scripts/sol_moves.gd")
 const SolStrafe = preload("res://scripts/sol_strafe.gd")
+const SolLoco = preload("res://scripts/sol_locomotion.gd")
+const SolArmPose = preload("res://scripts/sol_arm_pose.gd")
+const SolCrouchPose = preload("res://scripts/sol_crouch_pose.gd")
 
 var tree: AnimationTree
 var bt: AnimationNodeBlendTree
@@ -39,6 +49,17 @@ var _has_fidget := false
 const FIDGET_AFTER := 12.0 # seconds standing still (out of combat) before the look-around fidget
 var still_t := 0.0
 var fidgeting := false
+var arm_pose: Node # sol_arm_pose.gd: the relaxed right arm while sheathed
+var crouch_pose: Node # sol_crouch_pose.gd: the procedural crouch (no crouch clips yet)
+var relaxed := false # player.gd: the hand is empty (sheathed, or reaching for the hilt)
+var crouching := false # player.gd: Sol is crouched
+var crouch := 0.0 # eased 0..1
+var relax := 0.0 # eased 0..1 (ArmPose amount)
+var walk_clip := "walk_proc" # "walk" once a real walk clip is installed
+var has_crouch_clips := false
+const RELAX_IN := 5.0 # per second: the arm settles once the sword is away
+const RELAX_OUT := 7.0 # per second: the grip comes back as the blade leaves the scabbard
+const CROUCH_RATE := 5.0 # per second (about 0.2 s down or up)
 
 
 func setup(model: Node) -> bool:
@@ -51,6 +72,8 @@ func setup(model: Node) -> bool:
 			return false
 	_has_stance = lib.has_animation("stance")
 	_tame_root_yaw()
+	walk_clip = SolLoco.bake_walk(lib, model.get_node_or_null("Skeleton3D") as Skeleton3D)
+	has_crouch_clips = SolLoco.ensure_crouch_idle(lib)
 	ap.active = false
 	sim = model.get_node_or_null("CoatSim")
 	wrist = model.find_child("SwordWrist", true, false)
@@ -63,15 +86,31 @@ func setup(model: Node) -> bool:
 	var loco := AnimationNodeBlendSpace1D.new()
 	loco.min_space = 0.0
 	loco.max_space = 16.0
+	loco.sync = true # every point keeps time: the two run points stay in step
 	loco.add_blend_point(_clip("idle"), 0.0)
+	loco.add_blend_point(_clip_at(walk_clip, SolLoco.clip_rate(walk_clip, SolLoco.WALK_SPEED)), SolLoco.WALK_SPEED)
+	loco.add_blend_point(_clip("run"), SolLoco.RUN_POINT)
 	loco.add_blend_point(_clip("run"), 7.5)
 	loco.add_blend_point(_clip("sprint"), 13.0)
 	bt.add_node("loco", loco)
 	bt.add_node("loco_speed", AnimationNodeTimeScale.new()) # -1: the run backwards (lock-on backpedal)
 	bt.connect_node("loco_speed", 0, "loco")
+	var ground := "loco_speed"
+	if has_crouch_clips:
+		var cl := AnimationNodeBlendSpace1D.new()
+		cl.sync = true
+		cl.min_space = 0.0
+		cl.max_space = 8.0
+		cl.add_blend_point(_clip("crouch_idle"), 0.0)
+		cl.add_blend_point(_clip_at("crouch_walk", SolLoco.clip_rate("crouch_walk", SolLoco.CROUCH_SPEED)), SolLoco.CROUCH_SPEED)
+		bt.add_node("crouch_loco", cl)
+		bt.add_node("crouch", AnimationNodeBlend2.new())
+		bt.connect_node("crouch", 0, "loco_speed")
+		bt.connect_node("crouch", 1, "crouch_loco")
+		ground = "crouch"
 	bt.add_node("stance", _clip("stance" if _has_stance else "idle"))
 	bt.add_node("combat", AnimationNodeBlend2.new())
-	bt.connect_node("combat", 0, "loco_speed")
+	bt.connect_node("combat", 0, ground)
 	bt.connect_node("combat", 1, "stance")
 	bt.add_node("jump", _clip("jump"))
 	bt.add_node("jump_seek", AnimationNodeTimeSeek.new())
@@ -128,12 +167,28 @@ func setup(model: Node) -> bool:
 	tree.active = true
 	tree.set("parameters/hit_speed/scale", 1.6)
 	tree.set("parameters/loco_speed/scale", 1.0)
+	for space in ["loco", "crouch_loco"]:
+		if not bt.has_node(space):
+			continue
+		var bs := bt.get_node(space) as AnimationNodeBlendSpace1D
+		for i in bs.get_blend_point_count():
+			var n := bs.get_blend_point_node(i)
+			if n.has_meta("rate"):
+				tree.set("parameters/%s/%d/rate/scale" % [space, i], float(n.get_meta("rate")))
 	var skel := model.get_node_or_null("Skeleton3D") as Skeleton3D
 	if skel != null:
 		strafe = SolStrafe.new()
 		strafe.name = "Strafe"
 		skel.add_child(strafe)
 		skel.move_child(strafe, 0) # first: the draw reach and the wrist work on the twisted pose
+		crouch_pose = SolCrouchPose.new()
+		crouch_pose.name = "Crouch"
+		skel.add_child(crouch_pose)
+		skel.move_child(crouch_pose, 1)
+		arm_pose = SolArmPose.new()
+		arm_pose.name = "ArmPose"
+		skel.add_child(arm_pose)
+		skel.move_child(arm_pose, 2) # before DrawIK: the reach starts from the relaxed arm
 	tree.set("parameters/life/transition_request", "alive")
 	return true
 
@@ -174,6 +229,21 @@ func _tame_root_yaw() -> void:
 			var keep := clampf(dev * YAW_KEEP, -deg_to_rad(YAW_MAX), deg_to_rad(YAW_MAX))
 			a.track_set_key_value(t, k, (Quaternion(Vector3.UP, keep - dev) * q).normalized())
 		a.set_meta("yaw_tamed", true)
+
+
+## A clip played at `rate` (a small blend tree: clip -> time scale), for a blend point whose clip has a
+## different pace from the ground speed it stands for.
+static func _clip_at(name: String, rate: float) -> AnimationRootNode:
+	if absf(rate - 1.0) < 0.02:
+		return _clip(name)
+	var t := AnimationNodeBlendTree.new()
+	t.add_node("clip", _clip(name))
+	var ts := AnimationNodeTimeScale.new()
+	t.add_node("rate", ts)
+	t.connect_node("rate", 0, "clip")
+	t.connect_node("output", 0, "rate")
+	t.set_meta("rate", rate) # the scale is a parameter: set after the tree is built (setup)
+	return t
 
 
 static func _clip(name: String) -> AnimationNodeAnimation:
@@ -267,6 +337,20 @@ func update(delta: float, s: Dictionary) -> void:
 	var speed := float(s.speed)
 	tree.set("parameters/loco/blend_position", speed)
 	var in_air := not bool(s.on_floor)
+	# the crouch: crouch clips when installed, else the procedural pose
+	crouch = move_toward(crouch, 1.0 if (crouching and not dead) else 0.0, delta * CROUCH_RATE)
+	if has_crouch_clips:
+		tree.set("parameters/crouch/blend_amount", crouch)
+		tree.set("parameters/crouch_loco/blend_position", speed)
+	elif crouch_pose != null:
+		crouch_pose.amount = crouch * (1.0 - air)
+	# the empty right hand hangs and swings (sheathed); the sword's grip returns as it is drawn
+	var want_relax := 1.0 if (relaxed and not dead) else 0.0
+	relax = move_toward(relax, want_relax, delta * (RELAX_IN if want_relax > relax else RELAX_OUT))
+	if arm_pose != null:
+		arm_pose.amount = relax
+		arm_pose.dt = delta
+		arm_pose.swing = move_toward(arm_pose.swing, clampf(speed / 1.2, 0.0, 1.0) if not in_air else 0.0, delta * 4.0)
 	if in_air and not was_air:
 		tree.set("parameters/jump_seek/seek_request", 0.0)
 	was_air = in_air

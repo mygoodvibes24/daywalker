@@ -1,7 +1,8 @@
 extends CanvasLayer
 ## Touch controls (autoload "Touch"): a floating virtual stick on the left, camera drag on the
 ## right, and round buttons for attack (hold for the charged slash), Blood Dash, jump,
-## bite / take, parry, a sprint toggle, the Coat, the map and pause. Shown only on touch
+## bite / take, parry, a sprint toggle, crouch (tap to crouch, tap again to stand), the Coat, the map
+## and pause. A stick pushed part way walks; all the way runs. Shown only on touch
 ## devices (or with --touch / ?touch), and only while Sol is in play.
 ##
 ## In menus (the title screen, the hub, the Coat, pause, results...) touches stay emulated
@@ -50,6 +51,7 @@ func _ready() -> void:
 	_add("sprint", "RUN", ["sprint"], Vector2(-356, -170), 34.0, true)
 	_add("lock", "LOCK", ["lock_on"], Vector2(-200, -306), 30.0) # lock-on; a swipe on the right side switches target
 	_add("art", "ART", ["weapon_art"], Vector2(-316, -284), 34.0) # the Weapon Art / blood-chain (items/arsenal.gd)
+	_add("crouch", "CROUCH", ["crouch"], Vector2(-452, -118), 32.0) # lit while crouched
 	_add("pause", "II", ["@pause"], Vector2(-46, 150), 26.0, false, "top")
 	_add("map", "MAP", ["hunt_map"], Vector2(-114, 150), 26.0, false, "top")
 	_add("coat", "COAT", ["inventory"], Vector2(-182, 150), 26.0, false, "top")
@@ -266,7 +268,8 @@ func _draw_pad() -> void:
 	var pressed_ids := held.values()
 	for b in buttons:
 		var c := _button_center(b)
-		var on: bool = b.id in pressed_ids or (b.toggle and sprint_on) or (b.id == "lock" and _main != null and _main.player.get("lock_target") != null)
+		var on: bool = b.id in pressed_ids or (b.toggle and sprint_on) or (b.id == "lock" and _main != null and _main.player.get("lock_target") != null) \
+			or (b.id == "crouch" and _main != null and _main.player.get("crouched") == true)
 		var r: float = b.r * kk
 		pad.draw_circle(c, r, Color(0.55, 0.04, 0.07, 0.75) if on else Color(INK.r, INK.g, INK.b, 0.5))
 		pad.draw_arc(c, r, 0.0, TAU, 40, Color(GOLD.r, GOLD.g, GOLD.b, 0.95 if on else 0.6), 2.0, true)

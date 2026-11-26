@@ -75,6 +75,7 @@ const ROWS := [
 		["reduce_flashing", "Reduce flashing", "toggle"],
 		["reduce_motion", "Reduce motion (no shake)", "toggle"],
 		["toggle_sprint", "Sprint: toggle instead of hold", "toggle"],
+		["hold_crouch", "Crouch: hold instead of toggle", "toggle"],
 		["high_contrast", "High-contrast HUD", "toggle"],
 		["large_text", "Larger UI text", "toggle"],
 	],
