@@ -73,6 +73,12 @@ var cache_spots: Array = []
 var road_points := PackedVector3Array()
 ## Block cells (Vector2i) that got buildings, and every cell whose edges are streets.
 var block_cells: Array = []
+## Old Quarter rows whose block runs on over the next row (40 m long blocks, no cross street).
+const LONG_BLOCK_J := [-3, 1]
+## Street segments built over by a long block: Vector3i(line, cell, axis) as in _build_streets.
+var filled_segs := {}
+## Sub-cell centre -> bitmask of its sides that face into its own long block (1 +z, 2 -z).
+var inner_sides := {}
 var street_cells := {}
 var sign_spots: Array = []
 var _t := 0.0
@@ -170,6 +176,7 @@ func _b(mat: String) -> Batch:
 
 const CHUNK := 80.0 # main geometry is merged per 80 m cell...
 const MAIN_RANGE := 115.0
+const HLOD_RANGE := 230.0 # HLOD boxes are dropped beyond this (scaled by the view distance)
 ## Web tier (Compatibility, phones): main chunks hand over to their HLOD boxes sooner and the
 ## detail chunks drop sooner (the frame-cost budget: <= 300 draws, <= 400k triangles).
 var main_range := MAIN_RANGE
@@ -1332,6 +1339,11 @@ func build() -> void:
 	add_child(car_bodies)
 	_build_ground()
 	# the Old Quarter grid round the cathedral plaza
+	# Owner's playtest: "in the city part the streets are too short". The north-south streets
+	# now run unbroken past 40 m blocks (the cross streets at z = -40 and z = 40 are built over),
+	# so each avenue reads as one long canyon of galleries out to the cathedral and the pines
+	# (concept 12). Every crossing that remains is still a road point; the avenues are intact.
+	var consumed := {}
 	for i in range(Layout.OQ_I[0], Layout.OQ_I[1]):
 		for j in range(Layout.OQ_J[0], Layout.OQ_J[1]):
 			street_cells[Vector2i(i, j)] = true
@@ -1341,7 +1353,15 @@ func build() -> void:
 				continue
 			if cz == -30.0 and absf(cx) == 10.0:
 				continue # the cathedral takes these two blocks
-			_build_block(cx, cz, "quarter")
+			if consumed.has(Vector2i(i, j)):
+				continue
+			var span := 1
+			if j in LONG_BLOCK_J and not (j == -3 and (i == -1 or i == 0)):
+				span = 2 # (behind the cathedral the z = -40 street stays: it's its back lane)
+			for k in range(1, span):
+				consumed[Vector2i(i, j + k)] = true
+				filled_segs[Vector3i(j + k, i, 1)] = true
+			_build_block(cx, j * GRID + GRID * span * 0.5, "quarter", span)
 	# the Velvet Mile: grand blocks either side of the boulevard
 	for i in range(Layout.VM_I[0], Layout.VM_I[1]):
 		if i == Layout.VM_MILE_I:
@@ -1368,12 +1388,77 @@ func build() -> void:
 	_build_walls()
 	_collect_grid_spots()
 	_settle_on_terrain()
+	_register_quality()
 
 
 ## Ground height at (x, z): the one API everything placed on the map uses (terrain.gd).
 ## The paved plates (the Quarter, the Mile, the cemetery, the docks) are level at 0.
 func height_at(x: float, z: float) -> float:
 	return Terrain.height_at(x, z)
+
+
+# ---------------------------------------------------------------- quality tiers and frame budget
+## The web budget is <= 350 draws and <= 600k triangles from any spot at the default tier
+## (tests/frame_budget.gd guards it in the smoke test). Every visibility range authored here is
+## for the High tier; apply_quality() rescales them to Settings' view distance, thins the
+## foliage and street clutter MultiMeshes, and re-runs whenever Settings changes.
+const WQ = preload("res://scripts/map/world_quality.gd")
+const LABEL_RANGE := 60.0 # neon blade-sign lettering and other world text
+const PARTICLE_RANGE := 55.0 # steam from grates, fireflies
+## MultiMeshes with no colliders under them, thinned by foliage_density (the near pines and
+## cypress keep every tree: their trunks are solid, so they only shorten their range).
+const FOLIAGE_THIN := ["PineCards", "CypressCards", "PineBush", "BayouBush"]
+const PROPS_THIN := ["Glb_trash"]
+var _q_ranges: Array = [] # [GeometryInstance3D, begin, end]
+var _q_foliage: Array = [] # MultiMeshes thinned by foliage_density
+var _q_props: Array = [] # ... and by prop_density
+
+
+func _register_quality() -> void:
+	for n in find_children("*", "GeometryInstance3D", true, false):
+		var gi := n as GeometryInstance3D
+		if gi.visibility_range_end <= 0.0:
+			if gi is Label3D:
+				gi.visibility_range_end = LABEL_RANGE
+			elif gi is CPUParticles3D or gi is GPUParticles3D:
+				gi.visibility_range_end = PARTICLE_RANGE
+		if gi.visibility_range_end > 0.0 or gi.visibility_range_begin > 0.0:
+			_q_ranges.append([gi, gi.visibility_range_begin, gi.visibility_range_end])
+		if gi is MultiMeshInstance3D and (gi as MultiMeshInstance3D).multimesh != null:
+			var nm := String(gi.name)
+			for pre in FOLIAGE_THIN:
+				if nm.begins_with(pre):
+					_q_foliage.append((gi as MultiMeshInstance3D).multimesh)
+			for pre in PROPS_THIN:
+				if nm.begins_with(pre):
+					_q_props.append((gi as MultiMeshInstance3D).multimesh)
+	apply_quality()
+	var st := get_node_or_null("/root/Settings")
+	if st != null and st.has_signal("changed") and not st.is_connected("changed", apply_quality):
+		st.connect("changed", apply_quality)
+
+
+func apply_quality() -> void:
+	var k := WQ.range_scale()
+	for e in _q_ranges:
+		var gi: GeometryInstance3D = e[0]
+		if not is_instance_valid(gi):
+			continue
+		gi.visibility_range_begin = e[1] * k
+		gi.visibility_range_end = e[2] * k
+	# practical lights fade out past the view distance (each lit object pays per light it touches)
+	for l in find_children("*", "OmniLight3D", true, false):
+		var ol := l as OmniLight3D
+		ol.distance_fade_enabled = true
+		ol.distance_fade_begin = maxf(45.0, ol.omni_range * 2.5) * k
+		ol.distance_fade_length = 12.0
+		ol.distance_fade_shadow = ol.distance_fade_begin * 0.5
+	var fd := WQ.foliage_density()
+	for mm: MultiMesh in _q_foliage:
+		mm.visible_instance_count = -1 if fd >= 0.999 else ceili(mm.instance_count * fd)
+	var pd := WQ.prop_density()
+	for mm: MultiMesh in _q_props:
+		mm.visible_instance_count = -1 if pd >= 0.999 else ceili(mm.instance_count * pd)
 
 
 ## Spawn points, POI anchors and loot caches collected flat by the builders sit on the ground.
@@ -1429,6 +1514,8 @@ func _collect_grid_spots() -> void:
 	for k in mini(cells.size(), 22):
 		var b: Vector2 = cells[k]
 		var side := r.randi_range(0, 3)
+		if side < 2 and (int(inner_sides.get(b, 0)) & (1 << side)) != 0:
+			side += 2 # the inside of a long block: put it on an avenue side instead
 		var n: Vector3 = [Vector3(0, 0, 1), Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(-1, 0, 0)][side]
 		var t := Vector3.UP.cross(n)
 		var p: Vector3 = Vector3(b.x, 0.1, b.y) + n * 4.9 + t * r.randf_range(-3.5, 3.5)
@@ -1486,6 +1573,8 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 		if prefix != "" and parts[0] != prefix:
 			continue
 		var casts: bool = CASTS.get(parts[1], false)
+		if parts[0].begins_with("H"):
+			casts = false # frame budget: HLOD boxes never cast, so walls and roofs share one instance
 		var group := parts[0] + ("|cast" if casts else "|nocast")
 		if not by_chunk.has(group):
 			by_chunk[group] = []
@@ -1506,6 +1595,12 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 		if cell > 0.0:
 			var xz: PackedStringArray = group.split("|")[0].substr(1).split("_")
 			shift = Vector3((int(xz[0]) + 0.5) * cell, 0, (int(xz[1]) + 0.5) * cell)
+		# frame budget: a caster chunk's shadow is drawn from one merged single-surface proxy
+		# (positions + normals) instead of once per material surface (~10 per chunk)
+		var casts_group: bool = group.ends_with("|cast")
+		var sv := PackedVector3Array()
+		var sn := PackedVector3Array()
+		var si := PackedInt32Array()
 		for key in keys:
 			var bt: Batch = batches[key]
 			if bt.i.is_empty():
@@ -1515,6 +1610,12 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 					bt.v[k] -= shift
 			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, bt.arrays())
 			mesh.surface_set_material(mesh.get_surface_count() - 1, M[key.split("|")[1]])
+			if casts_group:
+				var base := sv.size()
+				sv.append_array(bt.v)
+				sn.append_array(bt.n)
+				for q in bt.i:
+					si.append(q + base)
 		for key in keys:
 			batches.erase(key)
 		if mesh.get_surface_count() == 0:
@@ -1523,6 +1624,24 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 		mi.name = "Chunk_" + group.replace("|", "_")
 		mi.mesh = mesh
 		if group.ends_with("nocast"):
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		elif mesh.get_surface_count() > 1 and not si.is_empty():
+			var arr := []
+			arr.resize(Mesh.ARRAY_MAX)
+			arr[Mesh.ARRAY_VERTEX] = sv
+			arr[Mesh.ARRAY_NORMAL] = sn
+			arr[Mesh.ARRAY_INDEX] = si
+			var smesh := ArrayMesh.new()
+			smesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+			var proxy := MeshInstance3D.new()
+			proxy.name = mi.name + "_shadow"
+			proxy.mesh = smesh
+			proxy.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+			proxy.position = shift if cell > 0.0 else Vector3.ZERO
+			if kind == "K":
+				proxy.visibility_range_end = main_range
+				proxy.visibility_range_end_margin = 10.0
+			(parent if parent else self).add_child(proxy)
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if cell > 0.0:
 			mi.position = shift
@@ -1537,6 +1656,9 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 			"H":
 				mi.visibility_range_begin = main_range
 				mi.visibility_range_begin_margin = 10.0
+				# frame budget: beyond this the fog has swallowed a block (landmarks, "M", stay)
+				mi.visibility_range_end = HLOD_RANGE
+				mi.visibility_range_end_margin = 20.0
 				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		(parent if parent else self).add_child(mi)
 
@@ -1629,22 +1751,42 @@ func _district(cx: float, cz: float) -> String:
 	return Layout.district_at(cx, cz)
 
 
-func _build_block(cx: float, cz: float, dist: String) -> void:
+func _build_block(cx: float, cz: float, dist: String, span := 1) -> void:
 	ck = _chunk_of(cx, cz)
 	_near = maxf(absf(cx), absf(cz)) <= 40.0
-	block_cells.append(Vector2(cx, cz))
+	var hz := GRID * span * 0.5 # half the block's length along z
+	for k in span:
+		var sc := Vector2(cx, cz - hz + GRID * (k + 0.5))
+		block_cells.append(sc)
+		if span > 1:
+			inner_sides[sc] = (1 if k < span - 1 else 0) | (2 if k > 0 else 0)
 	var walk_col := Color(1, 1, 1) if dist != "quarter" else Color(0.72, 0.66, 0.6)
-	_slab(cx - GRID * 0.5 + ROAD_HALF, cz - GRID * 0.5 + ROAD_HALF, cx + GRID * 0.5 - ROAD_HALF, cz + GRID * 0.5 - ROAD_HALF,
+	_slab(cx - GRID * 0.5 + ROAD_HALF, cz - hz + ROAD_HALF, cx + GRID * 0.5 - ROAD_HALF, cz + hz - ROAD_HALF,
 		"sidewalk" if dist != "quarter" else "cobble_fan", walk_col, Color(0.62, 0.6, 0.57))
 	# split the lot into parcels
 	var L := LOT
+	var Lz := hz - FACADE
 	var parcels: Array = []
 	var pattern := rng.randi_range(0, 4)
 	if dist == "quarter":
 		pattern = [1, 2, 3, 4][rng.randi() % 4]
 	elif dist == "docks":
 		pattern = [0, 0, 1, 2][rng.randi() % 4]
+	if span > 1:
+		pattern = 9 # a long block: a terrace of townhouses down each avenue
 	match pattern:
+		9:
+			# rows across the block, 6.5-10 m deep, some split into two houses back to back
+			var z := -Lz
+			while z < Lz - 0.01:
+				var dz := rng.randf_range(6.5, 10.0)
+				var z1 := Lz if Lz - (z + dz) < 5.0 else z + dz
+				if rng.randf() < 0.55:
+					var sx := rng.randf_range(-1.2, 1.2)
+					parcels.append([-L, z, sx, z1]); parcels.append([sx, z, L, z1])
+				else:
+					parcels.append([-L, z, L, z1])
+				z = z1
 		0:
 			parcels.append([-L, -L, L, L])
 		1:
@@ -1666,7 +1808,7 @@ func _build_block(cx: float, cz: float, dist: String) -> void:
 	var alley_sides := {} # parcel index -> facade side that faces the alley
 	var alley_p := {"quarter": 0.45, "midtown": 0.6, "docks": 0.6, "velvet": 0.35}
 	# (never on the blocks lining the x = 0 avenue, which keeps its gallery fronts unbroken)
-	if (pattern == 1 or pattern == 2) and rng.randf() < alley_p[dist] and not (dist == "quarter" and absf(cx) == 10.0):
+	if span == 1 and (pattern == 1 or pattern == 2) and rng.randf() < alley_p[dist] and not (dist == "quarter" and absf(cx) == 10.0):
 		var AW := 2.8
 		var s := clampf((parcels[0][2] if pattern == 1 else parcels[0][3]), -0.8, 0.8)
 		if pattern == 1:
@@ -1692,13 +1834,16 @@ func _build_block(cx: float, cz: float, dist: String) -> void:
 		spec["z0"] = cz + p[1]
 		spec["x1"] = cx + p[2]
 		spec["z1"] = cz + p[3]
-		spec["bc"] = Vector2(cx, cz)
+		# the street-cell centre this parcel faces (a long block spans several; lamps stand at
+		# each cell's mid-point and the gallery columns step round them)
+		var pcz: float = cz + (p[1] + p[3]) * 0.5
+		spec["bc"] = Vector2(cx, cz - hz + GRID * (clampi(floori((pcz - (cz - hz)) / GRID), 0, span - 1) + 0.5))
 		spec["alley"] = alley_sides.get(pi, -1)
 		if spec.alley >= 0 and dist == "quarter":
 			spec["wall"] = "brick" # alley walls are bare brick even in the Quarter
 			spec["wcol"] = BRICK[rng.randi() % BRICK.size()]
 		# which sides face a street
-		spec["ext"] = [is_equal_approx(p[3], L), is_equal_approx(p[1], -L), is_equal_approx(p[2], L), is_equal_approx(p[0], -L)]
+		spec["ext"] = [is_equal_approx(p[3], Lz), is_equal_approx(p[1], -Lz), is_equal_approx(p[2], L), is_equal_approx(p[0], -L)]
 		var H := _building(spec)
 		var fp := Rect2(cx + p[0], cz + p[1], p[2] - p[0], p[3] - p[1])
 		hlod_box(fp, H, spec.wcol)
@@ -1842,6 +1987,8 @@ static func _wall_row(bt: Batch, f: Facade, y0: float, y1: float, holes: Array, 
 
 func _window_uv(style: String) -> Array:
 	var lit_p := 0.32 if style != "docks" else 0.15
+	if style == "velvet":
+		lit_p = 0.22 # sparse, warm (the grey grid of pale squares read as an office block)
 	var r := rng.randf()
 	if r < 0.025:
 		return [cell_uv(rng.randi() % 4, 2), true] # flickering
@@ -1927,6 +2074,17 @@ func _building(spec: Dictionary) -> float:
 			for k in n_cols + 1:
 				var pu := margin + bay * k
 				fbox(stone, f, pu - 0.18, gh, pu + 0.18, H + par + 0.6, 0.0, 0.16, tcol)
+			# V2 (critic R2, concept 03): crimson and magenta neon running up the outer piers of
+			# half the facades (merged into the neon batch: no extra draws)
+			if rng.randf() < 0.55 and n_cols >= 2:
+				var nb := _b("neon_flicker" if rng.randf() < 0.15 else "neon")
+				var nuv := neon_uv([0, 2, 0, 3][rng.randi() % 4])
+				var k0 := nb.v.size()
+				for pu: float in [margin, margin + bay * n_cols]:
+					fbox(nb, f, pu - 0.05, gh + 0.4, pu + 0.05, H - 0.9, 0.16, 0.24, Color.WHITE)
+				fbox(nb, f, margin, gh + 0.25, margin + bay * n_cols, gh + 0.33, 0.16, 0.24, Color.WHITE)
+				for q in range(k0, nb.v.size()):
+					nb.t[q] = nuv
 		# parapet + cornice
 		fq(wall, f, 0, H, f.w, H + par, 0.0, wcol)
 		var corn := tcol if style != "docks" else wcol * Color(0.8, 0.8, 0.8)
@@ -2123,6 +2281,11 @@ func _gallery(spec: Dictionary, f: Facade, levels: int) -> void:
 		var k1 := lace.v.size()
 		fbox(metal, f, u - 0.05, 0.0, u + 0.05, roof_y - 0.14, D - 0.15, D - 0.05, Color.WHITE, false)
 		_solid_uv(lace, k1)
+		# QA2 #8: the camera arm passed through the iron columns. They stop the camera only (a
+		# solid post every 2.6 m along each kerb broke the enemies' street paths in the smoke test)
+		cam_blocker(f.p(u, roof_y * 0.5, D - 0.1), Vector3(0.18, roof_y, 0.18), Basis(f.r, Vector3.UP, f.n))
+	# ... and the gallery decks stop the camera arm instead of letting it poke through the floor
+	cam_blocker(f.p(f.w * 0.5, gh - 0.07, D * 0.5), Vector3(f.w, 0.3, D), Basis(f.r, Vector3.UP, f.n))
 	# hanging ferns in baskets between the columns
 	for k in levels:
 		var y := gh + (k + 1) * fh - 0.14 if k + 1 < levels else roof_y - 0.14
@@ -2600,24 +2763,39 @@ func _palm(p: Vector3) -> void:
 	body.add_child(cs)
 
 
+## V6 (critic R2): the plaza's trees were flat black cards. Now a live oak hung with Spanish
+## moss, from the same textured tree builder as the bayou cypress (one draw, plus a cheap
+## shadow proxy), each one turned and scaled a little differently.
+var _oak_mesh: ArrayMesh
+var _oak_shadow: ArrayMesh
+
+
 func _tree(p: Vector3) -> void:
-	var m := _b("metal")
-	var bark := Color(0.2, 0.16, 0.13)
-	cyl(m, p, 0.42, 0.3, 2.6, 8, bark, false)
-	var lv := _b("leaves")
-	# low, spreading boughs
-	for k in 5:
-		var a := k * TAU / 5.0 + rng.randf() * 0.5
-		var tip := p + Vector3(cos(a) * 3.0, rng.randf_range(3.3, 4.3), sin(a) * 3.0)
-		beam(m, p + Vector3(0, 2.4, 0), tip, 0.22, 0.22, bark)
-		_foliage(lv, tip + Vector3(0, 0.3, 0), rng.randf_range(1.6, 2.2))
-	_foliage(lv, p + Vector3(0, 5.0, 0), 2.6)
+	const Trees = preload("res://scripts/map/trees.gd")
+	if _oak_mesh == null:
+		_oak_mesh = Trees.cypress_mesh(9.5, 811)
+		_oak_shadow = Trees.shadow_mesh(9.5, 4.0, 4.5)
+	var s := rng.randf_range(0.95, 1.12)
+	var xf := Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s * 1.15, s, s * 1.15)), p - Vector3(0, 0.1, 0))
+	var oak := MeshInstance3D.new()
+	oak.name = "PlazaOak"
+	oak.mesh = _oak_mesh
+	oak.transform = xf
+	oak.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	oak.visibility_range_end = 140.0
+	add_child(oak)
+	var sh_mi := MeshInstance3D.new()
+	sh_mi.mesh = _oak_shadow
+	sh_mi.transform = xf
+	sh_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+	sh_mi.visibility_range_end = 60.0
+	add_child(sh_mi)
 	var body := StaticBody3D.new()
 	body.position = p
 	collider_root.add_child(body)
 	var cs := CollisionShape3D.new()
 	var sh := CylinderShape3D.new()
-	sh.radius = 0.4
+	sh.radius = 1.0 * s # the flared buttress roots of the trunk (QA2: colliders match the mesh)
 	sh.height = 3.0
 	cs.shape = sh
 	cs.position.y = 1.5
@@ -2865,6 +3043,8 @@ func _build_streets() -> void:
 		var a := sk.x
 		var b := sk.y
 		var axis := sk.z
+		if filled_segs.has(sk):
+			continue # built over by a long block
 		var s := a * GRID
 		if true:
 			var g0 := b * GRID
@@ -3105,6 +3285,8 @@ func _sidewalk_props() -> void:
 		var cz := bc.y
 		if true:
 			for side in 4:
+				if side < 2 and (int(inner_sides.get(bc, 0)) & (1 << side)) != 0:
+					continue # that side is the inside of a long block
 				var n: Vector3 = [Vector3(0, 0, 1), Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(-1, 0, 0)][side]
 				var r := Vector3.UP.cross(n)
 				var face := Vector3(cx, WALK_TOP, cz) + n * LOT
@@ -3207,6 +3389,7 @@ func _build_props() -> void:
 				mmi.material_override = entry[1]
 				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if big and entry[2] else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 				mmi.visibility_range_end = (100.0 if kind == "lamp" else 80.0) * (0.7 if web_tier else 1.0)
+				WQ.tag_bounds(mmi, idx.map(func(i): return xfs[i]))
 				add_child(mmi)
 	# warm halos round every lantern: camera-facing quads in one MultiMesh
 	if not halo_xfs.is_empty():
@@ -3241,8 +3424,15 @@ func _glb_multimeshes(kind: String, glb: Dictionary, xfs: Array) -> void:
 			cells[key] = []
 		cells[key].append(xf)
 	var big: bool = kind == "sedan" or kind == "dumpster"
+	var shuf := RandomNumberGenerator.new()
+	shuf.seed = hash(kind)
 	for key in cells.keys():
 		var list: Array = cells[key]
+		for k in range(list.size() - 1, 0, -1): # shuffled: the prop density setting thins a prefix
+			var j := shuf.randi_range(0, k)
+			var tmp = list[k]
+			list[k] = list[j]
+			list[j] = tmp
 		for part in glb.meshes:
 			var mm := MultiMesh.new()
 			mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -3256,6 +3446,7 @@ func _glb_multimeshes(kind: String, glb: Dictionary, xfs: Array) -> void:
 			mmi.multimesh = mm
 			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if big else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			mmi.visibility_range_end = 55.0 if big else 40.0
+			WQ.tag_bounds(mmi, list.map(func(xf): return Transform3D(xf.basis.orthonormalized(), xf.origin) * part[1]))
 			add_child(mmi)
 	print("city props: %d x %s (generated model)" % [xfs.size(), kind])
 
@@ -3418,10 +3609,10 @@ const WetMats = preload("res://scripts/wet_materials.gd")
 
 
 func _make_map_materials() -> void:
-	M["mud"] = WetMats._make(Color(0.085, 0.062, 0.042), 0.62, 1.0) # rutted wet dirt roads
-	M["earth"] = WetMats._make(Color(0.04, 0.038, 0.03), 0.08, 0.8) # forest floor, cemetery gravel
+	M["mud"] = WetMats._make(Color(0.085, 0.062, 0.042), 0.62, 0.45) # rutted wet dirt roads
+	M["earth"] = WetMats._make(Color(0.04, 0.038, 0.03), 0.08, 0.4) # forest floor, cemetery gravel
 	M["earth"].set_shader_parameter("damp_roughness", 0.7)
-	M["dock"] = WetMats._make(Color(0.1, 0.098, 0.095), 0.3, 0.7) # quay concrete
+	M["dock"] = WetMats.concrete(Color(0.16, 0.155, 0.15)) # quay and tank-farm concrete
 	# open water: near-black with a weak, glossy sheen (a full mirror reads as snow at grazing angles)
 	M["water"] = Terrain.river_mat # the river: the terrain's water shader (moving normals, fresnel)
 	M["swamp"] = Terrain.water_mat
@@ -3591,8 +3782,16 @@ func scatter_mm(name: String, mesh: Mesh, xfs: Array, cell: float, range_begin :
 		if not cells.has(key):
 			cells[key] = []
 		cells[key].append(k)
+	var shuf := RandomNumberGenerator.new()
+	shuf.seed = hash(name)
 	for key in cells.keys():
 		var idx: Array = cells[key]
+		# shuffled, so any prefix (MultiMesh.visible_instance_count) is an even thinning
+		for k in range(idx.size() - 1, 0, -1):
+			var j := shuf.randi_range(0, k)
+			var tmp = idx[k]
+			idx[k] = idx[j]
+			idx[j] = tmp
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.use_colors = not cols.is_empty()
@@ -3616,6 +3815,7 @@ func scatter_mm(name: String, mesh: Mesh, xfs: Array, cell: float, range_begin :
 		if range_end > 0.0:
 			mmi.visibility_range_end = range_end
 			mmi.visibility_range_end_margin = 8.0
+		WQ.tag_bounds(mmi, idx.map(func(i): return xfs[i]))
 		add_child(mmi)
 
 
