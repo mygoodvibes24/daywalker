@@ -1137,7 +1137,7 @@ func _asset_r3_checks(main) -> bool:
 	audio.set_boss(false)
 	for k in ["boss", "boss_marcus", "boss_abomination", "boss_knight", "boss_hollow", "rival_crowe"]:
 		var ms = load(audio.DIR + audio.MUSIC[k] + ".ogg")
-		ok = _check("music loads and loops: %s (%.0f s)" % [k, ms.get_length() if ms != null else 0.0], ms is AudioStreamOggVorbis and ms.loop and ms.get_length() > 40.0 and ms.get_length() < 70.0) and ok
+		ok = _check("music loads and loops: %s (%.0f s)" % [k, ms.get_length() if ms != null else 0.0], ms is AudioStreamOggVorbis and ms.loop and ms.get_length() > 25.0 and ms.get_length() < 70.0) and ok
 	# a field boss and the Undercroft rival: engage() holds the duel music, death drops it
 	var fb = load("res://scripts/hunt/bosses/field_boss.gd").new()
 	fb.main = main

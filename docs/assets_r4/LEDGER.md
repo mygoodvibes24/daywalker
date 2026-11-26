@@ -1,54 +1,79 @@
-# Asset round 4 ledger: boss music (hip-hop)
+# Asset round 4 ledger: boss music (vampire-hunter hip-hop)
 
-Owner's request: "When he's in the boss fight, change the music to a hip-hop beat." Six original
-instrumentals: dark boom-bap / half-time trap with Japanese instruments (shamisen, koto, taiko,
-shakuhachi) over gothic synths and strings. The prompts describe the style only; they name no song,
+Owner's request: hip-hop music in the boss fights. The direction changed mid-round: first a
+Japanese-flavoured boom-bap brief, then the owner's correction: "a Blade-type feel, not Japanese",
+and no samurai or Japanese flavour of any kind. The shipped tracks are six original instrumentals
+in one style: late-90s dark vampire-hunter action music, with hard hip-hop beats (boom-bap and
+breakbeat, distorted 808s, gritty stabs) fused with industrial synths and acid or techno leads,
+plus a thin horror-orchestra layer. The prompts describe the style only. They name no film, song,
 artist or soundtrack.
 
-Balance: 198.45 credits before, 173.20 after. **Spent: 25.25 credits** (cap: 30). One retry (the Abomination).
+**Credits:** 39.83 in all (cap: 40), confirmed against `transactions`:
+- 25.25 on the first, Japanese-style set, which was dropped and is not used: seven jobs, including one Abomination retake.
+- 14.58 on the shipped set: six jobs at 38 s and 2.43 credits each. The 38 s length was set by the budget that remained.
 
+The account balance fell further over the same period (198.45 to 142.62) because of two 8-credit
+"3D Rigging" jobs that other agents ran in parallel. They are not part of this round.
+
+## Shipped set (style 2: vampire-hunter hip-hop, industrial and techno)
 | # | Track | Model | Settings | Credits | Job id | Result |
 |---|---|---|---|---|---|---|
-| 1 | `boss_marcus` | elevenlabs_music_v2 | 56 s, force_instrumental | 3.59 | f1b5330b-7c37-49c7-a253-ea76def1431a | ok (10.7 s quiet intro skipped: the loop starts on the drop) |
-| 2 | `boss_abomination` | elevenlabs_music_v2 | 56 s, force_instrumental | 3.59 | 7fc7ef81-0066-417f-8ca6-7a623038496a | rejected: an 11 s quiet intro and a fade-out left only a 39.5 s loop |
-| 3 | `boss_knight` | elevenlabs_music_v2 | 56 s, force_instrumental | 3.59 | e619b42a-45aa-47f4-832f-03b7c7a646db | ok |
-| 4 | `boss_hollow` | elevenlabs_music_v2 | 56 s, force_instrumental | 3.59 | 0759e342-2237-4d7e-941b-0c9bda3e27ad | ok (fade-out tail cut) |
-| 5 | `boss_shared` | elevenlabs_music_v2 | 56 s, force_instrumental | 3.59 | 8d0e83b7-418e-4016-bbd1-8aface47e698 | ok (a 4 s near-silent break at 31-35 s was spliced out on the bar grid, 2 bars) |
-| 6 | `rival_crowe` | elevenlabs_music_v2 | 56 s, force_instrumental | 3.59 | cc5634f6-9bd2-442c-9cac-1c86f5b9514c | ok |
-| 7 | `boss_abomination` (retry) | elevenlabs_music_v2 | 58 s, force_instrumental | 3.71 | d05f8522-6d3a-4af2-87dc-e22c41392198 | ok (3 bars of drums, then the full wall: the drum bars come back as a breakdown each loop) |
+| 11 | `boss_marcus` | elevenlabs_music_v2 | 38 s, force_instrumental | 2.43 | 624ef7e4-fa84-4f70-ba4b-0679c97fbf80 | ok |
+| 12 | `boss_abomination` | elevenlabs_music_v2 | 38 s, force_instrumental | 2.43 | a6ca6d6e-0613-41d4-9eed-6042064d70dd | ok |
+| 13 | `boss_knight` | elevenlabs_music_v2 | 38 s, force_instrumental | 2.43 | f9db70ae-daee-45ce-9b4e-915c18d111a8 | ok |
+| 14 | `boss_hollow` | elevenlabs_music_v2 | 38 s, force_instrumental | 2.43 | af4d7920-bda0-4e8a-83a7-4199f7893100 | ok (fade-out tail cut) |
+| 15 | `boss_shared` | elevenlabs_music_v2 | 38 s, force_instrumental | 2.43 | f4d172de-c295-4b9d-9992-a1ab3b813cdc | ok (fade-out tail cut) |
+| 16 | `rival_crowe` | elevenlabs_music_v2 | 38 s, force_instrumental | 2.43 | 3bcb032f-64c8-4d19-b70e-e14cd38dfa29 | ok |
 
-Two first submissions of #3 and #4 were refused by the rate limit (max 2 concurrent jobs, no charge)
-and resubmitted once the first jobs finished.
+## Dropped set (style 1: Japanese-flavoured boom-bap; the owner rejected this style, so none of it is used)
+| # | Track | Settings | Credits | Job id | Result |
+|---|---|---|---|---|---|
+| 1 | boss_marcus | 56 s | 3.59 | f1b5330b-7c37-49c7-a253-ea76def1431a | rejected (style change) |
+| 2 | boss_abomination | 56 s | 3.59 | 7fc7ef81-0066-417f-8ca6-7a623038496a | rejected: 11 s quiet intro and a fade left only a 39.5 s loop |
+| 3 | boss_knight | 56 s | 3.59 | e619b42a-45aa-47f4-832f-03b7c7a646db | rejected (style change) |
+| 4 | boss_hollow | 56 s | 3.59 | 0759e342-2237-4d7e-941b-0c9bda3e27ad | rejected (style change) |
+| 5 | boss_shared | 56 s | 3.59 | 8d0e83b7-418e-4016-bbd1-8aface47e698 | rejected (style change) |
+| 6 | rival_crowe | 56 s | 3.59 | cc5634f6-9bd2-442c-9cac-1c86f5b9514c | rejected (style change) |
+| 7 | boss_abomination retake | 58 s | 3.71 | d05f8522-6d3a-4af2-87dc-e22c41392198 | rejected (style change) |
+
+Several submissions were refused by the rate limit (at most 2 concurrent jobs). Those refusals cost
+nothing, and the jobs were resubmitted once earlier jobs finished.
 
 Result URLs: `https://d8j0ntlcm91z4.cloudfront.net/user_3M3cbVYOpQkCAbZXwwBloXVahos/hf_20261126_<time>_<job id>.mp3`.
 
 ## Processing
-MP3 (56 s) -> tempo from the onset envelope's autocorrelation near the prompt's BPM, bar grid anchored
-on the drop -> a loop of whole bars chosen where the 4 s around its end best match the 4 s around its
-start -> the last 0.6 s of the loop equal-power crossfaded with the 0.6 s just before its start (so the
-end runs straight into the first bar) -> peak 0.93 -> OGG Vorbis q5, 44.1 kHz stereo, imported with
-loop=true. No fade-out tails.
+1. Start from the MP3 output.
+2. Find the tempo from the onset envelope's autocorrelation, searching near the prompt's BPM, and lay a bar grid over the track.
+3. Pick a loop of whole bars whose last 4 s best match the 4 s around its start, preferring the longest near-best seam.
+4. Equal-power crossfade the last 0.6 s of the loop with the 0.6 s just before its start, so the end runs straight into the first bar.
+5. Normalise to a peak of 0.93.
+6. Encode as OGG Vorbis q5, 44.1 kHz stereo, imported with loop=true.
 
-| Track | BPM | Loop (source s) | Bars | Length | OGG size | Loudness | MUSIC_DB |
+No track keeps a fade-out tail. The levels are set in `MUSIC_DB` so that each track lands near the
+loudness of the old boss themes, about -17.5 LUFS after gain.
+
+| Track | BPM (grid) | Loop (source s) | Bars | Length | OGG size | Loudness | MUSIC_DB |
 |---|---|---|---|---|---|---|---|
-| boss_marcus | 89.9 | 10.66-53.34 | 16 | 42.7 s | 853 KB | -15.1 LUFS | -2.5 |
-| boss_abomination (retry) | 85.1 | 2.84-53.65 | 18 | 50.8 s | 995 KB | -12.6 LUFS | -5.0 |
-| boss_knight | 94.0 | 2.87-53.93 | 20 | 51.1 s | 967 KB | -14.9 LUFS | -2.5 |
-| boss_hollow | 88.0 | 2.73-51.80 | 18 | 49.1 s | 941 KB | -13.6 LUFS | -4.0 |
-| boss_shared | 92.1 | 3.28-52.79 minus 30.00-35.21 | 17 | 44.3 s | 877 KB | -13.0 LUFS | -4.5 |
-| rival_crowe | 85.0 | 3.54-51.52 | 17 | 48.0 s | 896 KB | -13.5 LUFS | -4.5 |
+| boss_marcus | 95.1 | 2.54-35.35 | 13 | 32.8 s | 643 KB | -11.9 LUFS | -5.5 |
+| boss_abomination | 89.9 | 4.66-34.01 | 11 | 29.4 s | 577 KB | -12.7 LUFS | -4.5 |
+| boss_knight | 99.9 | 3.29-34.55 | 13 | 31.3 s | 592 KB | -12.6 LUFS | -5.0 |
+| boss_hollow | 92.1 | 2.62-33.92 | 12 | 31.3 s | 624 KB | -12.8 LUFS | -4.5 |
+| boss_shared | 95.1 | 4.12-34.40 | 12 | 30.3 s | 574 KB | -13.7 LUFS | -4.0 |
+| rival_crowe | 89.9 | 3.77-35.77 | 12 | 32.0 s | 661 KB | -13.3 LUFS | -4.0 |
 
-Not checked by ear (no audio output here): listen for stray vocal-like textures and the seams before
-calling it final. Every request was sent with `force_instrumental`.
+The loops run about 30 s, shorter than the 50-60 s first planned, because the budget left after the
+style change paid for 38 s per track. Nobody has listened to them yet, because there is no audio
+output here. Before calling them final, listen for vocal-like textures and check the seams. Every
+request was sent with `force_instrumental`. If a track has to be lengthened later, a 56 s take costs
+3.59 credits.
 
-## Prompts
-1. **boss_marcus:** Original dark cinematic boom-bap hip-hop instrumental, 90 BPM, no vocals, no lyrics. Sleek and menacing crimson luxury: heavy punchy kick and crisp snare, swung hi-hats, gritty vinyl crackle, deep gliding 808 bass. Silky koto plucks and a slow minor-key shamisen hook, occasional taiko accents, a shakuhachi breath. Over it ominous gothic synth pads, velvet string swells and a cold harpsichord counter-line, vampire nightclub opulence. Steady loop-friendly groove from the first bar to the last, no intro build, no fade-out ending.
-2. **boss_abomination:** Original brutal dark half-time trap hip-hop instrumental, 85 BPM feel, no vocals, no lyrics. Huge and monstrous: massive distorted 808 sub bass, crushing kick and slammed snare, thunderous taiko war drums and low toms, gritty vinyl texture and tape saturation. Detuned shamisen stabs, metallic anvil hits, a growling bowed-bass drone, ominous gothic organ and horror string clusters, low brass blasts. Relentless and heavy, combat-ready, steady loopable groove start to finish, no intro build, no fade-out ending.
-3. **boss_knight:** Original dark cinematic boom-bap hip-hop instrumental, 94 BPM, no vocals, no lyrics. A swordsman's duel: sharp fast shamisen riffs as the lead hook, ringing steel blade-scrape textures and metallic percussion, hard kick and cracking snare, tight hi-hats, dusty vinyl crackle, deep 808 bass. Taiko hits on the turnarounds, a brief koto flourish, dark gothic strings and a cold synth pad underneath, vampire knight menace. Driving and precise, steady loopable groove start to finish, no intro build, no fade-out ending.
-4. **boss_hollow:** Original feral dark trap hip-hop instrumental, half-time feel at 88 BPM, no vocals, no lyrics. A werewolf pack leader in a moonlit swamp: pounding tribal taiko ensemble and rolling toms, booming kick, snapping snare, deep growling 808 bass, gritty vinyl noise. Eerie howling wind and wolf-like synth glides, breathy wild shakuhachi cries, plucked shamisen pattern, ominous gothic drones and tense low strings. Primal and savage, combat-ready, steady loopable groove start to finish, no intro build, no fade-out ending.
-5. **boss_shared:** Original dark cinematic boom-bap hip-hop instrumental, 92 BPM, no vocals, no lyrics. A battle theme for a lone sun-blooded swordsman hunting monsters in a rainy gothic port city: heavy kick and snare, crisp hi-hats, gritty vinyl crackle, deep 808 bass. A dark minor shamisen and koto hook, taiko hits, a shakuhachi phrase, ominous gothic synth pads and tense string ostinato. Urgent and driving, combat-ready, steady loopable groove start to finish, no intro build, no fade-out ending.
-7. **boss_abomination (retry, used):** Original brutal dark half-time trap hip-hop instrumental, 85 BPM feel, no vocals, no lyrics. Starts at full intensity on the very first downbeat and stays there: no quiet intro, no breakdown, no fade-out ending. Huge and monstrous: massive distorted 808 sub bass, crushing kick and slammed snare on every bar, thunderous taiko war drums and low toms, gritty vinyl texture and tape saturation. Detuned shamisen stabs, metallic anvil hits, a growling bowed-bass drone, ominous gothic organ and horror string clusters, low brass blasts. Relentless, heavy and combat-ready, one steady loopable groove from start to finish.
-6. **rival_crowe:** Original cold, restrained dark hip-hop instrumental, 86 BPM boom-bap, no vocals, no lyrics. A mirror-match duel in a flooded crypt: a lone mournful shakuhachi melody with lots of space over a hard dry kick and snare, sparse hi-hats, dusty vinyl crackle, deep sustained 808 bass. Faint koto harmonics, a single distant taiko hit, cold glassy gothic synth pad, dripping-water reverb, a quiet low cello drone. Tense, minimal and icy, steady loopable groove start to finish, no intro build, no fade-out ending.
+## Prompts (shipped set)
+11. **boss_marcus:** Original instrumental, no vocals, no lyrics. Late-90s dark vampire-hunter action music: a sleek blood-club rave with a hard hip-hop backbone. 95 BPM boom-bap drums, distorted 808 sub-bass, gritty sampled stabs, with a 140 BPM techno layer on top: pulsing acid synth lead, dark industrial arpeggio, metallic percussion, a thin ominous choir pad and low strings. Glossy, menacing underground night-club energy. Full intensity from the very first downbeat to the last bar: no intro, no breakdown, no fade-out; one steady loopable groove.
+12. **boss_abomination:** Original instrumental, no vocals, no lyrics. Late-90s dark vampire-hunter action music at its heaviest: a brutal industrial stomp with a half-time hip-hop beat at 90 BPM. Massively distorted 808 sub-bass, crushing kick and snare, clanging metal-factory percussion, grinding saw-wave industrial synths, aggressive electronic hits and noise bursts, a dark horror-orchestra layer of low brass and strings with a menacing choir pad. Monstrous, relentless, combat-ready. Full intensity from the very first downbeat to the last bar: no intro, no breakdown, no fade-out; one steady loopable groove.
+13. **boss_knight:** Original instrumental, no vocals, no lyrics. Late-90s dark vampire-hunter action music for a sword duel: a sharp, driving breakbeat at 100 BPM with hip-hop swagger, chopped funk-style breaks, distorted 808 sub-bass, gritty sampled orchestral stabs, fast dark industrial synth arpeggio, a stabbing acid rave lead, metallic percussion hits like clashing steel, tense low strings underneath. Precise, aggressive and punchy. Full intensity from the very first downbeat to the last bar: no intro, no breakdown, no fade-out; one steady loopable groove.
+14. **boss_hollow:** Original instrumental, no vocals, no lyrics. Late-90s dark vampire-hunter action music against a werewolf pack leader: feral tribal-industrial drums, pounding floor toms and metal hits over a half-time hip-hop beat at 92 BPM, a growling distorted 808 bass that snarls and slides, a rolling dark techno pulse at 138 BPM, aggressive electronic hits, howling filtered synth sweeps, low horror strings and a dark choir pad. Savage and primal, combat-ready. Full intensity from the very first downbeat to the last bar: no intro, no breakdown, no fade-out; one steady loopable groove.
+15. **boss_shared:** Original instrumental, no vocals, no lyrics. Late-90s dark vampire-hunter action theme for a lone hunter in a rainy gothic city at night: solid heavy boom-bap drums at 95 BPM, distorted 808 sub-bass, gritty sampled stabs, a dark industrial synth arpeggio and a driving techno pulse layered on top, metallic percussion, an ominous low-string and choir layer for tension. Determined, punchy and combat-ready with blood-rave energy. Full intensity from the very first downbeat to the last bar: no intro, no breakdown, no fade-out; one steady loopable groove.
+16. **rival_crowe:** Original instrumental, no vocals, no lyrics. Late-90s dark vampire-hunter music for a cold mirror-match duel in a flooded crypt: minimal techno-hip-hop, a hard dry hip-hop kick and snare at 90 BPM with a steady minimal techno hi-hat and pulse at 135 BPM feel, a deep sustained 808 sub-bass, a sparse cold repeating synth arpeggio, clicking metallic percussion, a faint icy pad and a low string drone. Restrained, tense and precise. Steady from the very first downbeat to the last bar: no intro, no breakdown, no fade-out; one loopable groove.
 
 ## Where each plays (`game/scripts/audio/audio.gd`)
 | Fight | Hook | Music context |
@@ -57,13 +82,17 @@ calling it final. Every request was sent with `force_instrumental`.
 | Seraphine's Abomination (final boss `abomination`) | same | `boss_abomination` |
 | Cassius Vane, the Blood Knight (night boss `knight`) | same | `boss_knight` |
 | The Hollow Alpha (night boss `alpha`) | same | `boss_hollow` |
-| Field bosses (Landmark guardians: Sir Aurelien, Dame Corvina, Old Gristle) and any boss without a theme | `boss_base.wake()` -> `Audio.engage(self, "boss")` | `boss` = `boss_shared` |
+| Field bosses (the Landmark guardians Sir Aurelien, Dame Corvina and Old Gristle) and any boss without a theme | `boss_base.wake()` -> `Audio.engage(self, "boss")` | `boss` = `boss_shared` |
 | Silas Crowe, the Pale Daywalker (Undercroft Depths) | `undercroft_rival._taunt()` -> `Audio.engage(self, "rival_crowe")` | `rival_crowe` |
 
-All crossfade in over 1.2 s when the fight starts. On the boss's death (`set_boss(false)`), the
-field boss's or rival's death, the rival's reset (Sol leaves), Sol moving 40 m away from a field
-boss, or Sol falling, the music crossfades back to combat (enemies near) or explore. Both music
-players are on the Music bus (`default_bus_layout.tres`), so the Music volume slider applies.
+Each theme crossfades in over 1.2 s when its fight starts. The music crossfades back to combat
+(enemies near) or explore when any of these happens:
+- the night boss dies (`set_boss(false)`);
+- a field boss or the rival dies;
+- the rival resets because Sol left;
+- Sol moves more than 40 m from a field boss;
+- Sol falls.
 
-The old `combat.ogg` stays (it is the street-combat track); the round-3 boss themes were replaced in
-place (same file names).
+Both music players are on the Music bus (`default_bus_layout.tres`), so the Music volume slider
+applies. The old `combat.ogg` stays, because it is still the street-combat track. The round-3 boss
+themes were replaced in place under the same file names.
