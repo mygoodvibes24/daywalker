@@ -1762,6 +1762,10 @@ func _boss_parry_checks(m, boss) -> bool:
 	var add = _spawn(m, 0, p.global_position + Vector3(1.2, 0.4, 0))
 	await _wait_physics(3)
 	add.attack_cd = 9.0
+	add.special_cd = 99.0 # a plain swipe wind-up: no claw combo, lunge or backflip of its own mid-check
+	add.flip_cd = 99.0
+	if add.special != "":
+		add._cancel_special()
 	add.strike_dir = Vector3(-1, 0, 0)
 	add.windup_t = 0.35 # comfortably inside the window even if a loaded machine stretches a frame
 	p.parry_t = 0.0
@@ -1770,7 +1774,8 @@ func _boss_parry_checks(m, boss) -> bool:
 	p._parry()
 	await _wait_physics(4)
 	m.clear_slowmo()
-	ok = _check("an add is parried during a boss fight (staggered %s)" % add.staggered, add.staggered and p.hp == hp0) and ok
+	var add_d: float = Vector2(add.global_position.x - p.global_position.x, add.global_position.z - p.global_position.z).length()
+	ok = _check("an add is parried during a boss fight (staggered %s, %.2f m, windup %.2f, hp %.0f/%.0f)" % [add.staggered, add_d, add.windup_t, p.hp, hp0], add.staggered and p.hp == hp0) and ok
 	if is_instance_valid(add):
 		m.enemies_root.remove_child(add)
 		add.free()
