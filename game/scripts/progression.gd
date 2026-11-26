@@ -133,6 +133,8 @@ func kill_value(e: Node, drained: bool) -> int:
 	if e.kind == 1:
 		key = ("moon_wolf" if e.max_hp >= 150.0 else "werewolf") if e.transformed else "civilian"
 	var v := float(KILL_TITHE[key])
+	if e.get("tithe_value") != null: # an elite (the Undercroft's rival daywalker) names its own worth
+		v = float(e.get("tithe_value"))
 	if drained:
 		v *= DRAIN_BONUS
 	return int(round(v * (1.0 + stat("tithe_mult"))))

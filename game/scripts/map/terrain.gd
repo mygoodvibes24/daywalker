@@ -292,8 +292,17 @@ static func build() -> void:
 			C[j * N + i] = Color(hint[0], hint[1], hint[2], 0.5 + 0.5 * _n2.get_noise_2d(x * 2.3, z * 2.3))
 
 
+## UNDERCROFT HOOK (map/undercroft.gd): while Sol is down in the crypt under the plaza, ground
+## height inside this rect is the crypt's floor, so loot, Tithe motes, telegraphs and the kill
+## plane follow him underground. Empty (the default) everywhere else and at any other time.
+static var under_rect := Rect2()
+static var under_y := 0.0
+
+
 ## Ground height at (x, z), on the same triangles as the collision shape and the meshes.
 static func height_at(x: float, z: float) -> float:
+	if under_rect.has_area() and under_rect.has_point(Vector2(x, z)):
+		return under_y # UNDERCROFT HOOK
 	if not _built:
 		build()
 	var gx := (x - ORIGIN) / STEP

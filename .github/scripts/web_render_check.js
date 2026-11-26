@@ -4,6 +4,13 @@
 // in Godot 4.3's single-threaded web build, a scene over 1000 instances used to cull to
 // nothing (see threaded_cull_minimum_instances.web in game/project.godot).
 //
+// It then also guards the sound: the browser's autoplay policy is left on (like a real player's),
+// so the page starts with a suspended AudioContext. One click must unlock it, and the Web Audio
+// output (an AnalyserNode tapped onto the destination) must then be non-silent, with no cycle in
+// the bus graph. Godot 4.3's web "Sample" playback once wired Master into a child bus and back
+// (buses added at runtime with AudioServer.add_bus()), and the browser silences such a cycle: no
+// sound at all on the web. See settings.gd ensure_buses() and default_bus_layout.tres.
+//
 // usage (run from a directory where playwright is installed):
 //   node web_render_check.js http://localhost:8060/index.html <screenshot dir>
 const path = require('path');
@@ -15,6 +22,72 @@ const outDir = process.argv[3] || 'web-render-check';
 const READY_TIMEOUT_MS = 240000; // SwiftShader on CI runners is slow (about 1 fps)
 const SETTLE_MS = 15000; // the Hunt's fade-in and first frames after HUNT_READY
 const MIN_STDDEV = 12; // broken (sky only) measures about 5.5; a drawn city 25-85
+const MIN_RMS = 0.002; // the Hunt after a click (music, rain, a sword swing) measures about 0.05-0.15; broken 0
+
+// Injected before the page loads: tap every AudioContext's destination with an analyser and
+// record the audio graph's edges, so the check can measure the output and find a cycle.
+function audioProbe() {
+  const Base = window.AudioContext || window.webkitAudioContext;
+  if (!Base) return;
+  const A = { ctxs: [], taps: [], edges: new Map(), peak: 0, peakSince: 0 };
+  window.__dwProbe = A;
+  function Probed(...args) {
+    const c = new Base(...args);
+    const an = c.createAnalyser();
+    an.fftSize = 2048;
+    an.__tap = true;
+    A.ctxs.push(c);
+    A.taps.push(an);
+    return c;
+  }
+  Probed.prototype = Base.prototype;
+  window.AudioContext = Probed;
+  if (window.webkitAudioContext) window.webkitAudioContext = Probed;
+  const connect = AudioNode.prototype.connect;
+  AudioNode.prototype.connect = function (dst, ...rest) {
+    if (dst instanceof AudioNode && !this.__tap) {
+      if (!A.edges.has(this)) A.edges.set(this, new Set());
+      A.edges.get(this).add(dst);
+      if (dst === this.context.destination) {
+        const tap = A.taps[A.ctxs.indexOf(this.context)];
+        if (tap) connect.call(this, tap);
+      }
+    }
+    return connect.call(this, dst, ...rest);
+  };
+  const disconnect = AudioNode.prototype.disconnect;
+  AudioNode.prototype.disconnect = function (dst, ...rest) {
+    const e = A.edges.get(this);
+    if (e) { if (dst instanceof AudioNode) e.delete(dst); else e.clear(); }
+    return disconnect.call(this, dst, ...rest);
+  };
+  const buf = new Float32Array(2048);
+  setInterval(() => {
+    for (const t of A.taps) {
+      t.getFloatTimeDomainData(buf);
+      let s = 0;
+      for (const v of buf) s += v * v;
+      A.peak = Math.max(A.peak, Math.sqrt(s / buf.length));
+    }
+  }, 100);
+  A.reset = () => { A.peak = 0; };
+  A.cycle = () => {
+    const state = new Map();
+    let found = false;
+    const dfs = (n) => {
+      state.set(n, 1);
+      for (const d of (A.edges.get(n) || [])) {
+        if (found) return;
+        if (state.get(d) === 1) { found = true; return; }
+        if (!state.has(d)) dfs(d);
+      }
+      state.set(n, 2);
+    };
+    for (const n of A.edges.keys()) if (!found && !state.has(n)) dfs(n);
+    return found;
+  };
+  A.report = () => ({ states: A.ctxs.map((c) => c.state), peak: A.peak, cycle: A.cycle() });
+}
 
 async function centreStddev(browser, png) {
   // decode the screenshot in a blank page's canvas (no image libraries needed)
@@ -46,8 +119,11 @@ async function centreStddev(browser, png) {
   fs.mkdirSync(outDir, { recursive: true });
   const browser = await chromium.launch({
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+    // keep Chromium's autoplay policy (Playwright turns it off by default): audio must wait for a click
+    ignoreDefaultArgs: ['--autoplay-policy=no-user-gesture-required'],
   });
   const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
+  await page.addInitScript(audioProbe);
   const log = [];
   let ready = false;
   page.on('console', (m) => {
@@ -80,13 +156,41 @@ async function centreStddev(browser, png) {
     if (best >= MIN_STDDEV) break;
     await page.waitForTimeout(10000);
   }
+
+  // Sound. Nothing has clicked yet, so the page must still be silent; one click (an attack in
+  // the Hunt) must unlock the AudioContext, and music, rain and the sword must then be audible.
+  // (page.evaluate counts as a user gesture, so read the probe only after the click.)
+  const vp = page.viewportSize();
+  await page.mouse.click(vp.width * 0.5, vp.height * 0.55);
+  await page.evaluate(() => window.__dwProbe && window.__dwProbe.reset());
+  await page.waitForTimeout(2500);
+  await page.mouse.click(vp.width * 0.5, vp.height * 0.55); // a second swing
+  await page.waitForTimeout(6000);
+  const aud = await page.evaluate(() => (window.__dwProbe ? window.__dwProbe.report() : null));
+  console.log('audio after a click:', JSON.stringify(aud), `(need running, no cycle, peak RMS >= ${MIN_RMS})`);
+  let audioOk = true;
+  if (!aud || !aud.states.length) {
+    console.error('::error::web build never created an AudioContext');
+    audioOk = false;
+  } else if (aud.cycle) {
+    console.error('::error::the Web Audio bus graph has a cycle, which the browser silences (no sound at all): see settings.gd ensure_buses()');
+    audioOk = false;
+  } else if (!aud.states.includes('running')) {
+    console.error('::error::a click did not unlock the AudioContext (still ' + aud.states.join(',') + ')');
+    audioOk = false;
+  } else if (aud.peak < MIN_RMS) {
+    console.error('::error::web build is silent after a click in the Hunt (peak RMS ' + aud.peak.toFixed(4) + ')');
+    audioOk = false;
+  }
+
   fs.writeFileSync(path.join(outDir, 'console.txt'), log.join('\n'));
   await browser.close();
   if (best < MIN_STDDEV) {
     console.error('::error::web build renders the Hunt as a near-uniform screen (no city / Sol): see the web-render-check screenshots');
     process.exit(1);
   }
-  console.log('web render check: PASS');
+  if (!audioOk) process.exit(1);
+  console.log('web render + audio check: PASS');
 })().catch((e) => {
   console.error(e);
   process.exit(1);

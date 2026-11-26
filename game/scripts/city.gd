@@ -18,6 +18,7 @@ const Velvet = preload("res://scripts/map/velvet.gd")
 const Wilds = preload("res://scripts/map/wilds.gd")
 const Cemetery = preload("res://scripts/map/cemetery.gd")
 const Terrain = preload("res://scripts/map/terrain.gd")
+const UndercroftStair = preload("res://scripts/map/undercroft_stair.gd") # UNDERCROFT HOOK: the walkable well stair
 const SEED := 1859
 const ATLAS_COLS := 4.0
 const ATLAS_ROWS := 5.0
@@ -3916,10 +3917,9 @@ const PIT_DEPTH := 3.4
 
 
 ## The Undercroft entrance (image 01): a sunken circular stair well under a carved
-## balustrade, curved steps sweeping down to a crypt arcade glowing red, a gothic
-## arch (generated model) over the head of the stairs, flanked by two weeping
-## angels on pedestals. A solid ring collider keeps everyone out of the well; the
-## drink prompt stays reachable at the ring (radius ~3.4 m).
+## balustrade, a spiral stair down to a door glowing red (the way to the Undercroft
+## Depths), a gothic arch (generated model) over the head of the stairs, flanked by two
+## weeping angels on pedestals.
 func build_lair(root: Node3D) -> void:
 	var save_ck := ck
 	ck = "L"
@@ -3935,49 +3935,9 @@ func build_lair(root: Node3D) -> void:
 	for s in segs + 1:
 		var a := TAU * s / segs
 		dirs.append(Vector3(cos(a), 0, sin(a)))
-	# shaft wall, seen from inside
-	for s in segs:
-		var d0: Vector3 = dirs[s]
-		var d1: Vector3 = dirs[s + 1]
-		st.quad_sm(d1 * R + Vector3(0, -D, 0), d1 * R + Vector3(0, y0, 0), d0 * R + Vector3(0, y0, 0), d0 * R + Vector3(0, -D, 0), -d1, -d1, -d0, -d0, dark)
-	# curved steps sweeping down the south half of the well (an amphitheatre stair)
-	var N := 11
-	var tread := (R - 1.0) / N
-	var rise := (D + y0) / N
-	var a_lo := PI * 0.5 - 1.3
-	var a_hi := PI * 0.5 + 1.3
-	var ss := 14
-	for k in N:
-		var ro := R - k * tread
-		var ri := R - (k + 1) * tread
-		var yt := y0 - (k + 1) * rise
-		var col := sc * Color(0.78, 0.76, 0.74) * (0.85 + 0.15 * float(k % 2))
-		for q in ss:
-			var a0 := lerpf(a_lo, a_hi, float(q) / ss)
-			var a1 := lerpf(a_lo, a_hi, float(q + 1) / ss)
-			var d0 := Vector3(cos(a0), 0, sin(a0))
-			var d1 := Vector3(cos(a1), 0, sin(a1))
-			st.quad(d0 * ri + Vector3(0, yt, 0), d0 * ro + Vector3(0, yt, 0), d1 * ro + Vector3(0, yt, 0), d1 * ri + Vector3(0, yt, 0), Vector3.UP, col)
-			st.quad_sm(d0 * ri + Vector3(0, yt - rise, 0), d0 * ri + Vector3(0, yt, 0), d1 * ri + Vector3(0, yt, 0), d1 * ri + Vector3(0, yt - rise, 0), -d0, -d0, -d1, -d1, col * Color(0.7, 0.7, 0.7))
-		for a: float in [a_lo, a_hi]:
-			var d := Vector3(cos(a), 0, sin(a))
-			var t := Vector3(-sin(a), 0, cos(a)) * (1.0 if a == a_lo else -1.0)
-			st.quad(d * ri + Vector3(0, -D, 0), d * ri + Vector3(0, yt, 0), d * ro + Vector3(0, yt, 0), d * ro + Vector3(0, -D, 0), -t, dark)
-	# the crypt arcade on the far side: three pointed arches breathing red light
-	var glow := _b("crypt_glow")
-	for k in 3:
-		var a := -PI * 0.5 + (k - 1) * 0.62
-		var d := Vector3(cos(a), 0, sin(a))
-		var f := Facade.new()
-		f.n = -d
-		f.r = Vector3(-sin(a), 0, cos(a)) * -1.0
-		f.w = 1.7
-		f.o = d * (R - 0.03) - f.r * f.w * 0.5 + Vector3(0, -D, 0)
-		fq(glow, f, 0.2, 0.0, 1.5, 1.9, 0.01, Color(0.3, 0.3, 0.3))
-		glow.tri(f.p(0.2, 1.9, 0.01), f.p(0.85, 2.7, 0.01), f.p(1.5, 1.9, 0.01), f.n, Color(0.3, 0.3, 0.3))
-		_pointed_arch(st, f, 0.85, 0.68, 1.9, 0.2, 0.18, sc * Color(0.7, 0.68, 0.66), 0.2)
-	# floor of the well: wet flags lit from the crypt
-	_disc(glow, Vector3(0, -D + 0.01, 0), R, segs, Color(0.22, 0.22, 0.22))
+	# UNDERCROFT HOOK: the shaft, the walkable spiral stair, the floor and the door down to the
+	# Undercroft Depths (map/undercroft_stair.gd; the crypt itself is map/undercroft.gd)
+	UndercroftStair.build(self, root, y0)
 	# carved balustrade around the well, open under the arch at the south
 	var bal := _b("baluster")
 	var gap := 0.45 # radians either side of +z
@@ -4058,16 +4018,9 @@ func build_lair(root: Node3D) -> void:
 	pit_light.light_energy = 2.2
 	pit_light.omni_range = 6.5
 	root.add_child(pit_light)
-	# colliders: a solid ring over the well, the pedestals and the arch piers
-	var ring := StaticBody3D.new()
-	root.add_child(ring)
-	var ring_col := CollisionShape3D.new()
-	var ring_shape := CylinderShape3D.new()
-	ring_shape.radius = R + 0.05
-	ring_shape.height = 1.0
-	ring_col.shape = ring_shape
-	ring_col.position.y = 0.5
-	ring.add_child(ring_col)
+	# colliders: the pedestals and the arch piers (the stair, the balustrade and the hollowed
+	# ground are undercroft_stair.gd's)
+	UndercroftStair.hollow_terrain(self) # UNDERCROFT HOOK
 	for pp in ped_pos:
 		_static_box(Vector3(1.2, 4.0, 1.2), pp + Vector3(0, 2.0, 0), root)
 	var aw: float = arch.x if arch != Vector3.ZERO else 5.0

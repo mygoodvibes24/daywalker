@@ -16,6 +16,7 @@ extends RefCounted
 ## skeleton keeps the blade from pointing at the sky in locomotion; it is eased off during moves.
 
 const SolMoves = preload("res://scripts/sol_moves.gd")
+const SolStrafe = preload("res://scripts/sol_strafe.gd")
 
 var tree: AnimationTree
 var bt: AnimationNodeBlendTree
@@ -27,6 +28,10 @@ var was_air := false
 var dead := false
 var combat := 0.0
 var in_combat := false
+var strafe: Node # sol_strafe.gd: legs toward the move, chest on the lock-on target
+var _strafe_yaw := 0.0
+var _backpedal := false
+var armed := true # the sword is in his hand (player.gd / sol_sheath.gd); sheathed, the wrist rests
 var _slot := 1
 var _slot_left := [0.0, 0.0] # seconds of the move left in each slot
 var _has_stance := false
@@ -62,9 +67,11 @@ func setup(model: Node) -> bool:
 	loco.add_blend_point(_clip("run"), 7.5)
 	loco.add_blend_point(_clip("sprint"), 13.0)
 	bt.add_node("loco", loco)
+	bt.add_node("loco_speed", AnimationNodeTimeScale.new()) # -1: the run backwards (lock-on backpedal)
+	bt.connect_node("loco_speed", 0, "loco")
 	bt.add_node("stance", _clip("stance" if _has_stance else "idle"))
 	bt.add_node("combat", AnimationNodeBlend2.new())
-	bt.connect_node("combat", 0, "loco")
+	bt.connect_node("combat", 0, "loco_speed")
 	bt.connect_node("combat", 1, "stance")
 	bt.add_node("jump", _clip("jump"))
 	bt.add_node("jump_seek", AnimationNodeTimeSeek.new())
@@ -120,6 +127,13 @@ func setup(model: Node) -> bool:
 	tree.tree_root = bt
 	tree.active = true
 	tree.set("parameters/hit_speed/scale", 1.6)
+	tree.set("parameters/loco_speed/scale", 1.0)
+	var skel := model.get_node_or_null("Skeleton3D") as Skeleton3D
+	if skel != null:
+		strafe = SolStrafe.new()
+		strafe.name = "Strafe"
+		skel.add_child(strafe)
+		skel.move_child(strafe, 0) # first: the draw reach and the wrist work on the twisted pose
 	tree.set("parameters/life/transition_request", "alive")
 	return true
 
@@ -224,6 +238,28 @@ func die() -> void:
 	tree.set("parameters/life/transition_request", "dead")
 
 
+## Lock-on strafe: `rel` is the move direction relative to the facing (radians), `on` false eases back.
+## Up to ~110 deg off the facing the legs turn toward the move; behind that he backpedals (the run
+## played backwards, the legs turned toward the opposite of the move).
+func set_strafe(rel: float, on: bool, delta: float) -> void:
+	var want := 0.0
+	var back := false
+	if on:
+		rel = wrapf(rel, -PI, PI)
+		if absf(rel) <= deg_to_rad(110.0):
+			want = clampf(rel, -1.25, 1.25)
+		else:
+			back = true
+			want = clampf(wrapf(rel - PI, -PI, PI), -1.25, 1.25)
+	if back != _backpedal:
+		_backpedal = back
+		if tree != null:
+			tree.set("parameters/loco_speed/scale", -1.0 if back else 1.0)
+	_strafe_yaw = lerp_angle(_strafe_yaw, want, minf(10.0 * delta, 1.0))
+	if strafe != null:
+		strafe.yaw = _strafe_yaw if absf(_strafe_yaw) > 0.002 else 0.0
+
+
 ## s: speed (horizontal m/s), on_floor (bool); in_combat (enemies near) is set by the player.
 func update(delta: float, s: Dictionary) -> void:
 	if tree == null:
@@ -261,4 +297,4 @@ func update(delta: float, s: Dictionary) -> void:
 			if _slot_left[i] <= 0.0:
 				tree.set("parameters/%s/request" % ("actA" if i == 0 else "actB"), AnimationNodeOneShot.ONE_SHOT_REQUEST_FADE_OUT)
 	if wrist != null:
-		wrist.amount = move_toward(wrist.amount, 0.0 if (move_playing() or dead) else 1.0, delta * (12.0 if move_playing() else 3.0))
+		wrist.amount = move_toward(wrist.amount, 0.0 if (move_playing() or dead or not armed) else 1.0, delta * (12.0 if move_playing() or not armed else 3.0))
