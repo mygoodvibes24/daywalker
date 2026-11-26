@@ -6,6 +6,10 @@ extends Node3D
 
 const ItemDB = preload("res://scripts/items/item_db.gd")
 const U = preload("res://scripts/util.gd")
+const Wardrobe = preload("res://scripts/items/wardrobe_data.gd")
+const Meta = preload("res://scripts/hunt/hunt_meta.gd")
+## WARDROBE: chance a source turns up a piece of clothing Sol doesn't own yet (only in a Hunt).
+const CLOTH_CHANCE := {"cache": 0.05, "coffin": 0.08, "site": 0.18, "boss": 0.5}
 
 const PICK_RANGE := 2.0
 const CACHE_RANGE := 2.3
@@ -410,6 +414,31 @@ func open_cache(c: Dictionary) -> void:
 		spawn_item(ItemDB.random_item(rng, night, main.is_full_moon(), luck), c.pos + side * 1.1)
 	main.hud.popup("THE " + ("COFFIN" if c.coffin else "CRATE") + " GIVES UP ITS SECRETS")
 	Audio.play("loot_pickup", 0.0, 0.0) # AUDIO HOOK
+	roll_clothing("cache")
+
+
+## WARDROBE: maybe find a rare piece of clothing (wardrobe_data.gd "drop" items not owned yet).
+## It goes straight to the lair's wardrobe (hunt_meta.gd, saved at once). Returns the id or "".
+func roll_clothing(source: String, force := false) -> String:
+	if main == null or main.get("hunt") == null:
+		return ""
+	var chance := float(CLOTH_CHANCE.get(source, 0.0)) * (1.0 + main.progression.stat("loot_luck"))
+	if not force and rng.randf() >= chance:
+		return ""
+	var pool: Array = []
+	for id in Wardrobe.drop_items():
+		if not Meta.owns_cloth(id):
+			for w in 4 - int(Wardrobe.get_def(id).r): # rarer pieces turn up less
+				pool.append(id)
+	if pool.is_empty():
+		return ""
+	var id: String = pool[rng.randi() % pool.size()]
+	if not Meta.add_cloth(id):
+		return ""
+	var d := Wardrobe.get_def(id)
+	main.hud.popup("FOUND: %s  ·  %s\nit waits in your wardrobe" % [String(d.name).to_upper(), Wardrobe.RARITY_NAMES[int(d.r)].to_upper()])
+	Audio.play("loot_pickup", 0.0, 0.0) # AUDIO HOOK
+	return id
 
 
 ## Sunrise: every cache is sealed and stocked again.

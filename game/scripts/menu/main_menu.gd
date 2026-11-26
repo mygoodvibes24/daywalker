@@ -1,18 +1,23 @@
 extends Node
 ## The main menu (res://scenes/main_menu.tscn, the project's main scene): the live lair
 ## set behind (lair_menu_set.tscn), the title and menu in the dark left third, and the
-## Controls / Options screens. Start fades out and loads the game on a thread with a
-## "Loading..." indicator (synchronously on the web), then hands over to main.tscn with
-## main.gd's `started_once` set, so the game begins at once without its title overlay.
+## Controls / Options screens. Start fades out into the playable lair (scenes/lair.tscn,
+## scripts/lair/lair_hub.gd): Sol walks his basement, picks his loadout at its stations and
+## begins the Hunt from there. ?autohunt / --autohunt (and ?bench) still go straight into a
+## Hunt: the game loads on a thread with a "Loading..." indicator (synchronously on the web),
+## then hands over to main.tscn with main.gd's `started_once` set. ?lair / --lair opens the lair
+## at once.
 
 const MS = preload("res://scripts/menu/menu_style.gd")
 const S = preload("res://scripts/ui/ui_style.gd")
 const OptionsPanel = preload("res://scripts/menu/options_panel.gd")
 const ControlsPanel = preload("res://scripts/menu/controls_panel.gd")
 const MainScript = preload("res://scripts/main.gd")
-const HubPanel = preload("res://scripts/hunt/hub_panel.gd") # the Undercroft hub before a Hunt
+const HubPanel = preload("res://scripts/hunt/hub_panel.gd") # the old menu hub (kept for the lair's fallback / tests)
 const HuntMeta = preload("res://scripts/hunt/hunt_meta.gd")
 const GAME_SCENE := "res://scenes/main.tscn"
+const LAIR_SCENE := "res://scenes/lair.tscn"
+var target_scene := GAME_SCENE # what the fade-out loads: the lair (Start) or a Hunt (?autohunt)
 
 var ui: CanvasLayer
 var menu_box: Control # the title + buttons column
@@ -36,18 +41,31 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_build_ui()
 	buttons[0].grab_focus.call_deferred()
-	if HuntMeta.return_to_hub: # back from a Hunt's results screen
-		HuntMeta.return_to_hub = false
-		_show.call_deferred("hub")
+	HuntMeta.return_to_hub = false # (a Hunt's results go to the lair scene now)
 	Audio.set_music("menu"); Dialogue.start_menu_banter() # AUDIO HOOK (starts after the first click on the web)
 	var tw := create_tween()
 	tw.tween_property(fade, "color:a", 0.0, 1.6).set_trans(Tween.TRANS_SINE)
 	if not _autohunt_done and _autohunt_wanted(): # ?autohunt (web) / --autohunt: straight into a Hunt (CI render check), once per page load
 		_autohunt_done = true
 		_begin_hunt.call_deferred()
+	elif not _autohunt_done and _flag_wanted("lair"): # ?lair / --lair: straight into the playable lair
+		_autohunt_done = true
+		_enter_lair.call_deferred()
 
 
 static var _autohunt_done := false
+
+
+static func _flag_wanted(flag: String) -> bool:
+	if ("--" + flag) in OS.get_cmdline_user_args():
+		return true
+	if not OS.has_feature("web"):
+		return false
+	var q := str(JavaScriptBridge.eval("window.location.search", true)).trim_prefix("?")
+	for part in q.split("&", false):
+		if part.split("=")[0] == flag:
+			return true
+	return false
 
 
 static func _autohunt_wanted() -> bool:
@@ -99,7 +117,7 @@ func _build_ui() -> void:
 	var gap := Control.new()
 	gap.custom_minimum_size = Vector2(0, 46)
 	menu_box.add_child(gap)
-	var entries := [["Start", _show.bind("hub")], ["Controls", _show.bind("controls")], ["Options", _show.bind("options")]]
+	var entries := [["Start", _enter_lair], ["Controls", _show.bind("controls")], ["Options", _show.bind("options")]]
 	if not OS.has_feature("web"):
 		entries.append(["Quit", func(): get_tree().quit()])
 	for e in entries:
@@ -240,6 +258,15 @@ func _begin_hunt() -> void:
 	HuntDirector.requested = true
 	hub.visible = false
 	state = "menu"
+	target_scene = GAME_SCENE
+	_on_start()
+
+
+## Start: fade out and walk into the lair (scenes/lair.tscn), where the loadout is chosen.
+func _enter_lair() -> void:
+	if state != "menu":
+		return
+	target_scene = LAIR_SCENE
 	_on_start()
 
 
@@ -251,7 +278,8 @@ func _on_start() -> void:
 	for b in buttons:
 		b.disabled = true
 		b.release_focus()
-	MainScript.started_once = true # main.gd starts at once, no title overlay
+	if target_scene == GAME_SCENE:
+		MainScript.started_once = true # main.gd starts at once, no title overlay
 	var tw := create_tween()
 	tw.tween_property(fade, "color:a", 1.0, 0.9).set_trans(Tween.TRANS_SINE)
 	tw.tween_callback(_begin_load)
@@ -261,13 +289,13 @@ func _begin_load() -> void:
 	loading.visible = true
 	# browsers may lack threads (no SharedArrayBuffer): load synchronously there
 	load_threaded = not OS.has_feature("web") and OS.get_processor_count() > 1
-	if load_threaded and ResourceLoader.load_threaded_request(GAME_SCENE, "PackedScene", true) == OK:
+	if load_threaded and ResourceLoader.load_threaded_request(target_scene, "PackedScene", true) == OK:
 		return
 	load_threaded = false
 	# give the "Loading..." label one frame on screen before blocking
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_enter(load(GAME_SCENE) as PackedScene)
+	_enter(load(target_scene) as PackedScene)
 
 
 func _process(delta: float) -> void:
@@ -277,17 +305,17 @@ func _process(delta: float) -> void:
 		loading.text = "Loading" + ".".repeat(1 + int(load_t * 2.0) % 3)
 	if state != "loading" or not load_threaded:
 		return
-	var st := ResourceLoader.load_threaded_get_status(GAME_SCENE)
+	var st := ResourceLoader.load_threaded_get_status(target_scene)
 	if st == ResourceLoader.THREAD_LOAD_LOADED:
 		load_threaded = false
-		_enter(ResourceLoader.load_threaded_get(GAME_SCENE) as PackedScene)
+		_enter(ResourceLoader.load_threaded_get(target_scene) as PackedScene)
 	elif st == ResourceLoader.THREAD_LOAD_FAILED or st == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
 		load_threaded = false
-		_enter(load(GAME_SCENE) as PackedScene)
+		_enter(load(target_scene) as PackedScene)
 
 
 func _enter(scene: PackedScene) -> void:
 	if scene == null:
-		push_error("main menu: could not load " + GAME_SCENE)
+		push_error("main menu: could not load " + target_scene)
 		return
 	get_tree().change_scene_to_packed(scene)

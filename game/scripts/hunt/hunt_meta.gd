@@ -5,11 +5,12 @@ extends RefCounted
 ## Saved to user://hunt_meta.json (the smoke test points `path` elsewhere).
 
 const ItemDB = preload("res://scripts/items/item_db.gd")
+const Wardrobe = preload("res://scripts/items/wardrobe_data.gd")
 const Cfg = preload("res://scripts/hunt/hunt_config.gd")
 const LOADOUT_SLOTS := 3
 
 static var path := "user://hunt_meta.json"
-## Set by the results screen so the main menu opens straight on the Undercroft hub.
+## Set by the results screen (legacy: the lair scene is where a Hunt now returns to).
 static var return_to_hub := false
 
 static var data := {}
@@ -22,7 +23,9 @@ static func defaults() -> Dictionary:
 		"armoury": [ItemDB.make("red_flannel"), ItemDB.make("john_root")], # charm instances owned for good
 		"loadout": [0, -1, -1], # armoury indices worn into the next Hunt
 		"blades": ["marrow_silver"], # the Arsenal: blade ids on Nia's rack (one per weapon type to buy)
-		"start_blade": "marrow_silver"} # the blade Sol carries into the next Hunt
+		"start_blade": "marrow_silver", # the blade Sol carries into the next Hunt
+		"clothes": Wardrobe.start_items(), # the wardrobe (items/wardrobe_data.gd): clothing ids owned for good
+		"outfit": Wardrobe.DEFAULT_OUTFIT.duplicate()} # what Sol wears, per slot
 
 
 ## The Arsenal (round 4): one blade of every weapon type on Nia's rack, bought once with Sunmarks;
@@ -108,6 +111,17 @@ static func load_meta() -> void:
 				blades.append(b)
 	data.blades = blades
 	data.start_blade = String(data.start_blade) if String(data.start_blade) in blades else "marrow_silver"
+	var clothes: Array = Wardrobe.start_items()
+	if data.clothes is Array:
+		for c in data.clothes:
+			if c is String and not Wardrobe.get_def(c).is_empty() and not c in clothes:
+				clothes.append(c)
+	data.clothes = clothes
+	var o := Wardrobe.sanitize(data.outfit if data.outfit is Dictionary else {})
+	for s in o:
+		if not o[s] in clothes:
+			o[s] = Wardrobe.DEFAULT_OUTFIT[s]
+	data.outfit = o
 
 
 static func save_meta() -> bool:
@@ -210,3 +224,52 @@ static func record_hunt(summary: Dictionary, carried_charms: Array) -> int:
 	data.last = last
 	save_meta()
 	return earned
+
+
+# ---------------------------------------------------------------- the wardrobe (lair mirror station)
+static func owns_cloth(id: String) -> bool:
+	ensure()
+	return id in data.clothes
+
+
+## The outfit Sol wears into the Hunt: {slot: item id}, every slot filled and owned.
+static func outfit() -> Dictionary:
+	ensure()
+	return Wardrobe.sanitize(data.outfit)
+
+
+static func outfit_mods() -> Dictionary:
+	return Wardrobe.outfit_mods(outfit())
+
+
+## Wear an owned piece in its slot.
+static func wear(id: String) -> bool:
+	ensure()
+	var slot := Wardrobe.slot_of(id)
+	if slot == "" or not owns_cloth(id):
+		return false
+	data.outfit[slot] = id
+	return true
+
+
+## Buy a shop piece with Sunmarks (owned at once and worn).
+static func buy_cloth(id: String) -> bool:
+	ensure()
+	var d := Wardrobe.get_def(id)
+	if d.is_empty() or owns_cloth(id) or not d.has("price") or data.sunmarks < int(d.price):
+		return false
+	data.sunmarks -= int(d.price)
+	data.clothes.append(id)
+	wear(id)
+	save_meta()
+	return true
+
+
+## A piece found in a Hunt (loot.gd): owned for good, saved at once. False if already owned.
+static func add_cloth(id: String) -> bool:
+	ensure()
+	if Wardrobe.get_def(id).is_empty() or owns_cloth(id):
+		return false
+	data.clothes.append(id)
+	save_meta()
+	return true

@@ -245,7 +245,7 @@ func _physics_process(delta: float) -> void:
 		_hang_t -= delta
 		player.velocity.y = maxf(player.velocity.y, -1.0) # the jump cut hangs a breath in the air
 	# Weapon Art / blood-chain
-	if Input.is_action_just_pressed("weapon_art"):
+	if Input.is_action_just_pressed("weapon_art") and not player.peaceful: # LAIR: no Weapon Art in the lair
 		art_buffer_t = ART_BUFFER
 	if art_buffer_t > 0.0:
 		art_buffer_t -= delta

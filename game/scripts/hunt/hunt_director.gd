@@ -31,6 +31,11 @@ const POIClass = preload("res://scripts/hunt/poi.gd")
 ## Set by the hub's "Begin the Hunt" (or --hunt / ?hunt) before main.tscn loads. The Hunt is
 ## THE game: main.tscn runs one however it was reached, unless free roam was asked for.
 static var requested := false
+## The lair (Sol's walkable Undercroft basement): where the results screen sends him.
+const LAIR_SCENE := "res://scenes/lair.tscn"
+## LAIR: the seed the lair's briefing drew (tonight's boss and modifier are shown before the Hunt);
+## used once by the next build_world, then cleared.
+static var next_seed := -1
 ## Debug only: the old free-roam sandbox (--freeroam / ?freeroam). Tests set this directly.
 static var force_freeroam := false
 ## Tests force the short timings; otherwise --shorthunt / ?shorthunt.
@@ -113,7 +118,8 @@ func build_world() -> void:
 	process_physics_priority = -10 # POIs hold idle enemies before enemy physics runs
 	short = force_short or short_flag(OS.get_cmdline_user_args(), main._url_flag("shorthunt"))
 	T = Cfg.timings(short)
-	seed = seed_override if seed_override >= 0 else randi()
+	seed = seed_override if seed_override >= 0 else (next_seed if next_seed >= 0 else randi())
+	next_seed = -1
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--seed="):
 			seed = int(a.substr(7))
@@ -160,15 +166,20 @@ func build_world() -> void:
 ## Nights 1 and 2 draw two different bosses from the pool; the Final Night is fixed. Its own
 ## RNG stream, so the boss draw doesn't move the deployment point or the POIs for a seed.
 func _pick_bosses() -> void:
+	night_bosses = bosses_for(seed)
+
+
+## The three nights' boss defs a seed draws (static: the lair's briefing shows night 1's beforehand).
+static func bosses_for(seed_: int) -> Array:
 	var br := RandomNumberGenerator.new()
-	br.seed = seed * 7919 + 13
+	br.seed = seed_ * 7919 + 13
 	var pool: Array = Cfg.NIGHT_BOSS_POOL.duplicate()
 	for k in range(pool.size() - 1, 0, -1):
 		var s_ := br.randi_range(0, k)
 		var t = pool[k]
 		pool[k] = pool[s_]
 		pool[s_] = t
-	night_bosses = [pool[0], pool[1], Cfg.FINAL_BOSS]
+	return [pool[0], pool[1], Cfg.FINAL_BOSS]
 
 
 func boss_def(d: int) -> Dictionary:
@@ -694,6 +705,7 @@ func _on_boss_died(b) -> void:
 	main.loot.spawn_motes(b.global_position + Vector3(0, 1.5, 0), int(round(def.tithe * (1.0 + main.progression.stat("tithe_mult")))))
 	main.loot.spawn_item(random_item(ItemDB.LEGENDARY, "blade"), b.global_position + Vector3(1.5, 0, 0))
 	main.loot.spawn_item(random_item(ItemDB.LEGENDARY, "charm"), b.global_position + Vector3(-1.5, 0, 0))
+	main.loot.roll_clothing("boss") # WARDROBE: rare clothes for the lair
 	main.set_slowmo(0.25, 1.2)
 	for s in summons:
 		if is_instance_valid(s) and not s.dead:
@@ -795,15 +807,21 @@ func register_site(site: Node3D) -> void:
 ## One modifier per night (Day 1, Day 2, the Final Night), on its own seeded stream so the draw
 ## never moves the POIs or the bosses; no night repeats the one before it.
 func _pick_modifiers() -> void:
+	night_mods = modifiers_for(seed)
+
+
+## The three nights' modifier ids a seed draws (static, for the lair's briefing).
+static func modifiers_for(seed_: int) -> Array:
 	var mr := RandomNumberGenerator.new()
-	mr.seed = seed * 104729 + 71
+	mr.seed = seed_ * 104729 + 71
 	var ids: Array = Cfg.NIGHT_MODIFIERS.keys()
-	night_mods = []
+	var out: Array = []
 	for d in 3:
 		var pick: String = ids[mr.randi() % ids.size()]
-		if not night_mods.is_empty() and pick == night_mods[-1]:
+		if not out.is_empty() and pick == out[-1]:
 			pick = ids[(ids.find(pick) + 1 + mr.randi() % (ids.size() - 1)) % ids.size()]
-		night_mods.append(pick)
+		out.append(pick)
+	return out
 
 
 ## Tonight's modifier def ({} before the Hunt has drawn them).
@@ -888,6 +906,8 @@ func on_poi_cleared(poi) -> void:
 		3:
 			main.loot.spawn_item(random_item(ItemDB.LEGENDARY, "blade"), pos + Vector3(0.8, 0, 0.8))
 	main.hud.popup("%s CLEARED" % poi.display_name.to_upper())
+	if int(d.reward) >= 2:
+		main.loot.roll_clothing("site") # WARDROBE
 	if poi.type == "fieldboss":
 		queue_rite(poi.display_name) # a Landmark horror's blood is worth a Rite too
 	# AUDIO HOOK: the nest line names a nest; anything else gets the generic one
@@ -902,6 +922,7 @@ func coffin_loot(pos: Vector3, day_: bool) -> void:
 	if rng.randf() < (0.75 if day_ else 0.5):
 		main.loot.spawn_item(random_item(ItemDB.UNCOMMON), pos + Vector3(rng.randf_range(-1, 1), 0, rng.randf_range(-1, 1)))
 	main.hud.popup("THE SLEEPER'S HOARD")
+	main.loot.roll_clothing("coffin") # WARDROBE
 
 
 ## A random item of at least `min_r` rarity, optionally of one kind (blade / charm / vial / flare).
@@ -1057,14 +1078,14 @@ func hunt_again() -> void:
 	get_tree().reload_current_scene()
 
 
-## Results -> back to the Undercroft (the hub in the main menu).
+## Results -> back to the Undercroft: Sol walks his lair again (scenes/lair.tscn), not the menu.
 func return_to_hub() -> void:
 	Meta.return_to_hub = true
 	requested = false
 	get_tree().paused = false
 	Engine.time_scale = 1.0
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+	get_tree().change_scene_to_file(LAIR_SCENE)
 
 
 # ---------------------------------------------------------------- debug / tests / screenshots
