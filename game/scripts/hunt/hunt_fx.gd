@@ -179,6 +179,7 @@ static func shockwave(parent: Node, pos: Vector3, radius: float, c := Color(1.0,
 
 ## A burst of glowing blood droplets / mist (blink, death, deploy dust).
 static func puff(parent: Node, pos: Vector3, c := Color(0.8, 0.02, 0.05), count := 10, size := 0.18, spread := 2.5) -> void:
+	count = SettingsScript.vfx_count(count) # SETTINGS HOOK: effects amount
 	var root := Node3D.new()
 	parent.add_child(root)
 	root.global_position = pos
