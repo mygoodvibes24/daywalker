@@ -1,6 +1,11 @@
 # Quality Loop
 
-The owner's bar: **compete with Elden Ring** in look, animation, action and gameplay. Every change to the game goes through this loop until the critic scores every category 10/10, or until a category hits a documented hard ceiling.
+The owner's bar, per area:
+- **Realism and atmosphere** (visuals, characters, presentation): **Until Dawn**.
+- **Animation and action movement** (character animation, combat): the **Blade film**: aggressive, fluid, two-handed sword work, kicks and martial-arts flair.
+- **Gameplay and features** (loop, systems, UI): **Elden Ring Nightreign**.
+
+Target platform: **Steam** (desktop, mouse/keyboard/gamepad). The web build stays as the test build; on-screen touch controls are off by default (`?touch` brings them back). Every change to the game goes through this loop until the critic scores every category 10/10, or until a category hits a documented hard ceiling.
 
 ## The cycle
 1. **Fix round:** fix agents work in parallel, each owning its own files. They may split work into sub-agents, and they report to the coordinator. The coordinator merges, runs the smoke test, pushes, and confirms the CI browser render check passed and the site deployed.
