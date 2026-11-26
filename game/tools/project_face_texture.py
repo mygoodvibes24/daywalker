@@ -298,6 +298,112 @@ def fit_camera(cam, v, f, mask, y_max_frac, log):
     return iou
 
 
+
+# --------------------------------------------------------------------------- cleanup (critic R2 §2)
+
+def _harmonic_fill(img, hole, iters=400):
+    """Fill `hole` pixels of img (H, W, C float) smoothly from their surroundings (a Laplace solve by
+    push-pull: coarse-to-fine averages, then Jacobi relaxation). No OpenCV needed."""
+    out = img.copy()
+    known = ~hole
+    # coarse initial guess: normalised gaussian of the known pixels
+    for sig in (24, 8, 3):
+        wk = ndimage.gaussian_filter(known.astype(np.float64), sig)
+        for c in range(img.shape[2]):
+            v = ndimage.gaussian_filter(np.where(known, img[..., c], 0.0), sig)
+            guess = v / np.maximum(wk, 1e-6)
+            out[..., c] = np.where(hole & (wk > 1e-4), guess, out[..., c])
+    k = np.array([[0, 0.25, 0], [0.25, 0, 0.25], [0, 0.25, 0]])
+    for _ in range(iters):
+        for c in range(img.shape[2]):
+            avg = ndimage.convolve(out[..., c], k, mode='nearest')
+            out[..., c] = np.where(hole, avg, out[..., c])
+    return out
+
+
+def cleanup_albedo(alb, cfg, log=print):
+    """The scanned head's albedo cleanup (sRGB 0..1 float, H x W x 3), in chart space:
+      (a) the nostril / philtrum smear: dark blotches and stray-view fragments under the nose are
+          masked and re-filled from the surrounding skin (harmonic fill plus the skin's own grain from
+          the cheek), then two soft nostril shadows are painted back;
+      (b) skin-coloured confetti in the hair atlas: small skin-toned islands inside the hair are
+          flooded with the hair tone (the median of the hair texels) instead of the nearest photo;
+      (d) the dark ring under the jaw: the bottom of the face chart is lifted toward the cheeks.
+    The face-chart positions come from cfg["chart"] (eyes in chart pixels at the albedo's size)."""
+    H, W = alb.shape[:2]
+    ch = cfg.get('chart', {})
+    eyes = np.array(ch.get('eyes_px', [[290, 515], [660, 515]]), float) * np.array([W / 2048.0, H / 1328.0])
+    mid = eyes.mean(0)
+    d = float(np.linalg.norm(eyes[1] - eyes[0]))
+    out = alb.copy()
+    lum = alb.mean(2)
+    # ---- (a) the nose
+    x0, x1 = int(mid[0] - 0.42 * d), int(mid[0] + 0.42 * d)
+    y0, y1 = int(mid[1] + 0.4 * d), int(mid[1] + 0.8 * d)
+    box = np.zeros((H, W), bool)
+    box[y0:y1, x0:x1] = True
+    base = ndimage.median_filter(lum, size=int(0.16 * d) | 1)
+    sat = alb.max(2) - alb.min(2)
+    hue_off = (alb[..., 1] >= alb[..., 0] * 0.92) & box  # greenish / grey fragments (skin is R > G)
+    dark = (lum < base * 0.72) & box
+    hole = ndimage.binary_dilation(dark | hue_off, iterations=4)
+    hole = ndimage.binary_closing(hole, iterations=3) & box
+    smooth_fill = _harmonic_fill(alb, hole, 300)
+    # the skin's grain, borrowed from the cheek below the left eye (same lighting, no features)
+    cy, cx = int(mid[1] + 0.33 * d), int(eyes[0][0])
+    grain_src = alb[cy - (y1 - y0) // 2: cy + (y1 - y0) - (y1 - y0) // 2, cx - (x1 - x0) // 2: cx + (x1 - x0) - (x1 - x0) // 2]
+    grain = np.zeros_like(alb)
+    if grain_src.shape[:2] == (y1 - y0, x1 - x0):
+        g = grain_src - ndimage.gaussian_filter(grain_src, (6, 6, 0))
+        grain[y0:y1, x0:x1] = g
+    w = ndimage.gaussian_filter(hole.astype(float), 2.5)
+    out = out * (1 - w[..., None]) + (smooth_fill + grain * 0.8) * w[..., None]
+    # nostril shadows: two soft dark ellipses where the nose's openings sit
+    yy, xx = np.mgrid[0:H, 0:W]
+    for sx in (-1, 1):
+        cxn, cyn = mid[0] + sx * 0.14 * d, mid[1] + 0.63 * d
+        e = ((xx - cxn) / (0.055 * d)) ** 2 + ((yy - cyn) / (0.026 * d)) ** 2
+        shade = np.exp(-e * 1.6) * 0.5
+        out *= (1 - shade[..., None])
+    log('cleanup (a): nose smear %d px re-filled' % int(hole.sum()))
+    # ---- (b) hair confetti (the side atlas right of the face strip)
+    strip = int(cfg.get('face_strip', 0.45) * W)
+    side = np.zeros((H, W), bool)
+    side[:, strip:] = True
+    r, gch, b = alb[..., 0], alb[..., 1], alb[..., 2]
+    skin = side & (r > 0.3) & (r - b > 0.12) & (r > gch)
+    hairpx = side & (lum < 0.16) & (lum > 0.01)
+    hair_tone = np.median(alb[hairpx], axis=0) if hairpx.any() else np.array([0.08, 0.06, 0.05])
+    lab, n = ndimage.label(skin)
+    sizes = ndimage.sum(skin, lab, range(1, n + 1))
+    small_max = float(cfg.get('confetti_px', 0.0012)) * W * H
+    small = np.isin(lab, 1 + np.nonzero(sizes < small_max)[0])
+    # only islands that sit in hair (most of their 6 px ring is hair-dark)
+    ring = ndimage.binary_dilation(small, iterations=6) & ~small
+    ring_hair = ndimage.sum(hairpx & ring, lab_ring := ndimage.label(ndimage.binary_dilation(small, iterations=6))[0],
+                            range(1, lab_ring.max() + 1))
+    ring_all = ndimage.sum(ring, lab_ring, range(1, lab_ring.max() + 1))
+    keep = np.nonzero(ring_hair / np.maximum(ring_all, 1) > 0.45)[0] + 1
+    flood = small & np.isin(lab_ring, keep)
+    flood = ndimage.binary_dilation(flood, iterations=2) & side
+    hair_grain = (lum - ndimage.gaussian_filter(lum, 3))[..., None] * 0.6
+    fill = np.clip(hair_tone[None, None, :] * (1 + 3.0 * hair_grain), 0, 1)
+    wf = ndimage.gaussian_filter(flood.astype(float), 1.5)[..., None]
+    out = out * (1 - wf) + fill * wf
+    log('cleanup (b): %d confetti islands (%d px) flooded with hair tone %s' % (len(keep), int(flood.sum()), np.round(hair_tone, 3).tolist()))
+    # ---- (d) the under-jaw band at the bottom of the face chart: lift dark texels toward the cheek tone
+    cheek = alb[int(mid[1] + 0.3 * d): int(mid[1] + 0.45 * d), int(eyes[0][0] - 0.1 * d): int(eyes[0][0] + 0.1 * d)].reshape(-1, 3)
+    cheek_tone = np.median(cheek, axis=0)
+    face = np.zeros((H, W), bool)
+    face[:, :strip] = True
+    jaw_y = mid[1] + 1.55 * d
+    t = np.clip((yy - jaw_y) / (0.35 * d), 0, 1)
+    lift = face & (lum > 0.02)
+    gain = np.clip(cheek_tone.mean() * 0.75 / np.maximum(ndimage.gaussian_filter(lum, 12), 1e-3), 1.0, 1.8)
+    out = np.where((lift & (t > 0))[..., None], out * (1 + (gain[..., None] - 1) * t[..., None]), out)
+    log('cleanup (d): under-jaw lift below y=%d' % int(jaw_y))
+    return np.clip(out, 0, 1)
+
 # --------------------------------------------------------------------------- main
 
 def main(cfg_path):
@@ -574,6 +680,8 @@ def main(cfg_path):
     alb = alb * np.array(tone)
     alb = dilate(alb, cov, 24)
     alb_srgb = lin_to_srgb(alb)
+    if cfg.get('cleanup', True):
+        alb_srgb = cleanup_albedo(alb_srgb, cfg, log)
     Image.fromarray((alb_srgb * 255 + 0.5).astype(np.uint8)).save(os.path.join(out_dir, prefix + '_albedo.jpg'), quality=92)
     wm_img = np.zeros((SH, S))
     wm_img[cov] = np.clip(wsum, 0, 1)
@@ -786,5 +894,24 @@ def main(cfg_path):
     open(os.path.join(dbg, 'report.txt'), 'w').write('\n'.join(report) + '\n')
 
 
+def cleanup_only(cfg_path, src=None, dst=None):
+    """Re-run only the albedo cleanup on an existing albedo (python3 ... scan.json --cleanup-only
+    [src.jpg] [dst.jpg]); src defaults to <out_prefix>_albedo_raw.jpg if present, else the albedo."""
+    cfg = json.load(open(cfg_path))
+    repo = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    out_dir = os.path.join(repo, cfg['out_dir'])
+    alb_path = os.path.join(out_dir, cfg['out_prefix'] + '_albedo.jpg')
+    src = src or alb_path
+    dst = dst or alb_path
+    alb = np.asarray(Image.open(src).convert('RGB')).astype(np.float64) / 255.0
+    out = cleanup_albedo(alb, cfg)
+    Image.fromarray((out * 255 + 0.5).astype(np.uint8)).save(dst, quality=92)
+    print('wrote', dst)
+
+
 if __name__ == '__main__':
-    main(sys.argv[1])
+    if '--cleanup-only' in sys.argv:
+        rest = [a for a in sys.argv[sys.argv.index('--cleanup-only') + 1:]]
+        cleanup_only(sys.argv[1], *(rest[:2]))
+    else:
+        main(sys.argv[1])

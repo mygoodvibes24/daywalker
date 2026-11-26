@@ -52,18 +52,9 @@ static func combo_for(inst: Dictionary) -> String:
 	return String(type_data(inst).chain)
 
 
-## Where the blade rides when sheathed (Group B's sheathing): {bone: index, slot, xf: Transform3D local
-## to that bone} on `skel` (Sol's modular skeleton), from the weapon type's mount (arsenal_data.gd).
-## The weapon visual's origin is its grip, so a socket with this transform carries it.
-static func mount_transform(inst: Dictionary, skel: Skeleton3D) -> Dictionary:
-	var m: Dictionary = type_data(inst).mount
-	var bi := skel.find_bone(String(m.bone))
-	if bi < 0:
-		return {}
-	var rest_g := skel.get_bone_global_rest(bi)
-	var r: Vector3 = m.rot
-	var target := Transform3D(Basis.from_euler(Vector3(deg_to_rad(r.x), deg_to_rad(r.y), deg_to_rad(r.z))), rest_g.origin + m.pos)
-	return {"bone": bi, "slot": m.slot, "xf": rest_g.affine_inverse() * target}
+## The sheath preset a weapon type rides on (sol_sheath.gd MOUNTS: back, back_great, hip, hip_right).
+static func mount_name(inst: Dictionary) -> String:
+	return String(type_data(inst).mount)
 
 
 ## True for the families built here from primitives (the Arsenal types) instead of a sword model.

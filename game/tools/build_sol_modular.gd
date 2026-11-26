@@ -100,6 +100,8 @@ const TUNNEL_TILT := -8.0
 const GUARD_GAP := 0.004 # between the top of the fist (thumb / index knuckle) and the guard (m)
 ## Left hand: the same fist with the fingers opened around the knuckle line (deg), so it reads relaxed.
 const LEFT_UNCURL := 28.0
+## Right hand, empty (sword sheathed on the back): opened a little further than the left.
+const RIGHT_UNCURL := 34.0
 const COAT_SCALE := Vector3(1.2, 1.12, 1.32)
 const COAT_TOP := 1.655 # collar height
 const COAT_SKIRT_STRETCH := 1.12 # lengthens the skirt below the waist toward mid-shin
@@ -229,6 +231,10 @@ func _initialize() -> void:
 	var hl := _attach(root, "HandL", "LeftHand")
 	var left_arr := _uncurl(_load_arrays(D + "sol_mod_hand_src.glb", Transform3D.IDENTITY), LEFT_UNCURL)
 	_add_part(hl, root, "HandMesh", _xform(left_arr, _fist_xf("Left")), hand_mat, false)
+	# the right hand empty and relaxed, for while the sword rides on his back (scripts/sol_sheath.gd
+	# swaps it for the fist whenever the blade is sheathed): the fist opened like the left one
+	var open_r := _add_part(hr, root, "HandMeshOpen", _xform(_uncurl(_load_arrays(D + "sol_mod_hand_src.glb", Transform3D.IDENTITY), RIGHT_UNCURL), fist_r), hand_mat, false)
+	open_r.visible = false
 	# the grip socket: on the fist's finger tunnel, blade (+Z) out of the thumb side (-Z of the fist
 	# mesh), edge (+Y) toward the knuckles, flat (+X) facing the palm
 	var tunnel := _tunnel_frame()

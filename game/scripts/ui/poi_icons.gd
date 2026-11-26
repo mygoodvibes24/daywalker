@@ -32,6 +32,12 @@ static func draw(ci: CanvasItem, type: String, c: Vector2, s: float, col: Color,
 			ci.draw_circle(c, s * 0.75, fill)
 			ci.draw_circle(c, s * 0.45, ink)
 			ci.draw_circle(c, s * 0.25, fill)
+		"undercroft": # a pointed arch over a stair going down (map/undercroft_poi.gd)
+			var pts := PackedVector2Array([c + Vector2(-s * 0.75, s * 0.8), c + Vector2(-s * 0.75, -s * 0.1), c + Vector2(0, -s * 0.95),
+				c + Vector2(s * 0.75, -s * 0.1), c + Vector2(s * 0.75, s * 0.8)])
+			ci.draw_colored_polygon(pts, fill)
+			for k in 3:
+				ci.draw_rect(Rect2(c + Vector2(-s * 0.5 + k * s * 0.16, -s * 0.05 + k * s * 0.27), Vector2(s * 1.0 - k * s * 0.32, s * 0.13)), ink)
 		"arena": # a crimson crown of spikes
 			var pts := PackedVector2Array()
 			for i in 10:

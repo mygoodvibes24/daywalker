@@ -59,6 +59,8 @@ func _reset_player() -> void:
 	p.attack_block_until = 0
 	p.arsenal.art_cd_t = 0.0
 	p.arsenal.chain_t = 0.0
+	p.stamina = p.stamina_max # the checks test moves, not the stamina bar
+	p.exhausted = false
 	p.arsenal._events.clear()
 
 
@@ -73,6 +75,7 @@ func _dummy(at: Vector3, kind := 0):
 	e.hp = 1e6
 	e.attack_cd = 99.0
 	e.special_cd = 99.0
+	e.speed = 0.0 # a training dummy: stands where it is put
 	return e
 
 
@@ -120,8 +123,9 @@ func run(t: SceneTree, m, c: Callable) -> bool:
 			if not SolMoves.has_move(mv) or (lib != null and not lib.has_animation(SolMoves.move(mv).clip)):
 				clips_ok = false
 				missing.append("%s:%s" % [tn, mv])
-		var mt := WeaponVisual.mount_transform(ItemDB.make(_item_for(tn)), p.visual.find_child("Skeleton3D", true, false))
-		if _item_for(tn) == "" or mt.is_empty():
+		var SolSheath = load("res://scripts/sol_sheath.gd")
+		var inst := ItemDB.make(_item_for(tn))
+		if _item_for(tn) == "" or not SolSheath.MOUNTS.has(WeaponVisual.mount_name(inst)) or SolSheath.mount_name_for(inst) != WeaponVisual.mount_name(inst):
 			clips_ok = false
 			missing.append(tn + ":item/mount")
 	ok = _ok("every type has blades, a mount and real clips for its moves %s" % str(missing), clips_ok) and ok
@@ -156,13 +160,17 @@ func run(t: SceneTree, m, c: Callable) -> bool:
 		await _wait_idle()
 		p.combo = 0
 		p.combo_t = 0.0
+		p.stamina = p.stamina_max
+		p.exhausted = false
 		hits.clear()
 		e.global_position = p.global_position + Vector3(0, 0.4, 1.6)
 		Input.action_press("attack")
 		var heavy_seen := false
-		for f in 90:
+		for f in 150:
 			await tree.physics_frame
 			heavy_seen = heavy_seen or p.move_name == ArsenalData.TYPES[tn].heavy
+			if OS.has_environment("ARS_DEBUG") and f % 6 == 0:
+				print("  dbg %s f%d move %s hold %.2f st %.0f exh %s d %.2f stag %s pend %s cd %.2f" % [tn, f, p.move_name, p.hold_t, p.stamina, p.exhausted, e.global_position.distance_to(p.global_position), e.staggered, str(p.pending.keys()), p.attack_cd])
 			if heavy_seen and p.pending.is_empty() and p.arsenal._events.is_empty():
 				break
 		Input.action_release("attack")
@@ -177,7 +185,7 @@ func run(t: SceneTree, m, c: Callable) -> bool:
 		_equip(_item_for(tn))
 		await _frames(2)
 		var art: Dictionary = ArsenalMoves.ARTS[ArsenalData.TYPES[tn].art]
-		var dist := {"wave": 7.0, "lash": 6.5, "rush": 3.5, "flurry": 3.0, "cleave": 4.0}.get(art.fx, 2.0)
+		var dist: float = {"wave": 7.0, "lash": 6.5, "rush": 3.5, "flurry": 3.0, "cleave": 4.0}.get(art.fx, 2.0)
 		var e = await _dummy(p.global_position + Vector3(0, 0.4, dist))
 		hits.clear()
 		var n0: int = p.arsenal.art_count
@@ -331,14 +339,16 @@ func run(t: SceneTree, m, c: Callable) -> bool:
 			if b.id == "art" and "weapon_art" in b.actions:
 				has_btn = true
 		touch._send(["weapon_art"], true)
-	await tree.process_frame
+	Input.flush_buffered_events()
 	var pressed := Input.is_action_pressed("weapon_art")
 	if touch != null:
 		touch._send(["weapon_art"], false)
+		Input.flush_buffered_events()
+	p.arsenal.art_buffer_t = 0.0
 	ok = _ok("the ART touch button presses the Weapon Art", has_btn and pressed) and ok
-	var art_keys := InputMap.action_get_events("weapon_art").map(func(ev): return ev.as_text())
-	var dash_rb := InputMap.action_get_events("dash").any(func(ev): return ev is InputEventJoypadButton and ev.button_index == JOY_BUTTON_RIGHT_SHOULDER)
-	ok = _ok("Weapon Art is on V, the mouse thumb button and RB (dash keeps B) %s" % str(art_keys), art_keys.size() == 3 and not dash_rb) and ok
+	var art_keys: Array = InputMap.action_get_events("weapon_art").map(func(ev): return ev.as_text())
+	var fwd_dpad: bool = InputMap.action_get_events("move_forward").any(func(ev): return ev is InputEventJoypadButton and ev.button_index == JOY_BUTTON_DPAD_UP)
+	ok = _ok("Weapon Art is on V, mouse side button 2 and D-pad Up, clear of the other bindings %s" % str(art_keys), art_keys.size() == 3 and not fwd_dpad and not InputMap.action_get_events("parry").any(func(ev): return ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_XBUTTON2)) and ok
 
 	# ---- the rack, the Rites, the drops
 	var Meta = load("res://scripts/hunt/hunt_meta.gd")

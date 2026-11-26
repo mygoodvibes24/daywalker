@@ -7,6 +7,10 @@ const SOL_MODULAR := "res://assets/characters/sol/sol_modular.scn"
 const SolModularAnim = preload("res://scripts/sol_modular_anim.gd")
 const SolMoves = preload("res://scripts/sol_moves.gd") # the sword moves as data (clips, timing, damage)
 const WeaponVisual = preload("res://scripts/items/weapon_visual.gd")
+const HFx = preload("res://scripts/hunt/hunt_fx.gd") # settings hooks (shake, sprint toggle)
+const SolSheath = preload("res://scripts/sol_sheath.gd") # the sword on his back: draw / sheathe
+const SHEATHE_AFTER := 7.0 # seconds of calm (no enemy near, no blows) before he puts the sword away
+const THREAT_RANGE := 6.0 # an enemy winding up this close makes him draw
 const HEAVY_HOLD := 0.4 # hold attack this long for the charged slash
 const DASH_ATTACK_WINDOW := 0.3 # attack within this long after a Blood Dash ends: the thrust
 const PARRY_WINDOW := 0.3 # seconds a parry press catches an enemy's wind-up
@@ -101,6 +105,39 @@ var coat: MeshInstance3D # primitive fallback only
 var arm_pivot: Node3D # swing driver; drawn directly only by the primitive fallback
 var mod_anim: SolModularAnim # clip blending for the modular model (null otherwise)
 var arsenal: Node # items/arsenal.gd: weapon types, Weapon Arts, special combos, bleed / stagger, trails
+var sheath: SolSheath # the back scabbard and the draw (null on the older bodies: always in hand)
+# ---- stamina (round 3, G4): light and fast. Dashes, sprinting, swings and the parry spend it; it comes
+# back after STAMINA_DELAY at stamina_regen/s. Spent to zero he is EXHAUSTED: no sprint, dash or swing
+# until it is back to EXHAUST_RECOVER, refilling slower. A move's cost is its sol_moves.gd "stamina".
+# BLOOD RITE / PROGRESSION HOOKS: stamina_max and stamina_regen are plain fields a boon may raise, and
+# stat("stamina") / stat("stamina_regen") / stat("stamina_cost") add on top (see max_stamina()).
+var stamina_max := 100.0
+var stamina_regen := 65.0 # per second
+var stamina := 100.0
+var exhausted := false
+var _stamina_wait := 0.0
+const STAMINA_DELAY := 0.4
+const EXHAUST_DELAY := 0.9
+const EXHAUST_RECOVER := 30.0
+const DASH_STAMINA := 16.0
+const SPRINT_STAMINA := 9.0 # per second at a sprint
+# ---- Frenzy (round 3, G3): no longer free. While it runs: x frenzy_dmg_mult damage, +25% speed and no
+# stamina cost, but blood drains frenzy_drain/s (never below FRENZY_FLOOR of max), he takes
+# frenzy_dmg_taken more damage, and the beast neither parries nor stops to bite; every blow that lands gives back
+# FRENZY_LEECH. Parries and executions feed the hunger (FRENZY_FEED), so it is earned by fighting well.
+# BLOOD RITE HOOKS: frenzy_drain, frenzy_dmg_taken and frenzy_dmg_mult are fields a boon may change.
+var frenzy_drain := 2.5
+var frenzy_dmg_taken := 0.25
+var frenzy_dmg_mult := 2.0
+const FRENZY_FLOOR := 0.12
+const FRENZY_LEECH := 1.5
+const FRENZY_FEED := {"parry": 8.0, "finisher": 6.0}
+var calm_t := 0.0 # seconds without combat (enemies near, swings, blows)
+var auto_sheathe := true # false: keep the sword out (tests)
+var _threat_t := 0.0
+var _sprint_toggle := false
+var _sprint_toggle_t := 0.0
+var _sprint_latched := false
 
 
 func _ready() -> void:
@@ -171,6 +208,11 @@ func _build_modular() -> bool:
 		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	matte_coat(model)
 	hurt.connect(func(_amount, _src): mod_anim.hit())
+	sheath = SolSheath.new()
+	if sheath.setup(model):
+		sheath.sheathe(true) # he walks in with the sword on his back
+	else:
+		sheath = null
 	# arm_pivot keeps the swing math alive; the clips draw the actual swing
 	arm_pivot = Node3D.new()
 	visual.add_child(arm_pivot)
@@ -238,6 +280,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		block_attack()
 	elif event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var mm := event as InputEventMouseMotion
+		if lock_target != null:
+			lock_flick(mm.relative.x) # locked: a mouse flick switches targets
+			return
 		cam_yaw -= mm.relative.x * Settings.mouse_look()
 		cam_pitch = clampf(cam_pitch - mm.relative.y * Settings.mouse_look() * Settings.y_sign(), -1.1, 0.35)
 	elif event.is_action_pressed("ui_cancel"):
@@ -252,14 +297,31 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 	_timers(delta)
+	_sheath_tick(delta)
 	var day: bool = main.is_day()
 
 	var inp := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var dir := Basis(Vector3.UP, cam_yaw) * Vector3(inp.x, 0.0, inp.y)
 	if dir.length() > 1.0:
 		dir = dir.normalized()
-	sprinting = Input.is_action_pressed("sprint") and dir.length() > 0.1
+	var sprint_held := Input.is_action_pressed("sprint")
+	if _sprint_toggle_t <= 0.0:
+		_sprint_toggle_t = 1.0
+		_sprint_toggle = bool(HFx.opt("toggle_sprint", false)) # settings: tap to toggle (polled 1/s)
+	_sprint_toggle_t -= delta
+	if _sprint_toggle:
+		if Input.is_action_just_pressed("sprint"):
+			_sprint_latched = not _sprint_latched
+		if dir.length() <= 0.1 or exhausted:
+			_sprint_latched = false # stopping (or running out of breath) ends the run
+		sprint_held = _sprint_latched
+	sprinting = sprint_held and dir.length() > 0.1 and (not exhausted or frenzy_t > 0.0)
+	if sprinting and frenzy_t <= 0.0 and walk_vel.length() > WALK:
+		_drain_stamina(SPRINT_STAMINA * delta, 0.25)
+	_lock_tick(delta)
 	var spd := SPRINT if sprinting else WALK
+	if lock_target != null and not sprinting:
+		spd = WALK * LOCK_STRAFE # locked on: a measured strafe (sprint breaks into a run)
 	if speed_boost_t > 0.0:
 		spd *= 1.3
 	if frenzy_t > 0.0:
@@ -268,7 +330,7 @@ func _physics_process(delta: float) -> void:
 
 	# Blood Dash (recharges faster in sunlight)
 	dash_charges = minf(dash_charges + delta / (0.7 if day else 1.1) * (1.0 + stat("dash_rate")), MAX_DASH) # PROGRESSION HOOK
-	if Input.is_action_just_pressed("dash") and dash_charges >= 1.0 and bite_t <= 0.0:
+	if Input.is_action_just_pressed("dash") and dash_charges >= 1.0 and bite_t <= 0.0 and spend_stamina(DASH_STAMINA):
 		dash_charges -= 1.0
 		dash_t = DASH_TIME
 		since_dash = 0.0
@@ -312,11 +374,19 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_track_safe_ground(delta)
 
+	var strafing := false
 	if dash_t > 0.0:
 		facing = atan2(dash_dir.x, dash_dir.z)
+	elif lock_target != null and not sprinting and bite_t <= 0.0:
+		var tl: Vector3 = lock_target.global_position - global_position
+		if Vector2(tl.x, tl.z).length() > 0.3:
+			facing = atan2(tl.x, tl.z) # locked on: he keeps his chest on the target and strafes
+		strafing = dir.length() > 0.1
 	elif dir.length() > 0.1 and swing_t <= 0.0 and bite_t <= 0.0:
 		facing = atan2(dir.x, dir.z)
 	visual.rotation.y = lerp_angle(visual.rotation.y, facing, 16.0 * delta)
+	if mod_anim != null:
+		mod_anim.set_strafe(atan2(dir.x, dir.z) - facing if strafing else 0.0, strafing and swing_t <= 0.0, delta)
 
 	# actions
 	_combat_tick(delta)
@@ -324,18 +394,20 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("attack") and Time.get_ticks_msec() >= attack_block_until:
 		attack_buffer_t = ATTACK_BUFFER
 	if attack_buffer_t > 0.0:
-		if attack_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0:
+		if attack_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0 and (not exhausted or frenzy_t > 0.0) and _sword_ready():
 			attack_buffer_t = 0.0
 			_attack_pressed()
 			if hold_t >= 0.0 and not Input.is_action_pressed("attack"):
 				hold_t = -1.0 # a buffered tap, not a hold
-		else:
-			attack_buffer_t = maxf(attack_buffer_t - delta, 0.0)
-	if Input.is_action_just_pressed("parry") and parry_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0:
+		elif sheath == null or not sheath.busy():
+			attack_buffer_t = maxf(attack_buffer_t - delta, 0.0) # (the draw holds the press until the grab)
+	if Input.is_action_just_pressed("parry") and parry_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0 and frenzy_t <= 0.0 \
+			and spend_stamina(SolMoves.stamina_cost("parry")):
+		draw_sword()
 		_parry()
 	var bite_target = _nearest_enemy(BITE_RANGE, 1)
 	bite_ready = bite_target != null
-	if Input.is_action_just_pressed("bite") and bite_t <= 0.0 and bite_target != null:
+	if Input.is_action_just_pressed("bite") and bite_t <= 0.0 and bite_target != null and frenzy_t <= 0.0:
 		_bite(bite_target)
 	var near_lair: bool = global_position.distance_to(main.lair_pos) < 3.5
 	if Input.is_action_just_pressed("drink") and near_lair:
@@ -349,6 +421,73 @@ func _physics_process(delta: float) -> void:
 			prompt_text = ("[LB]" if main.hud.using_pad else "[F]") + "  DRINK BAGGED BLOOD  (%d left)" % main.lair_stock
 		else:
 			prompt_text = "BLOOD BANK EMPTY  —  restocks at sunrise"
+
+
+# ---------------------------------------------------------------- the sword on his back (sol_sheath.gd)
+## Can a swing start now? Sheathed: start the draw and say no (the buffered press fires on the grab).
+func _sword_ready() -> bool:
+	if sheath == null:
+		return true
+	if sheath.busy():
+		return false
+	if not sheath.drawn:
+		sheath.draw()
+		calm_t = 0.0
+		return false
+	return true
+
+
+## Pull the sword if it is on his back (attack, parry, lock-on, an enemy winding up close by).
+func draw_sword() -> void:
+	calm_t = 0.0
+	if sheath != null and (not sheath.drawn or sheath.phase == "stow"):
+		sheath.draw()
+
+
+## True while the sword rides in the scabbard (smoke test, HUD).
+func sword_on_back() -> bool:
+	return sheath != null and sheath.on_back()
+
+
+func sword_in_hand() -> bool:
+	return sheath == null or sheath.in_hand()
+
+
+func _sheath_tick(delta: float) -> void:
+	if sheath == null:
+		return
+	sheath.tick(delta)
+	calm_t += delta
+	if swing_t > 0.0 or since_hurt < 0.5 or finisher_t > 0.0:
+		calm_t = 0.0
+	_threat_t -= delta
+	if _threat_t <= 0.0:
+		_threat_t = 0.15
+		var near := false
+		for e in main.enemies_root.get_children():
+			if e.get("dead") != false:
+				continue
+			var d2: float = e.global_position.distance_squared_to(global_position)
+			if d2 > COMBAT_RANGE * COMBAT_RANGE:
+				continue
+			near = true
+			if d2 < THREAT_RANGE * THREAT_RANGE and _winding_up(e):
+				draw_sword()
+				break
+		if near:
+			calm_t = 0.0
+	if auto_sheathe and calm_t >= SHEATHE_AFTER and sheath.drawn and sheath.phase == "" and swing_t <= 0.0 and pending.is_empty() and not dead:
+		sheath.sheathe()
+
+
+static func _winding_up(e) -> bool:
+	var w = e.get("windup_t")
+	if w != null and float(w) > 0.0:
+		return true
+	var sp = e.get("special")
+	if sp is String and (sp.ends_with("_windup") or sp == "claw"):
+		return true
+	return e.get("state") == "windup" # a boss
 
 
 ## QA2 #5: remember the last open ground Sol stood on; if he ever drops out of the world (a seam,
@@ -527,9 +666,13 @@ func _timers(delta: float) -> void:
 	if burn_t > 0.0:
 		burn_t -= delta
 		hp -= 3.0 * delta
+	_stamina_tick(delta)
 	if frenzy_t > 0.0:
 		frenzy_t -= delta
-		hp = minf(hp + 3.0 * delta, max_hp)
+		# the cost: blood drains while the beast is loose (it never kills on its own)
+		var floor_hp := max_hp * FRENZY_FLOOR
+		if hp > floor_hp:
+			hp = maxf(hp - frenzy_drain * delta, floor_hp)
 		if frenzy_t <= 0.0:
 			hunger = 55.0
 			main.hud.popup("The frenzy fades...")
@@ -549,7 +692,7 @@ func damage_mult() -> float:
 	if hunger >= 60.0:
 		m *= 1.25
 	if frenzy_t > 0.0:
-		m *= 2.0
+		m *= frenzy_dmg_mult
 	# PROGRESSION HOOK: rank, Vows and charms
 	m *= 1.0 + stat("dmg")
 	if main != null and not main.is_day():
@@ -590,12 +733,16 @@ func set_weapon_visual(item: Dictionary) -> void:
 		weapon_visual.queue_free()
 		weapon_visual = null
 	# modular model: "Blade" is the grip frame in the right fist; swap the sword scene under it
-	var grip := visual.find_child("Blade", true, false) if visual != null else null
+	var grip: Node = visual.find_child("Blade", true, false) if visual != null else null
+	if sheath != null:
+		grip = sheath.carrier # in the hand or on his back: the swap goes wherever the sword is
 	if grip != null and not grip is MeshInstance3D:
 		for c in grip.get_children():
 			(c as Node3D).visible = false
 		weapon_visual = preload("res://scripts/items/weapon_visual.gd").build(item, 0.014, true)
 		grip.add_child(weapon_visual)
+		if sheath != null:
+			sheath.use_item(item) # its mount (back, belt: sol_sheath.gd MOUNTS) and a scabbard that fits it
 		if arsenal != null:
 			arsenal.on_weapon_changed(item) # the left-hand twin, the whip chain, the trail
 		return
@@ -641,17 +788,26 @@ func _nearest_enemy(max_dist: float, staggered: int):
 	return best
 
 
+## Who a swing turns to: the lock-on target when it is in reach, else the nearest fighting enemy.
+func _swing_target():
+	if lock_target != null and _lock_valid(lock_target) and lock_target.global_position.distance_to(global_position) < 6.0 \
+			and lock_target.get("staggered") != true:
+		return lock_target
+	return _nearest_enemy(5.0, -1)
+
+
 func _attack() -> void:
 	var chain := WeaponVisual.combo_for(weapon_item)
 	combo = combo + 1 if (combo_t > 0.0 and combo < SolMoves.chain_len(chain)) else 1
 	combo_t = 0.7
 	move_name = SolMoves.combo_step(chain, combo)
 	var step := SolMoves.move(move_name)
+	spend_stamina(SolMoves.stamina_cost(move_name))
 	attack_cd = float(step.cd) # 0.22, 0.22, 0.4 for the sword; each weapon type its own (arsenal_moves.gd)
 	swing_t = 0.22
 	_lunge(float(step.lunge), 0.08)
 	# soft-lock prefers fighting enemies, so you don't kill the one you meant to bite
-	var target = _nearest_enemy(5.0, -1)
+	var target = _swing_target()
 	if target == null:
 		target = _nearest_enemy(5.0, 1)
 	if target != null:
@@ -693,6 +849,7 @@ func _combo_strike(name: String, n: int, target) -> void:
 			var hd: float = dmg * _vs_mult(e)
 			e.take_hit(hd, to.normalized() if d > 0.01 else fwd)
 			hit_enemy.emit(e, hd)
+			_on_blow_landed()
 			Audio.play_at("sword_hit", e.global_position, 0.0 if n < 3 else 3.0) # AUDIO HOOK
 			hit = true
 	if hit:
@@ -718,8 +875,11 @@ func _resolve_pending(p: Dictionary) -> void:
 
 
 # ---------------------------------------------------------------- sword moves (sol_moves.gd)
-## The parry action: keyboard C / middle mouse, L3 on a pad (sprint keeps LT). Registered here, like
-## atmosphere.gd's rain toggle, so the binding lives with the move it drives.
+## The combat bindings that live with the moves they drive (like atmosphere.gd's rain toggle):
+##   parry    C / mouse side button, L3 on a pad (sprint keeps LT)
+##   lock_on  Q / middle mouse, R3 on a pad (the soulslike layout). Q used to be a second Blood Dash
+##            key: the dash keeps right mouse and gains K; on a pad it keeps B, and RB (also a dash
+##            before) now takes quick-use slot 2, which R3 had.
 func _setup_combat_input() -> void:
 	if InputMap.has_action("parry"):
 		return
@@ -728,7 +888,7 @@ func _setup_combat_input() -> void:
 	k.physical_keycode = KEY_C
 	InputMap.action_add_event("parry", k)
 	var mb := InputEventMouseButton.new()
-	mb.button_index = MOUSE_BUTTON_MIDDLE
+	mb.button_index = MOUSE_BUTTON_XBUTTON1
 	InputMap.action_add_event("parry", mb)
 	var pb := InputEventJoypadButton.new()
 	pb.button_index = JOY_BUTTON_LEFT_STICK
@@ -737,6 +897,234 @@ func _setup_combat_input() -> void:
 		for ev in InputMap.action_get_events("sprint"):
 			if ev is InputEventJoypadButton and ev.button_index == JOY_BUTTON_LEFT_STICK:
 				InputMap.action_erase_event("sprint", ev) # sprint is LT on a pad now
+	if not InputMap.has_action("lock_on"):
+		InputMap.add_action("lock_on", 0.25)
+		var lk := InputEventKey.new()
+		lk.physical_keycode = KEY_Q
+		InputMap.action_add_event("lock_on", lk)
+		var lm := InputEventMouseButton.new()
+		lm.button_index = MOUSE_BUTTON_MIDDLE
+		InputMap.action_add_event("lock_on", lm)
+		var lp := InputEventJoypadButton.new()
+		lp.button_index = JOY_BUTTON_RIGHT_STICK
+		lp.device = -1
+		InputMap.action_add_event("lock_on", lp)
+	if InputMap.has_action("dash"):
+		for ev in InputMap.action_get_events("dash"):
+			if (ev is InputEventKey and ev.physical_keycode == KEY_Q) or (ev is InputEventJoypadButton and ev.button_index == JOY_BUTTON_RIGHT_SHOULDER):
+				InputMap.action_erase_event("dash", ev)
+		var dk := InputEventKey.new()
+		dk.physical_keycode = KEY_K
+		InputMap.action_add_event("dash", dk)
+	if InputMap.has_action("quick_2"):
+		for ev in InputMap.action_get_events("quick_2"):
+			if ev is InputEventJoypadButton and ev.button_index == JOY_BUTTON_RIGHT_STICK:
+				InputMap.action_erase_event("quick_2", ev)
+		var qb := InputEventJoypadButton.new()
+		qb.button_index = JOY_BUTTON_RIGHT_SHOULDER
+		qb.device = -1
+		InputMap.action_add_event("quick_2", qb)
+
+
+# ---------------------------------------------------------------- lock-on
+## Q / middle mouse / R3 / the touch LOCK button toggles it. Locked: the camera frames Sol and the
+## target, he faces it and strafes (sol_strafe.gd turns the legs), attacks go to it, and a flick of
+## the mouse or right stick (a swipe on touch) switches to the next target on that side. It breaks on
+## distance, on the target's death, or after LOCK_LOS_GRACE s without line of sight.
+const LOCK_RANGE := 18.0
+const LOCK_BREAK := 24.0
+const LOCK_LOS_GRACE := 1.0
+const LOCK_STRAFE := 0.8 # walk speed share while strafing locked on
+const FLICK_PX := 70.0 # mouse pixels in a quick flick that switch the target
+var lock_target = null
+var lock_reticle: MeshInstance3D
+var locks := 0 # targets acquired (smoke test)
+var _lock_los_t := 0.0
+var _lock_check_t := 0.0
+var _flick_x := 0.0
+var _flick_cd := 0.0
+var _stick_armed := true
+
+
+func _lock_tick(delta: float) -> void:
+	if Input.is_action_just_pressed("lock_on"):
+		toggle_lock()
+	_flick_cd = maxf(_flick_cd - delta, 0.0)
+	_flick_x = move_toward(_flick_x, 0.0, 400.0 * delta) # a slow drag never adds up to a flick
+	if lock_target == null:
+		return
+	if not _lock_valid(lock_target):
+		release_lock()
+		return
+	var d: float = lock_target.global_position.distance_to(global_position)
+	if d > LOCK_BREAK:
+		release_lock()
+		return
+	_lock_check_t -= delta
+	if _lock_check_t <= 0.0:
+		_lock_check_t = 0.15
+		if _sees(lock_target):
+			_lock_los_t = 0.0
+		else:
+			_lock_los_t += 0.15
+			if _lock_los_t >= LOCK_LOS_GRACE:
+				release_lock()
+				return
+	# right stick flick
+	var lx := Input.get_axis("look_left", "look_right")
+	if _stick_armed and absf(lx) > 0.75:
+		_stick_armed = false
+		switch_lock(signf(lx))
+	elif absf(lx) < 0.3:
+		_stick_armed = true
+
+
+func toggle_lock() -> void:
+	if lock_target != null:
+		release_lock()
+		return
+	var t = _pick_lock(0.0)
+	if t == null:
+		cam_yaw = facing + PI # nothing to lock: recentre the camera behind him
+		return
+	_set_lock(t)
+
+
+func _set_lock(t) -> void:
+	lock_target = t
+	locks += 1
+	_lock_los_t = 0.0
+	_lock_check_t = 0.0
+	draw_sword()
+	if lock_reticle == null:
+		_build_reticle()
+	lock_reticle.visible = true
+
+
+func release_lock() -> void:
+	lock_target = null
+	if lock_reticle != null:
+		lock_reticle.visible = false
+
+
+## Mouse x (or a touch swipe) while locked: a quick flick past FLICK_PX switches to that side.
+func lock_flick(dx: float) -> void:
+	_flick_x += dx
+	if absf(_flick_x) >= FLICK_PX and _flick_cd <= 0.0:
+		switch_lock(signf(_flick_x))
+		_flick_x = 0.0
+		_flick_cd = 0.3
+
+
+## The next target to the right (side 1) or left (-1) of the current one on screen.
+func switch_lock(side: float) -> void:
+	if lock_target == null:
+		return
+	var t = _pick_lock(side)
+	if t != null:
+		lock_target = t
+		_lock_los_t = 0.0
+
+
+func _lock_valid(e) -> bool:
+	if e == null or not is_instance_valid(e) or not e.is_inside_tree() or e.get("dead") != false:
+		return false
+	return e.get("dormant") != true
+
+
+## side 0: the best new target (near the screen centre, close); +-1: the nearest on that side of the
+## current target in screen x.
+func _pick_lock(side: float):
+	if main == null or main.enemies_root == null:
+		return null
+	var cam_fwd := -camera.global_transform.basis.z
+	cam_fwd.y = 0.0
+	cam_fwd = cam_fwd.normalized() if cam_fwd.length() > 0.01 else _forward()
+	var cur_x := 0.0
+	if side != 0.0 and lock_target != null:
+		cur_x = camera.unproject_position(_lock_point(lock_target)).x
+	var best = null
+	var best_s := INF
+	for e in main.enemies_root.get_children():
+		if not _lock_valid(e) or e == lock_target or not (e is Node3D):
+			continue
+		var to: Vector3 = e.global_position - global_position
+		to.y = 0.0
+		var d := to.length()
+		if d > LOCK_RANGE:
+			continue
+		var ang := acos(clampf(cam_fwd.dot(to / maxf(d, 0.01)), -1.0, 1.0))
+		var s := 0.0
+		if side == 0.0:
+			if ang > deg_to_rad(80.0) and d > 4.0:
+				continue # behind the camera and not right on top of him
+			s = ang * 6.0 + d * 0.25
+		else:
+			if camera.is_position_behind(_lock_point(e)):
+				continue
+			var dx: float = (camera.unproject_position(_lock_point(e)).x - cur_x) * side
+			if dx <= 4.0:
+				continue
+			s = dx + d * 4.0
+		if s < best_s and _sees(e):
+			best_s = s
+			best = e
+	return best
+
+
+## Where the camera and the reticle look on a target: chest height (bosses: their own body height).
+func _lock_point(e) -> Vector3:
+	var h := 1.25
+	var bh = e.get("body_height")
+	if bh != null:
+		h = float(bh) * 0.62
+	elif e.get("model_name") == "werewolf":
+		h = 1.7
+	return e.global_position + Vector3(0, h, 0)
+
+
+## Line of sight from Sol's chest to the target's chest, against the world (layer 1).
+func _sees(e) -> bool:
+	if not is_inside_tree():
+		return true
+	var q := PhysicsRayQueryParameters3D.create(global_position + Vector3(0, 1.4, 0), _lock_point(e), 1)
+	q.exclude = [get_rid()]
+	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+
+
+func _build_reticle() -> void:
+	var sh := Shader.new()
+	sh.code = """
+shader_type spatial;
+render_mode unshaded, cull_disabled, depth_test_disabled, shadows_disabled, blend_mix;
+uniform vec4 col : source_color = vec4(0.95, 0.78, 0.45, 0.95);
+void vertex() {
+	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
+}
+void fragment() {
+	vec2 p = abs(UV - 0.5) * 2.0;
+	float d = p.x + p.y; // a diamond
+	float ring = smoothstep(0.62, 0.7, d) * (1.0 - smoothstep(0.86, 0.94, d));
+	float dot_ = 1.0 - smoothstep(0.16, 0.24, d);
+	float a = max(ring, dot_ * 0.9);
+	if (a < 0.02) discard;
+	ALBEDO = mix(col.rgb, vec3(0.8, 0.05, 0.06), dot_);
+	ALPHA = a * col.a;
+}
+"""
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.render_priority = 4
+	var q := QuadMesh.new()
+	q.size = Vector2(0.26, 0.26)
+	lock_reticle = MeshInstance3D.new()
+	lock_reticle.name = "LockReticle"
+	lock_reticle.mesh = q
+	lock_reticle.material_override = m
+	lock_reticle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	lock_reticle.top_level = true
+	lock_reticle.extra_cull_margin = 2.0
+	add_child(lock_reticle)
 
 
 ## Attack pressed: an execution on a staggered enemy in reach, the thrust out of a Blood Dash, the
@@ -770,11 +1158,12 @@ func _combo_chain() -> String:
 ## The charged / dash / sprint moves: play the clip now, strike on its strike frame.
 func _special(name: String) -> void:
 	var m := SolMoves.move(name)
+	spend_stamina(SolMoves.stamina_cost(name))
 	move_name = name
 	combo = 0
 	combo_t = 0.0
 	hold_t = -1.0
-	var target = _nearest_enemy(5.0, -1)
+	var target = _swing_target()
 	if target != null:
 		var tt: Vector3 = target.global_position - global_position
 		facing = atan2(tt.x, tt.z)
@@ -855,6 +1244,8 @@ func _strike(name: String, target) -> void:
 			target.execution_death(fwd) # thrown back along Sol's cut, with a blood burst
 		Audio.play_at("sword_hit", target.global_position, 4.0) # AUDIO HOOK
 		hit_enemy.emit(target, fd)
+		_on_blow_landed()
+		add_hunger(float(FRENZY_FEED.finisher)) # an execution feeds the beast
 		shake = maxf(shake, float(m.shake))
 		main.rumble(0.6, 0.9, 0.2)
 		main.set_slowmo(0.15, float(m.stop) * 2.0)
@@ -876,6 +1267,7 @@ func _strike(name: String, target) -> void:
 			var hd: float = dmg * _vs_mult(e)
 			e.take_hit(hd, to.normalized() if d > 0.01 else fwd)
 			hit_enemy.emit(e, hd)
+			_on_blow_landed()
 			hit = true
 			Audio.play_at("sword_hit", e.global_position, 3.0 if heavy else 0.0) # AUDIO HOOK
 			if (name == "charged" or m.get("knock", false)) and not e.dead:
@@ -908,6 +1300,7 @@ func _parry_success(e) -> void:
 	main.rumble(0.6, 0.4, 0.15)
 	main.set_slowmo(0.25, 0.45)
 	main.hud.popup("PARRY")
+	add_hunger(float(FRENZY_FEED.parry)) # a clean parry feeds the beast
 	parried.emit(e)
 	Audio.play_at("sword_hit", e.global_position, 2.0, 0.15) # AUDIO HOOK
 
@@ -939,12 +1332,15 @@ func _combat_tick(delta: float) -> void:
 		if Input.is_action_pressed("attack"):
 			hold_t += delta
 			if hold_t >= HEAVY_HOLD:
-				# the weapon type's heavy; the third press of a chain held is the L-L-H finisher (arsenal.gd)
-				var hv: String = arsenal.heavy_move() if arsenal != null else "charged"
-				if hv.begins_with("@"):
-					arsenal.perform(hv.substr(1))
+				if exhausted and frenzy_t <= 0.0:
+					hold_t = -1.0 # no breath left for the heavy cut: the light one stands
 				else:
-					_special(hv)
+					# the weapon type's heavy; the third press of a chain held is the L-L-H finisher (arsenal.gd)
+					var hv: String = arsenal.heavy_move() if arsenal != null else "charged"
+					if hv.begins_with("@"):
+						arsenal.perform(hv.substr(1))
+					else:
+						_special(hv)
 		else:
 			hold_t = -1.0
 	if not pending.is_empty():
@@ -1025,6 +1421,47 @@ func heal(v: float) -> void:
 	hp = minf(hp + v, max_hp)
 
 
+# ---------------------------------------------------------------- stamina
+func max_stamina() -> float:
+	return maxf(stamina_max + stat("stamina"), 20.0) # PROGRESSION / BLOOD RITE HOOK
+
+
+## Spend `cost` for an action. False (and nothing spent) while exhausted. Frenzy pays nothing.
+func spend_stamina(cost: float) -> bool:
+	if frenzy_t > 0.0 or cost <= 0.0:
+		return true
+	if exhausted:
+		return false
+	_drain_stamina(cost * maxf(1.0 + stat("stamina_cost"), 0.2), STAMINA_DELAY) # PROGRESSION HOOK
+	return true
+
+
+func _drain_stamina(v: float, wait: float) -> void:
+	stamina -= v
+	_stamina_wait = maxf(_stamina_wait, wait)
+	if stamina <= 0.0:
+		stamina = 0.0
+		exhausted = true
+		_stamina_wait = EXHAUST_DELAY
+
+
+func _stamina_tick(delta: float) -> void:
+	var top := max_stamina()
+	if _stamina_wait > 0.0:
+		_stamina_wait -= delta
+	elif stamina < top:
+		stamina = minf(stamina + stamina_regen * (1.0 + stat("stamina_regen")) * (0.65 if exhausted else 1.0) * delta, top)
+	if exhausted and stamina >= EXHAUST_RECOVER:
+		exhausted = false
+	stamina = minf(stamina, top)
+
+
+## A blow landed: Frenzy feeds on it.
+func _on_blow_landed() -> void:
+	if frenzy_t > 0.0:
+		heal(FRENZY_LEECH)
+
+
 func add_hunger(v: float) -> void:
 	hunger = minf(hunger + v, 100.0)
 	if hunger >= 100.0 and frenzy_t <= 0.0:
@@ -1045,7 +1482,7 @@ func take_damage(amount: float, _src) -> void:
 		_parry_success(_src) # the strike landed inside the parry window: turned aside
 		return
 	if frenzy_t > 0.0:
-		amount *= 0.5
+		amount *= 1.0 + frenzy_dmg_taken # the beast doesn't guard
 	amount *= maxf(1.0 + stat("dmg_taken"), 0.2) # PROGRESSION HOOK
 	hp -= amount
 	hurt.emit(amount, _src)
@@ -1078,14 +1515,17 @@ func _process(delta: float) -> void:
 	# controller right stick camera (unscaled so it stays responsive in slow-mo)
 	var real_dt := delta / maxf(Engine.time_scale, 0.01)
 	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
-	if look.length() > 0.0:
+	if lock_target != null and _lock_valid(lock_target):
+		_lock_camera(real_dt) # the stick flicks between targets instead (_lock_tick)
+	elif look.length() > 0.0:
 		var curve := look * look.length() # finer control near center
 		cam_yaw -= curve.x * Settings.pad_yaw() * real_dt
 		cam_pitch = clampf(cam_pitch - curve.y * Settings.pad_pitch() * Settings.y_sign() * real_dt, -1.1, 0.35)
 	pivot.rotation = Vector3(cam_pitch, cam_yaw, 0.0)
 	if shake > 0.0:
-		camera.h_offset = randf_range(-1.0, 1.0) * shake * 0.25
-		camera.v_offset = randf_range(-1.0, 1.0) * shake * 0.25
+		var sk := shake * 0.25 * HFx.shake_scale() # settings: reduced camera shake
+		camera.h_offset = randf_range(-1.0, 1.0) * sk
+		camera.v_offset = randf_range(-1.0, 1.0) * sk
 		shake = maxf(shake - delta * 1.6, 0.0)
 	else:
 		camera.h_offset = 0.0
@@ -1099,7 +1539,11 @@ func _process(delta: float) -> void:
 	# the execution: the camera arm pulls in tight, then eases back out
 	if finisher_t > 0.0:
 		camera.fov = lerpf(camera.fov, 55.0, 8.0 * delta)
-	spring.spring_length = lerpf(spring.spring_length, 2.7 if finisher_t > 0.0 else 4.8, (7.0 if finisher_t > 0.0 else 3.0) * delta)
+	var arm := 4.8
+	if lock_target != null and _lock_valid(lock_target):
+		var br = lock_target.get("body_radius")
+		arm = 5.3 + (clampf(float(br) * 0.9, 0.0, 1.6) if br != null else 0.0) # a boss: pull out to frame him
+	spring.spring_length = lerpf(spring.spring_length, 2.7 if finisher_t > 0.0 else arm, (7.0 if finisher_t > 0.0 else 3.0) * delta)
 	_camera_obstruction()
 	if dead:
 		return
@@ -1127,7 +1571,8 @@ func _process(delta: float) -> void:
 		lean = 0.35
 	if mod_anim != null:
 		lean *= 0.5 # small additive tilt on top of the clips (dash lunge, bite lean)
-		mod_anim.in_combat = _nearest_enemy(COMBAT_RANGE, 0) != null
+		mod_anim.armed = sheath == null or sheath.drawn
+		mod_anim.in_combat = mod_anim.armed and _nearest_enemy(COMBAT_RANGE, 0) != null # the sword stance needs the sword
 		mod_anim.update(delta, {"speed": hs, "on_floor": is_on_floor()})
 	visual.rotation.x = lerpf(visual.rotation.x, lean, 12.0 * delta)
 
@@ -1136,6 +1581,20 @@ func _process(delta: float) -> void:
 		if ghost_t <= 0.0:
 			ghost_t = 0.025 if dash_t > 0.0 else 0.09
 			_spawn_ghost()
+
+
+## Locked on: the camera swings behind Sol to look past him at the target, pitched to keep both in
+## frame (lower for a tall boss close by), and the reticle sits on the target's chest.
+func _lock_camera(dt: float) -> void:
+	var lp := _lock_point(lock_target)
+	var to := lp - pivot.global_position
+	var flat := Vector2(to.x, to.z).length()
+	var want_yaw := atan2(-to.x, -to.z)
+	cam_yaw = lerp_angle(cam_yaw, want_yaw, minf(7.0 * dt, 1.0))
+	var want_pitch := clampf(atan2(to.y, maxf(flat, 0.5)) * 0.6 - 0.2, -0.7, 0.15)
+	cam_pitch = lerpf(cam_pitch, want_pitch, minf(5.0 * dt, 1.0))
+	if lock_reticle != null:
+		lock_reticle.global_position = lp
 
 
 ## After-images come from a small pool of 3-mesh silhouettes (cheap on web GPUs).

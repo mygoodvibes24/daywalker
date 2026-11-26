@@ -8,6 +8,10 @@ config/description="Open-world action-horror prototype. A daywalker against vamp
 run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
 
+[audio]
+
+buses/default_bus_layout="res://default_bus_layout.tres"
+
 [autoload]
 
 Settings="*res://scripts/settings.gd"

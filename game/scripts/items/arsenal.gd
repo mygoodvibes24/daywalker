@@ -96,25 +96,32 @@ func _ready() -> void:
 
 
 # ---------------------------------------------------------------- input
-## "weapon_art": V, the mouse's thumb button, RB on a pad (the Blood Dash keeps B), the ART touch button.
+## "weapon_art": V, the mouse's second side button (the first one parries), D-pad Up on a pad (every
+## face button, shoulder, trigger and stick click is taken; the D-pad only doubled the left stick, so
+## Up leaves move_forward), and the ART touch button.
+const ART_KEY := KEY_V
+const ART_MOUSE := MOUSE_BUTTON_XBUTTON2
+const ART_PAD := JOY_BUTTON_DPAD_UP
+
+
 static func _setup_input() -> void:
 	if InputMap.has_action("weapon_art"):
 		return
 	InputMap.add_action("weapon_art", 0.25)
 	var k := InputEventKey.new()
-	k.physical_keycode = KEY_V
+	k.physical_keycode = ART_KEY
 	InputMap.action_add_event("weapon_art", k)
 	var mb := InputEventMouseButton.new()
-	mb.button_index = MOUSE_BUTTON_XBUTTON1
+	mb.button_index = ART_MOUSE
 	InputMap.action_add_event("weapon_art", mb)
 	var pb := InputEventJoypadButton.new()
-	pb.button_index = JOY_BUTTON_RIGHT_SHOULDER
+	pb.button_index = ART_PAD
 	pb.device = -1
 	InputMap.action_add_event("weapon_art", pb)
-	if InputMap.has_action("dash"):
-		for ev in InputMap.action_get_events("dash"):
-			if ev is InputEventJoypadButton and ev.button_index == JOY_BUTTON_RIGHT_SHOULDER:
-				InputMap.action_erase_event("dash", ev) # RB is the Weapon Art now; the dash is B
+	if InputMap.has_action("move_forward"):
+		for ev in InputMap.action_get_events("move_forward"):
+			if ev is InputEventJoypadButton and ev.button_index == ART_PAD:
+				InputMap.action_erase_event("move_forward", ev)
 
 
 # ---------------------------------------------------------------- weapon
@@ -523,9 +530,9 @@ func _shockwave(m: Dictionary, mult: float, radius: float) -> int:
 
 
 func _spend_stamina(m: Dictionary) -> void:
-	var c := float(m.get("stamina_cost", 0.0)) * float(wtype.get("stamina", 1.0))
+	var c := float(m.get("stamina", 0.0)) # the row's cost (Weapon Arts cost blood and a cooldown instead)
 	if c > 0.0 and player.has_method("spend_stamina"):
-		player.spend_stamina(c) # Group B's stamina, when it lands
+		player.spend_stamina(c)
 
 
 # ---------------------------------------------------------------- the plunge
@@ -1009,7 +1016,7 @@ func _draw_hud() -> void:
 	if chain_t > 0.0:
 		c.draw_arc(centre, r + 6.0, 0.0, TAU, 32, Color(1.0, 0.05, 0.1, 0.9), 2.0, true)
 	var font := ThemeDB.fallback_font
-	var key: String = "RB" if (main != null and main.hud != null and main.hud.using_pad) else "V"
+	var key: String = "D↑" if (main != null and main.hud != null and main.hud.using_pad) else "V"
 	if touch:
 		key = "ART"
 	c.draw_string(font, centre + Vector2(-r, 6.0), key, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, 15, Color(1, 1, 1, 0.9 if ready else 0.5))

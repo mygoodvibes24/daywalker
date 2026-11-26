@@ -36,6 +36,10 @@
   "cassius": {
    "name": "CASSIUS VANE",
    "color": "#d0463c"
+  },
+  "crowe": {
+   "name": "SILAS CROWE",
+   "color": "#e8ddd0"
   }
  },
  "lines": [
@@ -656,6 +660,46 @@
    "text": "Stay down.",
    "audio": "res://assets/audio/voice/bark_kill_1.ogg",
    "duration": 1.51,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
+   "id": "rival_taunt",
+   "speaker": "crowe",
+   "category": "boss",
+   "text": "Come here, Daywalker. Let me taste you.",
+   "audio": "res://assets/audio/voice/vamp_taunt_3.ogg",
+   "duration": 3.0,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
+   "id": "rival_taunt_rematch",
+   "speaker": "crowe",
+   "category": "boss",
+   "text": "Half-breed! You smell like a church.",
+   "audio": "res://assets/audio/voice/vamp_taunt_1.ogg",
+   "duration": 3.42,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
+   "id": "rival_half",
+   "speaker": "crowe",
+   "category": "boss",
+   "text": "The Count wants you alive. Mostly.",
+   "audio": "res://assets/audio/voice/vamp_taunt_2.ogg",
+   "duration": 3.0,
+   "priority": 3,
+   "cooldown": 0
+  },
+  {
+   "id": "rival_death",
+   "speaker": "sol",
+   "category": "boss",
+   "text": "Stay down.",
+   "audio": "res://assets/audio/voice/bark_kill_1.ogg",
+   "duration": 1.5,
    "priority": 3,
    "cooldown": 0
   }

@@ -17,6 +17,7 @@ const FxScript = preload("res://scripts/fx.gd")
 const InventoryUI = preload("res://scripts/ui/inventory_ui.gd")
 const LevelupUI = preload("res://scripts/ui/levelup_ui.gd")
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
+const Depths = preload("res://scripts/map/undercroft.gd") # UNDERCROFT HOOK: the crypt under the plaza
 
 const DAY_LENGTH := 240.0 # seconds for one full day/night cycle
 const LAIR_MAX := 3
@@ -59,6 +60,7 @@ var pause_menu: CanvasLayer # Esc: Resume / Options / Controls / Quit to Menu
 var ui_block_until := 0 # ms; swallows the button press that closed a menu
 var hunt: HuntDirector = null # HUNT HOOK: hunt_director.gd while a Hunt runs (null in free roam)
 var free_roam := false # debug only (--freeroam / ?freeroam): plaza start + the old roaming spawner
+var depths: Node3D # UNDERCROFT HOOK: map/undercroft.gd (the Undercroft Depths and its rival)
 
 
 func _ready() -> void:
@@ -242,6 +244,10 @@ func _build_lair() -> void:
 	sign.position = Vector3(0, 4.6, 0)
 	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	root.add_child(sign)
+	# UNDERCROFT HOOK: the stair in the well leads down to the Undercroft Depths
+	depths = Depths.new()
+	depths.main = self
+	add_child(depths)
 
 
 ## Bake a navmesh from the generated city so enemies path around buildings.

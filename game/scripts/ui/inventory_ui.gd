@@ -271,7 +271,7 @@ func refresh() -> void:
 	_paint(weapon_slot, inv.weapon, "BLADE")
 	for i in 3:
 		_paint(charm_slots[i], inv.charms[i], "CHARM")
-	var qkeys := ["LB", "R3"] if main.hud.using_pad else ["1", "2"]
+	var qkeys := ["LB", "RB"] if main.hud.using_pad else ["1", "2"]
 	for i in 2:
 		_paint(quick_slots[i], inv.quick[i], "QUICK " + qkeys[i])
 	# the Arsenal: the weapon type, its affinity and its Weapon Art under the name
@@ -347,7 +347,7 @@ func _update_tooltip() -> void:
 		tip_body.text = {"bag": "Loot from kills, coffins and crates lands here.",
 			"weapon": "Sol always keeps a blade in hand. Equip another from your coat to swap.",
 			"charm": "Equip a gris-gris charm from your coat. Three can be worn at once.",
-			"quick": "Assign a vial or flare from your coat. Use it in the field with 1 / 2 (LB / R3 on a controller)."}[sel_where]
+			"quick": "Assign a vial or flare from your coat. Use it in the field with 1 / 2 (LB / RB on a controller)."}[sel_where]
 		tip_frame.add_theme_stylebox_override("panel", S.box(Color(0.03, 0.02, 0.025, 0.9), S.GOLD_DIM, 1, 3, 16))
 		return
 	var rc := ItemDB.color(inst)

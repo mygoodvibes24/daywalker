@@ -100,13 +100,29 @@ func _on_node_added(n: Node) -> void:
 		_apply_env.call_deferred(n)
 
 
+## The buses normally come from res://default_bus_layout.tres (project setting
+## audio/buses/default_bus_layout). This is only a fallback if that layout is missing.
+## Never call add_bus() here: in Godot 4.3 web builds (Sample playback) add_bus()
+## tells the browser side to insert at position -1, which lands the new bus *before* the
+## last one, so the Web Audio bus indices stop matching the engine's. The sends set next
+## then wire Master into a child bus and back, and Web Audio silences that cycle: every
+## sound plays at zero gain (the "no sound at all on the web" bug). set_bus_layout() rebuilds
+## the browser buses in order, so build a whole layout and apply that instead.
 static func ensure_buses() -> void:
+	var missing := []
 	for b in ["Music", "SFX", "Voice"]:
 		if AudioServer.get_bus_index(b) < 0:
-			AudioServer.add_bus()
-			var i := AudioServer.bus_count - 1
-			AudioServer.set_bus_name(i, b)
-			AudioServer.set_bus_send(i, "Master")
+			missing.append(b)
+	if missing.is_empty():
+		return
+	var layout := AudioServer.generate_bus_layout()
+	var n := AudioServer.bus_count
+	for b in missing:
+		layout.set("bus/%d/name" % n, StringName(b))
+		layout.set("bus/%d/send" % n, &"Master")
+		layout.set("bus/%d/volume_db" % n, 0.0)
+		n += 1
+	AudioServer.set_bus_layout(layout)
 
 
 static func load_settings(path: String = PATH) -> bool:
