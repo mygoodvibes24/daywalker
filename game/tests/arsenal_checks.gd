@@ -75,6 +75,7 @@ func _dummy(at: Vector3, kind := 0):
 	e.hp = 1e6
 	e.attack_cd = 99.0
 	e.special_cd = 99.0
+	e.flip_cd = 99.0 # a training dummy never backflips out of a charge or rush (that evade is random)
 	e.speed = 0.0 # a training dummy: stands where it is put
 	return e
 

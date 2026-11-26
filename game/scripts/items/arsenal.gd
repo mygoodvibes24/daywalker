@@ -63,6 +63,13 @@ var _plunging := false
 var _plunge_move := ""
 var _plunge_air := 0.0
 var _phase_t := 0.0
+# a "rush" art (Impaling Rush) skewers everything along the line Sol charges through, once each: the
+# charge is so fast (~26 m/s) that timed strikes would land after he has already passed the target
+var _sweep_t := 0.0
+var _sweep_m: Dictionary = {}
+var _sweep_dmg_mult := 0.0
+var _sweep_from := Vector3.ZERO
+var _sweep_hit: Dictionary = {}
 var _recent := {} # enemy -> msec of its last hit (shockwaves skip what the blade just hit)
 var _in_proc := false
 var _hang_t := 0.0
@@ -226,6 +233,9 @@ func _physics_process(delta: float) -> void:
 	riposte_t = maxf(riposte_t - delta, 0.0)
 	chain_t = maxf(chain_t - delta, 0.0)
 	_title_t = maxf(_title_t - delta, 0.0)
+	if _sweep_t > 0.0:
+		_sweep_t -= delta
+		_sweep_tick()
 	if _phase_t > 0.0:
 		_phase_t -= delta
 		player.collision_mask = 1 # passes through enemies, like the dash
@@ -369,6 +379,14 @@ func perform(name: String, target = null, fx := "") -> void:
 		p.invuln_t = maxf(p.invuln_t, float(m.invuln))
 	if m.get("phase", false):
 		_phase_t = last + 0.1
+	if fx == "rush":
+		_sweep_t = last + 0.1
+		_sweep_m = m
+		_sweep_dmg_mult = 0.0
+		for h in hits:
+			_sweep_dmg_mult += float(h[1]) # the move's whole designed damage, dealt as one skewer
+		_sweep_from = p.global_position
+		_sweep_hit = {}
 	if m.has("leap") and p.is_on_floor():
 		p.velocity.y = float(m.leap)
 	if m.has("hang"):
@@ -408,6 +426,8 @@ func _hit_times(m: Dictionary, rate: float) -> Array:
 
 ## Queue a move's strikes. `extra_only`: player.gd lands the first one itself (its own moves).
 func _schedule(m: Dictionary, rate: float, fx: String, target, extra_only: bool) -> void:
+	if fx == "rush" and not extra_only:
+		return # the rush hits by sweeping its path (_sweep_tick), not at timed strikes
 	var hits := _hit_times(m, rate)
 	for i in hits.size():
 		if extra_only and i == 0:
@@ -463,6 +483,36 @@ func _strike_event(ev: Dictionary) -> void:
 			Audio.play_at("boss_slam_impact", player.global_position, 0.0) # AUDIO HOOK
 	if n > 0 and m.has("crit") and target != null:
 		_show_title("RIPOSTE")
+
+
+## The rush: every enemy within reach of the segment Sol covered since last frame is skewered once.
+func _sweep_tick() -> void:
+	var p = player
+	var to_pos: Vector3 = p.global_position
+	var a2 := Vector2(_sweep_from.x, _sweep_from.z)
+	var b2 := Vector2(to_pos.x, to_pos.z)
+	var seg := b2 - a2
+	var w: Dictionary = p.weapon_stats()
+	var base_r := 1.1 + float(w.reach) * 0.5
+	var dmg: float = float(w.dmg) * _sweep_dmg_mult * p.damage_mult() * (1.0 + _stat("art_dmg"))
+	var n := 0
+	for e in main.enemies_root.get_children():
+		if e.dead or _sweep_hit.has(e):
+			continue
+		var e2 := Vector2(e.global_position.x, e.global_position.z)
+		var tt := clampf((e2 - a2).dot(seg) / maxf(seg.length_squared(), 1e-6), 0.0, 1.0)
+		var d := e2.distance_to(a2 + seg * tt)
+		var r: float = base_r + (float(e.get("body_radius")) if e.get("body_radius") != null else 0.0)
+		if d < r:
+			_sweep_hit[e] = true
+			var dir: Vector3 = p._forward()
+			_deal(e, dmg, dir, _sweep_m)
+			n += 1
+	_sweep_from = to_pos
+	if n > 0:
+		p.shake = maxf(p.shake, float(_sweep_m.get("shake", 0.3)))
+		main.rumble(0.4, 0.5, 0.1)
+		main.set_slowmo(0.06, float(_sweep_m.get("stop", 0.1)))
 
 
 ## One strike of a move: everything in the cone (reach, arc) around Sol. Returns how many it hit.
