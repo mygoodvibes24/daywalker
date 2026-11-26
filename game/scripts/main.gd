@@ -20,6 +20,7 @@ const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const Prewarm = preload("res://scripts/prewarm.gd") # PERF: first-use hitches (loads + shader compiles)
 const BenchScript = preload("res://scripts/bench.gd") # PERF: ?bench / --bench benchmark route
 const Depths = preload("res://scripts/map/undercroft.gd") # UNDERCROFT HOOK: the crypt under the plaza
+const HuntMeta = preload("res://scripts/hunt/hunt_meta.gd") # WARDROBE: the outfit chosen in the lair
 
 const DAY_LENGTH := 240.0 # seconds for one full day/night cycle
 const LAIR_MAX := 3
@@ -570,6 +571,8 @@ func _setup_progression() -> void:
 	progression.inventory = inventory
 	add_child(progression)
 	progression.load_save()
+	progression.set_outfit(HuntMeta.outfit()) # WARDROBE: the clothes' stats (kept through the Hunt's reset)
+	player.apply_outfit(HuntMeta.outfit()) # ...and their look
 	player.hp = player.max_hp
 	inventory.equipment_changed.connect(_on_equipment_changed)
 	progression.connect_player(player)

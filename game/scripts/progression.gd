@@ -11,6 +11,7 @@ signal stats_changed
 
 const ItemDB = preload("res://scripts/items/item_db.gd")
 const Rites = preload("res://scripts/hunt/blood_rite.gd")
+const Wardrobe = preload("res://scripts/items/wardrobe_data.gd")
 
 const MAX_LEVEL := 15
 const BASE_HP := 100.0
@@ -56,6 +57,10 @@ var rites: Array = []
 var rite_choices: Array = []
 var night_mods: Dictionary = {}
 var run_mods: Dictionary = {}
+## WARDROBE: what Sol's clothes add (items/wardrobe_data.gd outfit_mods, already capped per stat).
+## Persistent like the outfit itself, so reset() between Hunts leaves it alone; main.gd / the lair
+## set it from hunt_meta.gd.
+var outfit_mods: Dictionary = {}
 var death_drop := {} # {"pos": [x, y, z], "amount": n} — Tithe lost at the last death
 var stats := {}
 var rng := RandomNumberGenerator.new()
@@ -99,9 +104,11 @@ func recompute() -> void:
 		_add_mods(s, Rites.RITES.get(id, {}).get("mods", {}))
 	_add_mods(s, night_mods)
 	_add_mods(s, run_mods)
+	_add_mods(s, outfit_mods)
 	if inventory != null:
 		for inst in inventory.equipped_items():
 			_add_mods(s, ItemDB.item_mods(inst))
+	Wardrobe.clamp_totals(s) # every source summed, then the sane caps (speed, health, damage taken...)
 	stats = s
 	_apply_to_player()
 	stats_changed.emit()
@@ -116,7 +123,7 @@ func _apply_to_player() -> void:
 	var p = main.player if main != null else null
 	if p == null:
 		return
-	var new_max := BASE_HP + stat("max_hp")
+	var new_max := (BASE_HP + stat("max_hp")) * (1.0 + stat("max_hp_pct")) # WARDROBE: health in percent
 	var gained: float = new_max - p.max_hp
 	p.max_hp = new_max
 	p.hp = clampf(p.hp + maxf(gained, 0.0), 0.0, new_max) if not p.dead else p.hp
@@ -124,6 +131,12 @@ func _apply_to_player() -> void:
 
 func weapon_stats() -> Dictionary:
 	return ItemDB.weapon_stats(inventory.weapon if inventory != null else {})
+
+
+## WARDROBE: wear an outfit's mods ({slot: id} -> wardrobe_data.gd outfit_mods).
+func set_outfit(outfit: Dictionary) -> void:
+	outfit_mods = Wardrobe.outfit_mods(outfit)
+	recompute()
 
 
 # ---------------------------------------------------------------- tithe

@@ -746,6 +746,46 @@
    "duration": 4.87,
    "priority": 1,
    "cooldown": 40
+  },
+  {
+   "id": "lair_hint_alpha",
+   "speaker": "nia",
+   "category": "npc",
+   "text": "The Pack's restless tonight. Wren's firstborn wants your throat. Silver, Sol. Lots of it.",
+   "audio": "",
+   "duration": 5.6,
+   "priority": 1,
+   "cooldown": 0
+  },
+  {
+   "id": "lair_hint_marcus",
+   "speaker": "nia",
+   "category": "npc",
+   "text": "Marcus Crane's dealing blood on the Velvet Mile again. Fast hands, faster blade. Don't let him talk.",
+   "audio": "",
+   "duration": 6.0,
+   "priority": 1,
+   "cooldown": 0
+  },
+  {
+   "id": "lair_hint_knight",
+   "speaker": "nia",
+   "category": "npc",
+   "text": "Cassius Vane is out walking. Lucien's champion. He hits like a church bell, so don't stand under it.",
+   "audio": "",
+   "duration": 6.0,
+   "priority": 1,
+   "cooldown": 0
+  },
+  {
+   "id": "lair_hint_abomination",
+   "speaker": "nia",
+   "category": "npc",
+   "text": "Seraphine stitched something together out of Court and Pack. If it's out tonight, we're all in trouble.",
+   "audio": "",
+   "duration": 6.0,
+   "priority": 1,
+   "cooldown": 0
   }
  ]
 }

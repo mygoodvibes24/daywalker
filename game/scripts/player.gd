@@ -10,6 +10,7 @@ const WeaponVisual = preload("res://scripts/items/weapon_visual.gd")
 const HFx = preload("res://scripts/hunt/hunt_fx.gd") # settings hooks (shake, sprint toggle)
 const SolSheath = preload("res://scripts/sol_sheath.gd") # the sword on his back: draw / sheathe
 const SolLoco = preload("res://scripts/sol_locomotion.gd") # walk / crouch speeds, the stick's walk band
+const SolOutfit = preload("res://scripts/sol_outfit.gd") # WARDROBE: clothes on the modular body
 const SHEATHE_AFTER := 7.0 # seconds of calm (no enemy near, no blows) before he puts the sword away
 const THREAT_RANGE := 6.0 # an enemy winding up this close makes him draw
 const HEAVY_HOLD := 0.4 # hold attack this long for the charged slash
@@ -107,6 +108,12 @@ var arm_pivot: Node3D # swing driver; drawn directly only by the primitive fallb
 var mod_anim: SolModularAnim # clip blending for the modular model (null otherwise)
 var arsenal: Node # items/arsenal.gd: weapon types, Weapon Arts, special combos, bleed / stagger, trails
 var sheath: SolSheath # the back scabbard and the draw (null on the older bodies: always in hand)
+var model_root: Node3D # the instanced sol_modular.scn (null on the primitive fallback)
+## LAIR: true in Sol's lair (scripts/lair/lair_hub.gd): he walks, runs, crouches, jumps and dodges,
+## but never draws, swings, parries, bites or locks on; the sword stays on his back.
+var peaceful := false
+var cam_arm := 4.8
+var no_jump := false # LAIR: pad A uses a station when one is in reach, so it doesn't jump then # the camera arm's resting length (the lair's low vault wants it shorter)
 # ---- stamina (round 3, G4): light and fast. Dashes, sprinting, swings and the parry spend it; it comes
 # back after STAMINA_DELAY at stamina_regen/s. Spent to zero he is EXHAUSTED: no sprint, dash or swing
 # until it is back to EXHAUST_RECOVER, refilling slower. A move's cost is its sol_moves.gd "stamina".
@@ -216,6 +223,7 @@ func _build_modular() -> bool:
 		model.free()
 		return false
 	visual.add_child(model)
+	model_root = model
 	var ma := SolModularAnim.new()
 	if not ma.setup(model):
 		model.queue_free()
@@ -234,6 +242,12 @@ func _build_modular() -> bool:
 	arm_pivot = Node3D.new()
 	visual.add_child(arm_pivot)
 	return true
+
+
+## WARDROBE: dress Sol in an outfit {slot: id} (items/wardrobe_data.gd, scripts/sol_outfit.gd).
+func apply_outfit(outfit: Dictionary) -> void:
+	if model_root != null:
+		SolOutfit.apply(model_root, outfit)
 
 
 ## The coat as darker, matte black leather: no metal map (it read as chrome under the rim light),
@@ -370,7 +384,7 @@ func _physics_process(delta: float) -> void:
 		jumps_left = 2
 	else:
 		velocity.y -= GRAVITY * delta
-	if Input.is_action_just_pressed("jump") and jumps_left > 0 and bite_t <= 0.0 and set_crouch(false):
+	if Input.is_action_just_pressed("jump") and not no_jump and jumps_left > 0 and bite_t <= 0.0 and set_crouch(false):
 		velocity.y = JUMP if jumps_left == 2 else JUMP * 0.85
 		jumps_left -= 1
 
@@ -415,6 +429,10 @@ func _physics_process(delta: float) -> void:
 		mod_anim.set_strafe(atan2(dir.x, dir.z) - facing if strafing else 0.0, strafing and swing_t <= 0.0, delta)
 
 	# actions
+	if peaceful:
+		prompt_text = "" # LAIR: no blade, no bite; the lair's stations own E / Y
+		attack_buffer_t = 0.0
+		return
 	_combat_tick(delta)
 	# input buffer: a press up to ATTACK_BUFFER s early (mid-swing, mid-bite) comes out the moment Sol can
 	if Input.is_action_just_pressed("attack") and Time.get_ticks_msec() >= attack_block_until:
@@ -1046,7 +1064,8 @@ func _force_stand() -> void:
 
 ## How far idle enemies notice Sol, as a share of their range (hunt_director.gd aggro_range, poi.gd).
 func detect_mult() -> float:
-	return CROUCH_DETECT if crouched and not dead else 1.0
+	var k := 1.0 + stat("notice") # WARDROBE: soft soles, a hood... (capped in progression.gd)
+	return (CROUCH_DETECT if crouched and not dead else 1.0) * clampf(k, 0.3, 2.0)
 
 
 # ---------------------------------------------------------------- lock-on
@@ -1070,7 +1089,7 @@ var _stick_armed := true
 
 
 func _lock_tick(delta: float) -> void:
-	if Input.is_action_just_pressed("lock_on"):
+	if Input.is_action_just_pressed("lock_on") and not peaceful:
 		toggle_lock()
 	_flick_cd = maxf(_flick_cd - delta, 0.0)
 	_flick_x = move_toward(_flick_x, 0.0, 400.0 * delta) # a slow drag never adds up to a flick
@@ -1665,7 +1684,7 @@ func _process(delta: float) -> void:
 	# the execution: the camera arm pulls in tight, then eases back out
 	if finisher_t > 0.0:
 		camera.fov = lerpf(camera.fov, 55.0, 8.0 * delta)
-	var arm := 4.8
+	var arm := cam_arm
 	if lock_target != null and _lock_valid(lock_target):
 		var br = lock_target.get("body_radius")
 		arm = 5.3 + (clampf(float(br) * 0.9, 0.0, 1.6) if br != null else 0.0) # a boss: pull out to frame him

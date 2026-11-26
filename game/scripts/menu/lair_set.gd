@@ -12,6 +12,7 @@ extends Node3D
 const U = preload("res://scripts/util.gd")
 const Atmo = preload("res://scripts/atmosphere.gd")
 const PostFxScript = preload("res://scripts/post_fx.gd")
+const LairRooms = preload("res://scripts/lair/lair_rooms.gd") # LAIR: the walkable hub's extra rooms and colliders
 const BenchPose = preload("res://scripts/menu/sol_bench_pose.gd")
 const NiaIdle = preload("res://scripts/menu/nia_idle.gd")
 const SOL_SCENES := ["res://assets/characters/sol/sol_modular.scn"]
@@ -42,6 +43,11 @@ const DRIFT_TIME := 26.0
 
 var tier := "web"
 var cinematic := false
+## LAIR: true when the set is Sol's walkable lair (scripts/lair/lair_hub.gd) instead of the menu
+## backdrop: no bench Sol (the player is Sol), no menu camera, plus the front bay (armoury alcove,
+## wardrobe corner), colliders and the static-mesh batching (lair_rooms.gd). Set before _ready.
+var hub_mode := false
+var rooms # lair_rooms.gd (hub mode)
 var camera: Camera3D
 var env: Environment
 var world_env: WorldEnvironment
@@ -92,10 +98,17 @@ func _ready() -> void:
 	_bounce()
 	_puddles()
 	_dust()
-	_sol()
+	if hub_mode:
+		rooms = LairRooms.new()
+		rooms.build(self)
+	else:
+		_sol()
 	_nia()
 	_lights()
-	_camera()
+	if hub_mode:
+		rooms.finish(self) # the front bay's light, the colliders, the static batching
+	else:
+		_camera()
 	post = PostFxScript.new()
 	post.name = "PostFX"
 	add_child(post)
@@ -1358,7 +1371,8 @@ func _place_camera(time: float) -> void:
 
 func _process(delta: float) -> void:
 	t += delta
-	_place_camera(t)
+	if camera != null:
+		_place_camera(t)
 	for f in flicker_lights:
 		var l: OmniLight3D = f[0]
 		var ph: float = f[2]

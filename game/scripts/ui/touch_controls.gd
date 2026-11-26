@@ -127,8 +127,21 @@ func _button_center(b: Dictionary) -> Vector2:
 	return sz + p
 
 
+## LAIR HOOK: a scene may list the buttons it wants (`touch_buttons`) and relabel them (`touch_labels`).
+func _shown(b: Dictionary) -> bool:
+	var allow = _main.get("touch_buttons") if _main != null else null
+	return not (allow is Array) or b.id in allow
+
+
+func _label(b: Dictionary) -> String:
+	var lab = _main.get("touch_labels") if _main != null else null
+	return String(lab.get(b.id, b.label)) if lab is Dictionary else String(b.label)
+
+
 func _hit(pos: Vector2) -> Dictionary:
 	for b in buttons:
+		if not _shown(b):
+			continue
 		if pos.distance_to(_button_center(b)) <= b.r * _k() * 1.2:
 			return b
 	return {}
@@ -267,6 +280,8 @@ func _draw_pad() -> void:
 	pad.draw_circle(base + stick_vec * sr, 30.0 * kk, Color(0.75, 0.08, 0.1, a + 0.2))
 	var pressed_ids := held.values()
 	for b in buttons:
+		if not _shown(b):
+			continue
 		var c := _button_center(b)
 		var on: bool = b.id in pressed_ids or (b.toggle and sprint_on) or (b.id == "lock" and _main != null and _main.player.get("lock_target") != null) \
 			or (b.id == "crouch" and _main != null and _main.player.get("crouched") == true)
@@ -274,6 +289,7 @@ func _draw_pad() -> void:
 		pad.draw_circle(c, r, Color(0.55, 0.04, 0.07, 0.75) if on else Color(INK.r, INK.g, INK.b, 0.5))
 		pad.draw_arc(c, r, 0.0, TAU, 40, Color(GOLD.r, GOLD.g, GOLD.b, 0.95 if on else 0.6), 2.0, true)
 		var fs := int(clampf(r * 0.42, 12.0, 22.0))
-		var w := font.get_string_size(b.label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		pad.draw_string_outline(font, c + Vector2(-w * 0.5, fs * 0.35), b.label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0, 0, 0, 0.8))
-		pad.draw_string(font, c + Vector2(-w * 0.5, fs * 0.35), b.label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.95, 0.9, 0.82))
+		var txt := _label(b)
+		var w := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		pad.draw_string_outline(font, c + Vector2(-w * 0.5, fs * 0.35), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0, 0, 0, 0.8))
+		pad.draw_string(font, c + Vector2(-w * 0.5, fs * 0.35), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.95, 0.9, 0.82))
