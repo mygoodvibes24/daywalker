@@ -63,6 +63,7 @@ func run(t: SceneTree, c: Callable) -> bool:
 	for i in 3: await tree.process_frame
 	menu.buttons[0].pressed.emit()
 	var to_lair: bool = menu.target_scene == menu.LAIR_SCENE and menu.state == "loading"
+	_kill_tweens() # stop the fade before it starts a (threaded) scene load
 	menu.queue_free()
 	await tree.process_frame
 	var menu2 = load("res://scenes/main_menu.tscn").instantiate()
@@ -70,6 +71,7 @@ func run(t: SceneTree, c: Callable) -> bool:
 	for i in 3: await tree.process_frame
 	menu2._begin_hunt()
 	var to_hunt: bool = menu2.target_scene == menu2.GAME_SCENE and HD.requested
+	_kill_tweens()
 	menu2.queue_free()
 	HD.requested = false
 	await tree.process_frame
@@ -159,7 +161,7 @@ func run(t: SceneTree, c: Callable) -> bool:
 	ok = _ok("equipping each clothing slot changes both the stats and the visual %s" % [good], good.size() == 7) and ok
 	var mhp: float = p.max_hp
 	ok = _ok("the outfit's health reaches Sol (max blood %.0f with the duster)" % mhp, mhp > 100.0) and ok
-	var saved := JSON.parse_string(FileAccess.get_file_as_string(Meta.path))
+	var saved = JSON.parse_string(FileAccess.get_file_as_string(Meta.path))
 	ok = _ok("owned clothes and the outfit are saved", saved is Dictionary and "hunter_duster" in saved.get("clothes", []) and saved.get("outfit", {}).get("coat", "") == "hunter_duster") and ok
 	lair.panel.close()
 	await _frames(20)
@@ -179,11 +181,18 @@ func run(t: SceneTree, c: Callable) -> bool:
 	# Begin the Hunt: the seed the briefing showed goes to the Hunt
 	lair.begin_hunt()
 	var handed: bool = HD.requested and HD.next_seed == lair.hunt_seed and lair.leaving
+	_kill_tweens()
+	HD.next_seed = -1
 	ok = _ok("Begin the Hunt asks main.tscn for a Hunt with the briefing's seed", handed) and ok
 	lair.queue_free()
 	await tree.process_frame
 	HD.requested = false
 	return ok
+
+
+func _kill_tweens() -> void:
+	for t in tree.get_processed_tweens():
+		t.kill()
 
 
 func _worst(w: Dictionary, e: Dictionary) -> void:

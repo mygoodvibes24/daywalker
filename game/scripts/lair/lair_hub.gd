@@ -33,9 +33,9 @@ const SPAWN_YAW := PI # facing -Z
 const SHOTS := {
 	"rack": [Vector3(0.75, 1.8, 0.75), Vector3(3.9, 1.55, 2.45), 50.0, "left"],
 	"bench": [Vector3(-0.35, 1.85, -0.85), Vector3(1.55, 0.9, -3.1), 52.0, "right"],
-	"mirror": [Vector3(-0.45, 1.3, 1.3), Vector3(0.62, 1.05, 2.12), 42.0, "right"],
+	"mirror": [Vector3(-1.85, 1.3, 0.4), Vector3(0.22, 0.95, 2.64), 40.0, "right"],
 	"table": [Vector3(1.25, 1.85, -4.35), Vector3(1.0, 1.45, -6.9), 52.0, "right"],
-	"gate": [Vector3(-0.45, 1.65, -5.2), Vector3(-2.2, 1.25, -9.6), 54.0, "right"],
+	"gate": [Vector3(0.1, 1.85, -5.1), Vector3(-2.3, 1.15, -9.6), 54.0, "right"],
 }
 ## What the touch layer shows here (touch_controls.gd): move / look, run, crouch, jump, dash, USE, pause.
 var touch_buttons := ["jump", "dash", "sprint", "crouch", "bite", "pause"]

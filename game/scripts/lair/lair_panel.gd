@@ -60,6 +60,11 @@ func open(k: String, side: String) -> void:
 		anchor_right = 1.0
 		offset_left = -544
 		offset_right = -24
+	# the gate's panel is a short confirm, centred on its side; the rest run full height
+	anchor_top = 0.3 if k == "gate" else 0.0
+	anchor_bottom = 0.3 if k == "gate" else 1.0
+	offset_top = 0 if k == "gate" else 24
+	offset_bottom = 0 if k == "gate" else -24
 	visible = true
 	rebuild()
 

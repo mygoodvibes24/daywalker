@@ -28,7 +28,7 @@ const MIRROR_POS := Vector3(-0.62, 0.12, 1.55)
 const STATIONS := {
 	"rack": {"pos": Vector3(3.35, 0.12, 1.9), "radius": 1.5, "label": "WEAPON RACK", "verb": "choose your blade"},
 	"bench": {"pos": Vector3(1.0, 0.12, -2.25), "radius": 1.5, "label": "WORKBENCH", "verb": "charms and contacts"},
-	"mirror": {"pos": Vector3(0.35, 0.12, 2.05), "radius": 1.4, "label": "WARDROBE", "verb": "change clothes"},
+	"mirror": {"pos": Vector3(0.55, 0.12, 2.2), "radius": 1.4, "label": "WARDROBE", "verb": "change clothes"},
 	"table": {"pos": Vector3(0.55, 0.12, -5.75), "radius": 1.5, "label": "MAP TABLE", "verb": "tonight's briefing"},
 	"gate": {"pos": Vector3(-1.9, -0.02, -7.4), "radius": 1.6, "label": "SUBWAY GATE", "verb": "begin the Hunt"},
 	"nia": {"pos": Vector3(2.45, 0.12, -4.05), "radius": 1.7, "label": "NIA", "verb": "talk"},
@@ -234,6 +234,7 @@ func _wardrobe_corner() -> void:
 	mroot.name = "Mirror"
 	mroot.position = MIRROR_POS
 	mroot.rotation.y = 0.85 # faces Sol's spot on the rug
+	mroot.set_meta("no_batch", true) # hidden while the wardrobe looks out of it at Sol
 	s.add_child(mroot)
 	var glass := StandardMaterial3D.new()
 	glass.albedo_color = Color(0.05, 0.055, 0.06)
