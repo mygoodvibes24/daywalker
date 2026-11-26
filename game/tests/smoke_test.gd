@@ -2484,6 +2484,9 @@ func _hunt_checks() -> bool:
 	ok = _check("rare clothes drop in the Hunt and go to the wardrobe (%s)" % found, found != "" and Meta.owns_cloth(found) and W_DATA.get_def(found).get("drop", false)) and ok
 	Meta.data.outfit = W_DATA.DEFAULT_OUTFIT.duplicate()
 	Meta.save_meta()
+	m.progression.set_outfit(Meta.outfit()) # back to the stat-free default for the checks that follow
+	p.apply_outfit(Meta.outfit())
+	p.hp = p.max_hp
 	ok = _check("run starts fresh (rank 1, 0 Tithe, no save writes)", m.progression.level == 1 and m.progression.tithe == 0 and not m.progression.persist) and ok
 	# POIs
 	var with_enemies := 0

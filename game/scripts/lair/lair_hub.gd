@@ -108,8 +108,6 @@ func _ready() -> void:
 	player.hp = player.max_hp
 	if player.sheath != null:
 		player.sheath.sheathe(true)
-	if player.arsenal != null and player.arsenal.get("hud") != null:
-		player.arsenal.hud.visible = false # no Weapon Art here
 	# a soft warm fill that walks with him, so he reads in the dark bays (no shadows: cheap)
 	var fill := OmniLight3D.new()
 	fill.name = "SolFill"
@@ -338,8 +336,6 @@ func _load_game() -> void:
 
 
 func _process(_delta: float) -> void:
-	if player != null and player.arsenal != null and player.arsenal.get("hud") != null:
-		player.arsenal.hud.visible = false # no Weapon Art indicator in the lair
 	if not _load_threaded:
 		return
 	var st := ResourceLoader.load_threaded_get_status(GAME_SCENE)

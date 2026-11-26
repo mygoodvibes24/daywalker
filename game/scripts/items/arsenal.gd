@@ -1037,7 +1037,7 @@ func _show_title(t: String) -> void:
 func _update_hud() -> void:
 	if _hud_ctl == null:
 		return
-	var show: bool = main != null and main.get("started") != false and not player.dead
+	var show: bool = main != null and main.get("started") != false and not player.dead and not player.peaceful # LAIR: no Art indicator
 	hud.visible = show
 	if show:
 		_hud_ctl.queue_redraw()

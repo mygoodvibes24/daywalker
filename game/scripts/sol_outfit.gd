@@ -29,7 +29,7 @@ const REGIONS := "res://assets/characters/sol/sol_body_regions.png"
 const REGION_LUM := [1.0, 0.172, 0.189, 0.11]
 const COAT_LUM := 0.13
 const HAND_LUM := 0.22
-const HEAD_HAT_Y := 1.86 # top of the head in skeleton space at rest (Crowe's hat height)
+const HEAD_HAT_Y := 1.775 # where a hat band sits on Sol's head, skeleton space at rest (measured in the mirror shots)
 
 static var _tint_shader: Shader
 static var _body_shader: Shader
