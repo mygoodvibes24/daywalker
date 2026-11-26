@@ -1,6 +1,7 @@
 extends CanvasLayer
 ## The pause menu: Esc in play (or "Pause" / pad Back inside the Coat) pauses the world,
-## frees the mouse and offers Resume / Options / Controls / Quit to Menu. The Options and
+## frees the mouse and offers Resume / Options / Controls / Quit to Menu. Options is the shared
+## tabbed settings panel (Graphics / Display / Preferences / Audio / Accessibility, options_panel.gd). The Options and
 ## Controls screens are the same ones the main menu uses. Esc / pad B steps back, then resumes.
 
 const MS = preload("res://scripts/menu/menu_style.gd")
@@ -17,6 +18,7 @@ var options: Control
 var controls: Control
 var hint: Label
 var screen := "" # "", list, options, controls
+var dim: ColorRect
 
 
 func _ready() -> void:
@@ -25,7 +27,7 @@ func _ready() -> void:
 	root = Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(root)
-	var dim := S.dim_backdrop()
+	dim = S.dim_backdrop()
 	dim.color = Color(0.0, 0.0, 0.0, 0.66)
 	root.add_child(dim)
 	var center := CenterContainer.new()
@@ -101,6 +103,8 @@ func _show(which: String) -> void:
 	list.visible = which == "list"
 	options.visible = which == "options"
 	controls.visible = which == "controls"
+	# Options: a light dim, so graphics / brightness changes preview live on the world behind
+	dim.color.a = 0.2 if which == "options" else 0.66
 	if which == "list":
 		buttons[0].grab_focus.call_deferred()
 

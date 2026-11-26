@@ -194,6 +194,7 @@ func start() -> void:
 	prog.persist = false # a Hunt never writes the free-roam save
 	prog.reset()
 	main.inventory.charms = Meta.loadout_charms()
+	main.inventory.weapon = Meta.start_blade() # the blade chosen on Nia's rack (the Arsenal)
 	main.inventory.equipment_changed.emit()
 	main.inventory.changed.emit()
 	main.player.hp = main.player.max_hp
@@ -419,18 +420,39 @@ func living_enemies() -> int:
 	return main.living_enemies()
 
 
+var _poi_acc := 0.0
+var _poi_frame := 0
+var _poi_order: Array = []
+var _poi_sort_t := 0.0
+
+
+## PERF: the camps tick at 30 Hz (not every physics frame), the nearest-first order is re-sorted
+## twice a second instead of duplicated and sorted every frame, and a waking camp brings its
+## members in at most two per tick, so no single frame builds a whole camp.
 func _tick_pois(delta: float) -> void:
 	var p = main.player
 	if p == null:
 		return
-	var budget := Cfg.MAX_ACTIVE_ENEMIES - living_enemies()
+	_poi_acc += delta
+	_poi_frame += 1
+	if _poi_frame % 2 != 0:
+		return
+	var dt := _poi_acc
+	_poi_acc = 0.0
+	var budget := Settings.max_enemies(Cfg.MAX_ACTIVE_ENEMIES) - living_enemies() # SETTINGS HOOK: crowd density
 	if state in ["boss", "final_dusk", "deploy"]:
 		budget = 0
-	# nearest first, so the camp you're walking into wakes before a far one
-	var order := pois.duplicate()
-	order.sort_custom(func(a, b): return a.distance_to(p.global_position) < b.distance_to(p.global_position))
-	for poi in order:
-		budget -= poi.tick(delta, p.global_position, maxi(budget, 0))
+	budget = mini(budget, 2)
+	_poi_sort_t -= dt
+	if _poi_sort_t <= 0.0 or _poi_order.size() != pois.size():
+		_poi_sort_t = 0.5
+		# nearest first, so the camp you're walking into wakes before a far one
+		var pp: Vector3 = p.global_position
+		_poi_order = pois.duplicate()
+		_poi_order.sort_custom(func(a, b): return a.distance_to(pp) < b.distance_to(pp))
+	for poi in _poi_order:
+		if is_instance_valid(poi):
+			budget -= poi.tick(dt, p.global_position, maxi(budget, 0))
 
 
 ## Stragglers between the camps: a light trickle that turns up out of sight (well away from
@@ -901,7 +923,7 @@ func _interactions(p) -> void:
 	_interaction = {}
 	if p == null or p.dead or p.bite_ready or main.menu_open() or main.loot.prompt_text != "":
 		return
-	for poi in pois + micros:
+	for poi in _interactables():
 		if poi.distance_to(p.global_position) > 6.0:
 			continue
 		var it: Dictionary = poi.interaction(p.global_position)
@@ -926,6 +948,18 @@ func _interactions(p) -> void:
 				_interaction.poi.open_coffin(_interaction.coffin)
 			"micro":
 				_interaction.poi.use()
+
+
+var _inter_list: Array = []
+var _inter_n := -1
+
+
+## PERF: pois + micros without building a new array every physics frame.
+func _interactables() -> Array:
+	if _inter_n != pois.size() * 10000 + micros.size():
+		_inter_n = pois.size() * 10000 + micros.size()
+		_inter_list = pois + micros
+	return _inter_list
 
 
 # ---------------------------------------------------------------- death

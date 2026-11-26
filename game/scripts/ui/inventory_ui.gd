@@ -274,7 +274,8 @@ func refresh() -> void:
 	var qkeys := ["LB", "RB"] if main.hud.using_pad else ["1", "2"]
 	for i in 2:
 		_paint(quick_slots[i], inv.quick[i], "QUICK " + qkeys[i])
-	weapon_name.text = ItemDB.display_name(inv.weapon) if not inv.weapon.is_empty() else ""
+	# the Arsenal: the weapon type, its affinity and its Weapon Art under the name
+	weapon_name.text = (ItemDB.display_name(inv.weapon) + "\n" + ItemDB.weapon_line(inv.weapon)) if not inv.weapon.is_empty() else ""
 	weapon_name.add_theme_color_override("font_color", ItemDB.color(inv.weapon) if not inv.weapon.is_empty() else S.TEXT)
 	carried_lbl.text = "CARRIED   %d / %d" % [inv.bag.size(), inv.BAG_SIZE]
 	header_lbl.text = "RANK %d     TITHE %d" % [prog.level, prog.tithe]
@@ -311,6 +312,8 @@ func _stats_text() -> String:
 	lines.append("Rank %d    Blood %d / %d" % [prog.level, roundi(p.hp), roundi(p.max_hp)])
 	lines.append("Strike %d  (finisher %d)   Speed %.2f   Reach %+.1f m" % [
 		roundi(w.dmg * p.damage_mult()), roundi(w.dmg * 2.0 * (1.0 + prog.stat("finisher")) * p.damage_mult()), w.spd, w.reach])
+	if w.has("stagger"): # the Arsenal
+		lines.append("Stagger %.1f   ·   %s" % [float(w.stagger) * (1.0 + prog.stat("poise")), String(w.affinity).capitalize()])
 	var extra: Array[String] = []
 	for k in ["dash_rate", "bite_heal", "dmg_taken", "vs_vamp", "vs_wolf", "lifesteal", "speed", "tithe_mult", "loot_luck", "sun_heal", "frenzy_time"]:
 		var v: float = prog.stat(k)

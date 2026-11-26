@@ -48,7 +48,10 @@ const MOUNTS := {
 	"hip_right": {"bone": "Hips", "grip": Vector3(-0.25, 1.02, -0.02), "dir": Vector3(-0.08, -0.97, -0.22),
 		"flat": Vector3(1, 0, 0), "pole": Vector3(-0.7, -0.2, -0.2), "reach": 0.1, "pull": 0.1, "scabbard": true},
 }
-const FAMILY_MOUNT := {"kukri": "hip", "longblade": "back_great"}
+const FAMILY_MOUNT := {"kukri": "hip", "longblade": "back_great",
+	# the Arsenal's families (items/arsenal_data.gd TYPES carry the same preset as "mount")
+	"katana": "hip", "daggers": "hip_right", "greatsword": "back_great", "halberd": "back_great",
+	"scythe": "back_great", "hammer": "back", "whip": "hip_right"}
 const BACK_GAP := 0.043
 static var _back_z := 0.0 # the coat's back surface (measured once from the coat mesh)
 

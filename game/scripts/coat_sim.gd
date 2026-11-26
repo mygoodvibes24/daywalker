@@ -18,6 +18,8 @@ extends Node
 ## 600 capsule tests and 60 bone writes per physics frame, all plain float math (about 0.2 ms in a
 ## web build).
 
+const SettingsScript = preload("res://scripts/settings.gd") # PERF: Settings.coat_quality tiers
+
 @export var skeleton_path := NodePath("../Skeleton3D")
 @export var chains := 12
 @export var links := 5
@@ -71,6 +73,16 @@ var last_hips := Vector3.ZERO
 var _need_reset := true
 var _motion := 0.0
 var hips_rest_inv := Basis()
+# PERF: quality tiers (Settings.coat_quality): 2 full (60 Hz, two constraint passes), 1 cheap
+# (30 Hz, one pass), 0 static (rest shape written once, then nothing per frame)
+var _static_done := false
+var _half := false
+var _acc := 0.0
+# PERF: capsules in world space, reused every step (no per-frame array allocation)
+var _caps_a := PackedVector3Array()
+var _caps_b := PackedVector3Array()
+var _caps_c := PackedVector3Array() # bounding sphere centre
+var _caps_r2 := PackedFloat32Array() # bounding sphere radius squared
 
 
 func _ready() -> void:
@@ -123,6 +135,26 @@ func reset() -> void:
 func _physics_process(delta: float) -> void:
 	if not ready_ok or delta <= 0.0:
 		return
+	# PERF / SETTINGS HOOK: coat physics quality
+	var cq: int = SettingsScript.coat_quality
+	if cq <= 0 and enabled:
+		if not _static_done or _need_reset:
+			_static_done = true
+			_need_reset = false
+			var sx0 := skel.global_transform
+			_snap(sx0 * skel.get_bone_global_pose(hips))
+			_write(sx0)
+		return
+	if _static_done:
+		_static_done = false
+		_need_reset = true
+	if cq == 1:
+		_acc += delta
+		_half = not _half
+		if _half:
+			return
+		delta = _acc
+		_acc = 0.0
 	var sx := skel.global_transform
 	var hips_g := sx * skel.get_bone_global_pose(hips)
 	if _need_reset or hips_g.origin.distance_to(last_hips) > 3.0:
@@ -149,9 +181,21 @@ func _physics_process(delta: float) -> void:
 	var gust := Vector3(sin(t * 0.7) + 0.5 * sin(t * 1.9 + 1.3), 0.0, cos(t * 0.5) * 0.6) * flutter
 	var axis := hips_g.origin
 	# capsules in world space
-	var caps: Array[PackedVector3Array] = []
-	for cb in cap_bones:
-		caps.append(PackedVector3Array([sx * skel.get_bone_global_pose(cb[0]).origin, sx * skel.get_bone_global_pose(cb[1]).origin]))
+	var ncap := cap_bones.size()
+	if _caps_a.size() != ncap:
+		_caps_a.resize(ncap)
+		_caps_b.resize(ncap)
+		_caps_c.resize(ncap)
+		_caps_r2.resize(ncap)
+	for ci in ncap:
+		var a := sx * skel.get_bone_global_pose(cap_bones[ci][0]).origin
+		var b := sx * skel.get_bone_global_pose(cap_bones[ci][1]).origin
+		_caps_a[ci] = a
+		_caps_b[ci] = b
+		_caps_c[ci] = (a + b) * 0.5
+		var br := a.distance_to(b) * 0.5 + cap_r[ci] + cloth_margin
+		_caps_r2[ci] = br * br
+	var passes := 2 if cq >= 2 else 1
 	var msum := 0.0
 	var move_amt := 0.04 + 0.96 * clampf(hspeed / 8.0, 0.0, 1.0) # a breath of wind standing, a flutter running
 	for c in pos.size():
@@ -179,7 +223,7 @@ func _physics_process(delta: float) -> void:
 			var np := p[k] + (p[k] - q[k]) * keep + acc * dt * dt
 			q[k] = p[k]
 			p[k] = np
-		for it in 2:
+		for it in passes:
 			for k in range(1, links + 1):
 				var parent := p[k - 1]
 				var d := p[k] - parent
@@ -200,9 +244,11 @@ func _physics_process(delta: float) -> void:
 					var nd := _clamp_dir(line / ll, rest_line, max_cone)
 					p[k] = p[0] + nd * ll
 				# legs and hips: soft push out of each capsule, sideways and back, never up
-				for ci in caps.size():
+				for ci in ncap:
 					var before := p[k]
-					p[k] = _push_out(p[k], caps[ci][0], caps[ci][1], cap_r[ci] + cloth_margin, collision_softness)
+					if before.distance_squared_to(_caps_c[ci]) > _caps_r2[ci]:
+						continue # PERF: outside the capsule's bounding sphere, no push possible
+					p[k] = _push_out(p[k], _caps_a[ci], _caps_b[ci], cap_r[ci] + cloth_margin, collision_softness)
 					# inelastic contact: the push-out moves the cloth but adds no velocity, otherwise the
 					# spring pulls it back in, the capsule pushes it out, and it buzzes against the legs forever
 					var push := p[k] - before

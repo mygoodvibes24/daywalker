@@ -57,7 +57,7 @@ static func _autohunt_wanted() -> bool:
 		return false
 	var q := str(JavaScriptBridge.eval("window.location.search", true)).trim_prefix("?")
 	for part in q.split("&", false):
-		if part.split("=")[0] == "autohunt":
+		if part.split("=")[0] in ["autohunt", "bench"]: # PERF: ?bench runs the benchmark Hunt
 			return true
 	return false
 

@@ -20,7 +20,55 @@ static func defaults() -> Dictionary:
 	return {"version": 1, "sunmarks": 0, "hunts": 0, "wins": 0, "best_bosses": 0, "best_rank": 1, "total_kills": 0,
 		"bosses_slain": 0, "last": {},
 		"armoury": [ItemDB.make("red_flannel"), ItemDB.make("john_root")], # charm instances owned for good
-		"loadout": [0, -1, -1]} # armoury indices worn into the next Hunt
+		"loadout": [0, -1, -1], # armoury indices worn into the next Hunt
+		"blades": ["marrow_silver"], # the Arsenal: blade ids on Nia's rack (one per weapon type to buy)
+		"start_blade": "marrow_silver"} # the blade Sol carries into the next Hunt
+
+
+## The Arsenal (round 4): one blade of every weapon type on Nia's rack, bought once with Sunmarks;
+## the one chosen in the Undercroft is the blade Sol starts the Hunt with (Street rarity).
+const BLADE_RACK := [
+	{"id": "marrow_silver", "price": 0}, {"id": "hunter_silver", "price": 30}, {"id": "dock_machete", "price": 30},
+	{"id": "ronin_katana", "price": 50}, {"id": "hawthorn_stakes", "price": 50}, {"id": "levee_halberd", "price": 60},
+	{"id": "canefield_scythe", "price": 60}, {"id": "cathedral_slab", "price": 70}, {"id": "foundry_maul", "price": 70},
+	{"id": "censer_chain", "price": 60},
+]
+
+
+static func owns_blade(id: String) -> bool:
+	ensure()
+	return id in data.blades
+
+
+static func buy_blade(id: String) -> bool:
+	ensure()
+	if owns_blade(id):
+		return false
+	for e in BLADE_RACK:
+		if e.id == id and data.sunmarks >= e.price:
+			data.sunmarks -= e.price
+			data.blades.append(id)
+			data.start_blade = id
+			save_meta()
+			return true
+	return false
+
+
+static func choose_blade(id: String) -> bool:
+	ensure()
+	if not owns_blade(id):
+		return false
+	data.start_blade = id
+	return true
+
+
+## The blade instance Sol carries into the Hunt.
+static func start_blade() -> Dictionary:
+	ensure()
+	var id := String(data.get("start_blade", "marrow_silver"))
+	if not owns_blade(id) or ItemDB.kind_of({"id": id}) != "blade":
+		id = "marrow_silver"
+	return ItemDB.make(id)
 
 
 static func ensure() -> Dictionary:
@@ -53,6 +101,13 @@ static func load_meta() -> void:
 	data.loadout = lo
 	for k in ["sunmarks", "hunts", "wins", "best_bosses", "best_rank", "total_kills", "bosses_slain"]:
 		data[k] = int(data[k])
+	var blades: Array = ["marrow_silver"]
+	if data.blades is Array:
+		for b in data.blades:
+			if b is String and ItemDB.get_def(b).get("kind", "") == "blade" and not b in blades:
+				blades.append(b)
+	data.blades = blades
+	data.start_blade = String(data.start_blade) if String(data.start_blade) in blades else "marrow_silver"
 
 
 static func save_meta() -> bool:

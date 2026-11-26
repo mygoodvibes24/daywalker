@@ -202,7 +202,7 @@ func _process(delta: float) -> void:
 	if bolt_t <= 0.0:
 		bolt_t = randf_range(0.35, 1.4)
 		_strike()
-	mat.set_shader_parameter("flash", flash)
+	mat.set_shader_parameter("flash", flash * Settings.flash_scale()) # SETTINGS HOOK: reduced flashing
 	_drone(delta)
 
 

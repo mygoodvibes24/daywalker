@@ -2,6 +2,7 @@ extends RefCounted
 ## Cheap shared looks for the Hunt: fresnel auras, ground telegraphs, shockwaves and puffs.
 ## All unshaded + additive, no lights, shared materials where possible (web-friendly).
 
+const SettingsScript = preload("res://scripts/settings.gd")
 const U = preload("res://scripts/util.gd")
 
 const AURA_SHADER := """
@@ -178,6 +179,7 @@ static func shockwave(parent: Node, pos: Vector3, radius: float, c := Color(1.0,
 
 ## A burst of glowing blood droplets / mist (blink, death, deploy dust).
 static func puff(parent: Node, pos: Vector3, c := Color(0.8, 0.02, 0.05), count := 10, size := 0.18, spread := 2.5) -> void:
+	count = SettingsScript.vfx_count(count) # SETTINGS HOOK: effects amount
 	var root := Node3D.new()
 	parent.add_child(root)
 	root.global_position = pos
@@ -255,16 +257,18 @@ static func opt(key: String, def):
 
 ## The shake multiplier the settings ask for.
 static func shake_scale() -> float:
+	if bool(opt("reduce_motion", false)):
+		return 0.0 # settings.gd Accessibility: reduced motion
 	return clampf(float(opt("camera_shake", 1.0)), 0.0, 1.0) * (0.3 if bool(opt("reduce_shake", false)) else 1.0)
 
 
 ## A tell's colour under the colour-blind setting: reds and oranges move to hues that stay apart
 ## from the night palette (1: red-green blindness -> blue/white; 2: blue-yellow -> magenta/white).
 static func tell_color(c: Color) -> Color:
-	match int(opt("colorblind", 0)):
-		1:
+	match int(opt("colorblind", 0)): # settings.gd: 1 deuteranopia, 2 protanopia, 3 tritanopia
+		1, 2:
 			return Color(0.35, 0.65, 1.0).lerp(Color.WHITE, clampf(c.g, 0.0, 1.0) * 0.5)
-		2:
+		3:
 			return Color(1.0, 0.3, 0.75).lerp(Color.WHITE, clampf(c.g, 0.0, 1.0) * 0.5)
 	return c
 

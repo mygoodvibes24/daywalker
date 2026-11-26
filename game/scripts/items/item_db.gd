@@ -9,6 +9,9 @@ extends RefCounted
 ## Flags (any value > 0 turns them on) are handled by progression.gd / loot.gd:
 ##   sunburst  moonsplit  sun_any  reflect  (plus the Vow flags in progression.gd)
 
+const Arsenal = preload("res://scripts/items/arsenal_data.gd")
+const ArsenalMoves = preload("res://scripts/items/arsenal_moves.gd")
+
 enum { COMMON, UNCOMMON, RARE, LEGENDARY }
 
 const RARITY_NAMES := ["Street", "Blooded", "Hallowed", "Eclipse"]
@@ -27,9 +30,12 @@ const STAT_TEXT := {
 	"vs_wolf": "+%d%% damage to werewolves", "finisher": "+%d%% third-strike damage", "tithe_mult": "+%d%% Tithe gained",
 	"loot_luck": "+%d%% find better loot", "dodge_heal": "Perfect dodges heal %d", "kill_heal": "Kills heal %d",
 	"night_dmg": "+%d%% damage at night",
+	# the Arsenal (round 4, items/arsenal.gd)
+	"bleed": "+%d%% Bleed build-up", "poise": "+%d%% stagger", "art_cd": "Weapon Art recharges %d%% faster",
+	"art_dmg": "+%d%% Weapon Art damage", "bleed_heal": "Hemorrhage heals you %d",
 }
 const PERCENT_KEYS := ["dmg", "dmg_taken", "dash_rate", "bite_heal", "sun_heal", "frenzy_time", "speed", "lifesteal",
-	"vs_vamp", "vs_wolf", "finisher", "tithe_mult", "loot_luck", "night_dmg"]
+	"vs_vamp", "vs_wolf", "finisher", "tithe_mult", "loot_luck", "night_dmg", "bleed", "poise", "art_cd", "art_dmg"]
 
 ## Icon per family (one painted icon each; rarity tints it in the UI).
 const FAMILIES := {
@@ -39,6 +45,14 @@ const FAMILIES := {
 	"cleaver": {"label": "Cleaver", "icon": "cleaver"},
 	"longblade": {"label": "Longblade", "icon": "longblade"},
 	"kukri": {"label": "Kukri", "icon": "kukri"},
+	# the Arsenal (round 4): no painted icons yet, _fallback_icon() draws each silhouette
+	"katana": {"label": "Katana", "icon": "katana"},
+	"daggers": {"label": "Twin Stakes", "icon": "daggers"},
+	"greatsword": {"label": "Greatsword", "icon": "greatsword"},
+	"halberd": {"label": "Halberd", "icon": "halberd"},
+	"scythe": {"label": "Scythe", "icon": "scythe"},
+	"hammer": {"label": "War Hammer", "icon": "hammer"},
+	"whip": {"label": "Chain-Whip", "icon": "whip"},
 	"grisgris": {"label": "Gris-gris", "icon": "grisgris"},
 	"rosary": {"label": "Rosary", "icon": "rosary"},
 	"fang": {"label": "Fang", "icon": "fang"},
@@ -58,6 +72,14 @@ const BLADE_LOOK := {
 	"cleaver": {"len": 0.7, "w": 0.16, "col": Color(0.45, 0.45, 0.47), "shape": "cleaver"},
 	"longblade": {"len": 1.35, "w": 0.06, "col": Color(0.95, 0.75, 0.45), "shape": "straight"},
 	"kukri": {"len": 0.65, "w": 0.07, "col": Color(0.7, 0.7, 0.72), "shape": "hooked"},
+	# the Arsenal families (modelled in weapon_forge.gd; len / w are only for the fallback bodies)
+	"katana": {"len": 0.8, "w": 0.034, "col": Color(0.88, 0.9, 0.94), "shape": "curved"},
+	"daggers": {"len": 0.34, "w": 0.036, "col": Color(0.92, 0.88, 0.78), "shape": "straight"},
+	"greatsword": {"len": 1.45, "w": 0.115, "col": Color(0.72, 0.7, 0.68), "shape": "straight"},
+	"halberd": {"len": 1.4, "w": 0.05, "col": Color(0.8, 0.82, 0.86), "shape": "straight"},
+	"scythe": {"len": 1.0, "w": 0.04, "col": Color(0.6, 0.6, 0.64), "shape": "straight"},
+	"hammer": {"len": 0.7, "w": 0.13, "col": Color(0.75, 0.77, 0.82), "shape": "cleaver"},
+	"whip": {"len": 1.5, "w": 0.026, "col": Color(0.7, 0.62, 0.5), "shape": "thin"},
 }
 
 ## kind: blade | charm | vial | flare.  unique = only ever drops at Eclipse rarity, with its own effect.
@@ -83,7 +105,7 @@ const ITEMS := {
 		"mods": {"dmg_taken": -0.08}, "desc": "Thick enough to hide behind."},
 	"bloodletter": {"name": "Bloodletter", "kind": "blade", "family": "kukri", "dmg": 14.0, "spd": 1.15, "reach": 0.0,
 		"mods": {"lifesteal": 0.06}, "desc": "Grooved so the blood runs back up the blade. Toward you."},
-	"belltower_great": {"name": "Bell-Tower Greatsword", "kind": "blade", "family": "longblade", "dmg": 23.0, "spd": 0.75, "reach": 0.8,
+	"belltower_great": {"name": "Bell-Tower Greatsword", "kind": "blade", "family": "greatsword", "dmg": 23.0, "spd": 0.75, "reach": 0.8,
 		"mods": {"finisher": 0.25}, "desc": "Pulled from the cathedral's bell loft. It still rings when it hits."},
 	"nightshift_saber": {"name": "Night-Shift Saber", "kind": "blade", "family": "saber", "dmg": 16.0, "spd": 1.1, "reach": 0.0,
 		"mods": {"bite_heal": 0.2}, "desc": "Wrapped in hospital tape. Somebody kept it by the ER doors."},
@@ -100,6 +122,57 @@ const ITEMS := {
 	"crowes_penance": {"name": "Crowe's Penance", "kind": "blade", "family": "longblade", "dmg": 22.0, "spd": 1.05, "reach": 0.5, "unique": true, "boss_only": true,
 		"mods": {"lifesteal": 0.06, "dodge_heal": 8.0}, "effect": "A duellist's blade: perfect dodges heal 8 blood, and every cut drinks a little.",
 		"desc": "Silas Crowe's pale longblade, from the old Vigil. He carved his own name off the crypt wall with it."},
+	# ------------------------------------------------------------ the Arsenal (round 4): weapon types
+	# (arsenal_data.gd says how each family fights; its Weapon Art comes with the type)
+	"hunter_silver": {"name": "Hunter's Silver Longsword", "kind": "blade", "family": "longblade", "dmg": 17.0, "spd": 0.95, "reach": 0.4,
+		"mods": {"vs_wolf": 0.2}, "desc": "Church silver over a steel core, the way Sol's father would have wanted it. If he'd stayed."},
+	"ronin_katana": {"name": "Ronin's Crescent", "kind": "blade", "family": "katana", "dmg": 13.0, "spd": 1.3, "reach": 0.2,
+		"mods": {"bleed": 0.15}, "desc": "Came off a cargo ship from Osaka with no papers and no owner. It found one."},
+	"lantern_katana": {"name": "Lantern-Street Katana", "kind": "blade", "family": "katana", "dmg": 15.0, "spd": 1.25, "reach": 0.2,
+		"mods": {"night_dmg": 0.12}, "desc": "Its tsuba is a melted streetlamp. It cuts best where the lights are out."},
+	"crimson_tide": {"name": "Crimson Tide", "kind": "blade", "family": "katana", "dmg": 17.0, "spd": 1.35, "reach": 0.3, "unique": true,
+		"mods": {"bleed": 0.5, "bleed_heal": 12.0}, "effect": "Every Hemorrhage you open heals you 12.",
+		"desc": "Folded a thousand times in the river's mud. It drinks, then it shares."},
+	"hawthorn_stakes": {"name": "Hawthorn Stakes", "kind": "blade", "family": "daggers", "dmg": 8.0, "spd": 1.5, "reach": -0.3,
+		"mods": {"vs_vamp": 0.2}, "desc": "Sharpened hawthorn, capped in silver. The oldest answer to the Court, twice over."},
+	"gutter_twins": {"name": "Gutter Twins", "kind": "blade", "family": "daggers", "dmg": 9.0, "spd": 1.45, "reach": -0.3,
+		"mods": {"lifesteal": 0.04}, "desc": "Two knives that never left a Docks alley. Neither did their last owner."},
+	"mothers_needles": {"name": "Grace's Needles", "kind": "blade", "family": "daggers", "dmg": 10.0, "spd": 1.6, "reach": -0.2, "unique": true,
+		"mods": {"art_cd": 0.35, "vs_vamp": 0.3}, "effect": "Your Weapon Art recharges 35% faster.",
+		"desc": "Surgical steel from Port Vesper General, the night of 1979. Sharpened every year since."},
+	"cathedral_slab": {"name": "Cathedral Slab", "kind": "blade", "family": "greatsword", "dmg": 27.0, "spd": 0.7, "reach": 0.9,
+		"mods": {"poise": 0.2}, "desc": "Cut from the altar rail of St. Jerome's. It weighs what a sin weighs."},
+	"noonfall": {"name": "Noonfall", "kind": "blade", "family": "greatsword", "dmg": 30.0, "spd": 0.72, "reach": 1.0, "unique": true,
+		"mods": {"vs_vamp": 0.45, "art_dmg": 0.4}, "effect": "Weapon Arts strike 40% harder.",
+		"desc": "A greatsword that holds the sun at its height. The Court calls it the long afternoon."},
+	"levee_halberd": {"name": "Levee Guard Halberd", "kind": "blade", "family": "halberd", "dmg": 18.0, "spd": 0.9, "reach": 1.2,
+		"mods": {"vs_wolf": 0.15}, "desc": "Issued to the men who held the levee the night the Pack came through. Most of them."},
+	"riverboat_pike": {"name": "Riverboat Pike", "kind": "blade", "family": "halberd", "dmg": 17.0, "spd": 0.95, "reach": 1.4,
+		"mods": {"dmg_taken": -0.05}, "desc": "Kept a paddle-steamer's deck clear for a hundred years. Kept it red."},
+	"jerome_lance": {"name": "St. Jerome's Lance", "kind": "blade", "family": "halberd", "dmg": 21.0, "spd": 0.95, "reach": 1.5, "unique": true,
+		"mods": {"vs_wolf": 0.4, "poise": 0.4}, "effect": "Every thrust carries 40% more stagger.",
+		"desc": "The saint's own, the sacristan swears. The silver on its head was a reliquary."},
+	"canefield_scythe": {"name": "Cane-Field Scythe", "kind": "blade", "family": "scythe", "dmg": 16.0, "spd": 0.95, "reach": 0.9,
+		"mods": {"bleed": 0.15}, "desc": "Harvested sugar for a plantation. The cane remembers. So does the blade."},
+	"gravedigger_scythe": {"name": "Gravedigger's Scythe", "kind": "blade", "family": "scythe", "dmg": 17.0, "spd": 0.9, "reach": 0.9,
+		"mods": {"kill_heal": 3.0}, "desc": "For the weeds on the Cemetery's paths. For whatever crawls out, too."},
+	"last_harvest": {"name": "The Last Harvest", "kind": "blade", "family": "scythe", "dmg": 20.0, "spd": 1.0, "reach": 1.0, "unique": true,
+		"mods": {"bleed": 0.6, "lifesteal": 0.06}, "effect": "Reaps blood: Bleed builds 60% faster and feeds you.",
+		"desc": "Mama Odette won't touch it. She says it was made for one particular neck."},
+	"foundry_maul": {"name": "Foundry Maul", "kind": "blade", "family": "hammer", "dmg": 25.0, "spd": 0.68, "reach": -0.2,
+		"mods": {"poise": 0.15}, "desc": "A rivet hammer from the dead foundry. It still flattens things."},
+	"railspike_hammer": {"name": "Railspike Hammer", "kind": "blade", "family": "hammer", "dmg": 24.0, "spd": 0.72, "reach": -0.2,
+		"mods": {"vs_wolf": 0.2}, "desc": "Drives silver spikes through rail ties, and through anything else that runs on four legs."},
+	"wolfsbane_maul": {"name": "Wolfsbane Maul", "kind": "blade", "family": "hammer", "dmg": 29.0, "spd": 0.7, "reach": 0.0, "unique": true,
+		"mods": {"vs_wolf": 0.6, "poise": 0.5}, "effect": "Breaks the Pack: wolves stagger in half the hits.",
+		"desc": "Silver head, ash haft, a sprig of wolfsbane under the wrap. Wren Hollow has a bounty on it."},
+	"censer_chain": {"name": "Censer Chain", "kind": "blade", "family": "whip", "dmg": 12.0, "spd": 1.1, "reach": 0.0,
+		"mods": {"vs_vamp": 0.2}, "desc": "The thurible's chain from the cathedral, its links filed to edges. Still smells of incense."},
+	"mooring_chain": {"name": "Mooring Chain", "kind": "blade", "family": "whip", "dmg": 13.0, "spd": 1.05, "reach": 0.2,
+		"mods": {"tithe_mult": 0.12}, "desc": "Held a smuggler's boat to the pier. Holds Thralls still now."},
+	"penitent_chain": {"name": "Chain of the Penitent", "kind": "blade", "family": "whip", "dmg": 15.0, "spd": 1.15, "reach": 0.3, "unique": true,
+		"mods": {"vs_vamp": 0.4, "art_cd": 0.25}, "effect": "Burns the Court; Chain Lash recharges 25% faster.",
+		"desc": "A flagellant's chain, set alight at the end of every prayer. It never quite goes out."},
 	# ------------------------------------------------------------ charms (gris-gris)
 	"red_flannel": {"name": "Red Flannel Bag", "kind": "charm", "family": "grisgris", "mods": {"max_hp": 12.0},
 		"desc": "Nine herbs, a lock of hair and a promise, tied in red."},
@@ -180,13 +253,25 @@ static func color(inst: Dictionary) -> Color:
 	return RARITY_COLORS[int(inst.get("r", 0))]
 
 
-## Blade numbers after rarity: {dmg, spd, reach}.
+## Blade numbers after rarity: {dmg, spd, reach}, plus the Arsenal's {type, stagger, affinity, art}
+## (items/arsenal_data.gd: the weapon type the blade's family belongs to).
 static func weapon_stats(inst: Dictionary) -> Dictionary:
 	var d := get_def(inst.get("id", "marrow_silver"))
 	if d.is_empty() or d.kind != "blade":
 		d = ITEMS["marrow_silver"]
 	var r := int(inst.get("r", 0))
-	return {"dmg": d.dmg * DMG_SCALE[r], "spd": d.spd, "reach": d.reach}
+	var tname := Arsenal.type_of_family(d.get("family", "saber"))
+	var t := Arsenal.get_type(tname)
+	return {"dmg": d.dmg * DMG_SCALE[r], "spd": d.spd, "reach": d.reach, "type": tname, "stagger": float(t.stagger),
+		"affinity": String(t.affinity), "art": String(t.art)}
+
+
+## "Katana  ·  Bleed  ·  Art: Blood Wave" for a blade (the Coat, the hub, tooltips).
+static func weapon_line(inst: Dictionary) -> String:
+	var w := weapon_stats(inst)
+	var t := Arsenal.get_type(w.type)
+	var art: Dictionary = ArsenalMoves.ARTS.get(w.art, {})
+	return "%s  ·  %s  ·  Art: %s" % [t.label, String(w.affinity).capitalize(), art.get("name", "—")]
 
 
 ## Stat contributions of an equipped item after rarity.
@@ -233,7 +318,13 @@ static func describe(inst: Dictionary) -> String:
 	match d.kind:
 		"blade":
 			var w := weapon_stats(inst)
-			lines.append("Damage  %d    Speed  %.2f    Reach  %+.1f m" % [roundi(w.dmg), w.spd, w.reach])
+			lines.append("Damage  %d    Speed  %.2f    Reach  %+.1f m    Stagger  %.1f" % [roundi(w.dmg), w.spd, w.reach, w.stagger])
+			var t := Arsenal.get_type(w.type)
+			lines.append("%s  ·  %s" % [t.label, Arsenal.AFFINITY_TEXT.get(w.affinity, "")])
+			var art: Dictionary = ArsenalMoves.ARTS.get(w.art, {})
+			if not art.is_empty():
+				var cost := ("  ·  %d blood" % roundi(art.blood)) if float(art.blood) > 0.0 else ""
+				lines.append("Weapon Art: %s  (%ds%s)  %s" % [art.name, roundi(art.cd), cost, art.desc])
 		"vial":
 			lines.append("Restores %d blood" % roundi(heal_amount(inst)) + ("  ·  eases hunger" if d.get("hunger", 0.0) < 0.0 else ""))
 		"flare":
@@ -336,7 +427,9 @@ static func _fallback_icon(fam: String) -> Texture2D:
 			c = Color(0.7, 0.15, 0.12)
 		"medal", "rosary":
 			c = Color(0.9, 0.75, 0.35)
-	if BLADE_LOOK.has(fam):
+	if Arsenal.FAMILY_TYPE.has(fam) and fam in ["katana", "daggers", "greatsword", "halberd", "scythe", "hammer", "whip"]:
+		_arsenal_icon(img, fam)
+	elif BLADE_LOOK.has(fam):
 		for i in 44:
 			img.fill_rect(Rect2i(10 + i, 52 - i, 4, 4), c)
 	else:
@@ -345,3 +438,59 @@ static func _fallback_icon(fam: String) -> Texture2D:
 				if Vector2(x - 32, y - 32).length() < 16.0:
 					img.set_pixel(x, y, c)
 	return ImageTexture.create_from_image(img)
+
+
+static func _stroke(img: Image, a: Vector2, b: Vector2, w: int, c: Color) -> void:
+	var n := int(maxf(a.distance_to(b), 1.0))
+	for i in n + 1:
+		var p := a.lerp(b, float(i) / n)
+		img.fill_rect(Rect2i(int(p.x) - w / 2, int(p.y) - w / 2, w, w), c)
+
+
+## A silhouette per Arsenal family (steel, dark haft, a little colour), drawn into the 64 px icon.
+static func _arsenal_icon(img: Image, fam: String) -> void:
+	var steel := Color(0.86, 0.88, 0.92)
+	var wood := Color(0.45, 0.28, 0.15)
+	var red := Color(0.7, 0.08, 0.1)
+	var gold := Color(0.85, 0.65, 0.3)
+	match fam:
+		"katana":
+			_stroke(img, Vector2(10, 54), Vector2(20, 44), 5, red)
+			_stroke(img, Vector2(17, 40), Vector2(24, 47), 3, gold)
+			for i in 30:
+				var u := i / 29.0
+				var p := Vector2(22 + u * 32, 42 - u * 32 + sin(u * PI) * 4)
+				img.fill_rect(Rect2i(int(p.x) - 2, int(p.y) - 2, 4, 4), steel)
+		"daggers":
+			for off in [Vector2(0, 0), Vector2(18, 4)]:
+				_stroke(img, Vector2(12, 52) + off, Vector2(18, 44) + off, 5, wood)
+				_stroke(img, Vector2(14, 42) + off, Vector2(20, 48) + off, 3, steel)
+				_stroke(img, Vector2(18, 44) + off, Vector2(34, 22) + off, 4, steel)
+		"greatsword":
+			_stroke(img, Vector2(8, 56), Vector2(16, 48), 5, wood)
+			_stroke(img, Vector2(10, 40), Vector2(24, 54), 5, gold)
+			_stroke(img, Vector2(17, 47), Vector2(56, 8), 9, steel)
+		"halberd":
+			_stroke(img, Vector2(8, 58), Vector2(52, 14), 3, wood)
+			_stroke(img, Vector2(50, 16), Vector2(60, 4), 3, steel)
+			for i in 10:
+				_stroke(img, Vector2(44 - i, 18 - i), Vector2(54 - i, 28 - i), 2, steel)
+		"scythe":
+			_stroke(img, Vector2(14, 60), Vector2(30, 6), 3, wood)
+			for i in 26:
+				var u := i / 25.0
+				var p := Vector2(30 + u * 28, 8 - sin(u * PI) * -6 + u * 18)
+				img.fill_rect(Rect2i(int(p.x) - 2, int(p.y) - 2, 5, int(6 - u * 4)), steel)
+		"hammer":
+			_stroke(img, Vector2(14, 58), Vector2(40, 20), 4, wood)
+			for i in 14:
+				_stroke(img, Vector2(28 + i, 10 + i * 0.6), Vector2(48 + i * 0.3, 28 + i * 0.4), 3, steel)
+			_stroke(img, Vector2(46, 14), Vector2(56, 8), 3, steel)
+		"whip":
+			_stroke(img, Vector2(8, 56), Vector2(18, 46), 5, red)
+			var prev := Vector2(18, 46)
+			for i in 14:
+				var u := (i + 1) / 14.0
+				var p := Vector2(18 + u * 38, 46 - u * 30 + sin(u * 7.0) * 6)
+				_stroke(img, prev, p, 3, steel if i % 2 == 0 else gold)
+				prev = p
