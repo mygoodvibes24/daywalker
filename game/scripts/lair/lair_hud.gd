@@ -116,7 +116,7 @@ func _update_hint() -> void:
 	if not using_pad and t != null and t.enabled:
 		hint.text = "Walk to a station and tap USE"
 	elif using_pad:
-		hint.text = "L stick  move     LT  run     D-pad down  crouch     Y  use     Start  menu"
+		hint.text = "L stick  move     LT  run     D-pad down  crouch     A  use     Start  menu"
 	else:
 		hint.text = "WASD  move     Shift  run     X  crouch     E  use     Esc  menu"
 

@@ -69,6 +69,7 @@ var _cam_tw: Tween
 var _turn := 0
 var _load_threaded := false
 var stations_used := {} # tests: station -> times opened
+var _pad_a_was := false
 
 
 func _ready() -> void:
@@ -177,8 +178,14 @@ func _physics_process(_delta: float) -> void:
 		hud.set_prompt("")
 	else:
 		var st: Dictionary = LairRooms.STATIONS[near]
-		hud.set_prompt("%s   %s   ·   %s" % [hud.key("[Y]", "[E]"), st.label, st.verb])
-	if near != "" and (Input.is_action_just_pressed("interact") or Input.is_action_just_pressed("bite")) and Time.get_ticks_msec() >= ui_block_until:
+		hud.set_prompt("%s   %s   ·   %s" % [hud.key("[A]", "[E]"), st.label, st.verb])
+	player.no_jump = near != "" # pad A uses the station instead of jumping
+	var pad_a := false
+	for d in Input.get_connected_joypads():
+		pad_a = pad_a or Input.is_joy_button_pressed(d, JOY_BUTTON_A)
+	var a_now := pad_a and not _pad_a_was
+	_pad_a_was = pad_a
+	if near != "" and (Input.is_action_just_pressed("interact") or Input.is_action_just_pressed("bite") or a_now) and Time.get_ticks_msec() >= ui_block_until:
 		use_station(near)
 
 

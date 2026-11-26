@@ -112,7 +112,8 @@ var model_root: Node3D # the instanced sol_modular.scn (null on the primitive fa
 ## LAIR: true in Sol's lair (scripts/lair/lair_hub.gd): he walks, runs, crouches, jumps and dodges,
 ## but never draws, swings, parries, bites or locks on; the sword stays on his back.
 var peaceful := false
-var cam_arm := 4.8 # the camera arm's resting length (the lair's low vault wants it shorter)
+var cam_arm := 4.8
+var no_jump := false # LAIR: pad A uses a station when one is in reach, so it doesn't jump then # the camera arm's resting length (the lair's low vault wants it shorter)
 # ---- stamina (round 3, G4): light and fast. Dashes, sprinting, swings and the parry spend it; it comes
 # back after STAMINA_DELAY at stamina_regen/s. Spent to zero he is EXHAUSTED: no sprint, dash or swing
 # until it is back to EXHAUST_RECOVER, refilling slower. A move's cost is its sol_moves.gd "stamina".
@@ -383,7 +384,7 @@ func _physics_process(delta: float) -> void:
 		jumps_left = 2
 	else:
 		velocity.y -= GRAVITY * delta
-	if Input.is_action_just_pressed("jump") and jumps_left > 0 and bite_t <= 0.0 and set_crouch(false):
+	if Input.is_action_just_pressed("jump") and not no_jump and jumps_left > 0 and bite_t <= 0.0 and set_crouch(false):
 		velocity.y = JUMP if jumps_left == 2 else JUMP * 0.85
 		jumps_left -= 1
 
