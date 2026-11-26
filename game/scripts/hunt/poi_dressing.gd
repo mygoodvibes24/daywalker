@@ -6,6 +6,9 @@ extends RefCounted
 const U = preload("res://scripts/util.gd")
 
 static var M := {}
+## POI and deploy-point dressing is hidden beyond this (the map's fog swallows it by then).
+const DRESSING_RANGE := 75.0
+const LABEL_RANGE := 110.0
 
 
 static func mats() -> Dictionary:
@@ -68,6 +71,7 @@ static func label(parent: Node3D, text: String, c: Color, y := 4.0) -> Label3D:
 	l.pixel_size = 0.008
 	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	l.position = Vector3(0, y, 0)
+	l.visibility_range_end = LABEL_RANGE # frame budget: the compass and map carry it further
 	parent.add_child(l)
 	return l
 
@@ -323,10 +327,18 @@ static func merge_parts(root: Node3D, keep: Array) -> void:
 		mi.mesh = mesh
 		mi.material_override = g.key[0]
 		mi.cast_shadow = g.key[1]
+		# frame budget: a POI's dressing is drawn only near it (its label and light read further)
+		mi.visibility_range_end = DRESSING_RANGE
+		mi.visibility_range_end_margin = 6.0
+		mi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 		root.add_child(mi)
 	for mi in done:
 		mi.get_parent().remove_child(mi)
 		mi.free()
+	for gi in root.find_children("*", "GeometryInstance3D", true, false):
+		if not (gi is Label3D) and (gi as GeometryInstance3D).visibility_range_end <= 0.0:
+			(gi as GeometryInstance3D).visibility_range_end = DRESSING_RANGE
+			(gi as GeometryInstance3D).visibility_range_end_margin = 6.0
 
 
 # ---------------------------------------------------------------- POI sets

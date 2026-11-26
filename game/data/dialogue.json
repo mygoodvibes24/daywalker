@@ -40,6 +40,10 @@
   "crowe": {
    "name": "SILAS CROWE",
    "color": "#e8ddd0"
+  },
+  "keeper": {
+   "name": "OLD AMOS",
+   "color": "#b8a98a"
   }
  },
  "lines": [
@@ -702,6 +706,46 @@
    "duration": 1.5,
    "priority": 3,
    "cooldown": 0
+  },
+  {
+   "id": "keeper_1",
+   "speaker": "keeper",
+   "category": "npc",
+   "text": "Mind the hole, son. Dug it fresh tonight, and I ain't digging two.",
+   "audio": "",
+   "duration": 5.2,
+   "priority": 1,
+   "cooldown": 40
+  },
+  {
+   "id": "keeper_2",
+   "speaker": "keeper",
+   "category": "npc",
+   "text": "The crows know before I do. They sit on the ones that won't stay down.",
+   "audio": "",
+   "duration": 5.47,
+   "priority": 1,
+   "cooldown": 40
+  },
+  {
+   "id": "keeper_3",
+   "speaker": "keeper",
+   "category": "npc",
+   "text": "Forty years on the night shift. It's the quiet ones you watch.",
+   "audio": "",
+   "duration": 4.93,
+   "priority": 1,
+   "cooldown": 40
+  },
+  {
+   "id": "keeper_4",
+   "speaker": "keeper",
+   "category": "npc",
+   "text": "Gate stays open till dawn. Don't let anything follow you out.",
+   "audio": "",
+   "duration": 4.87,
+   "priority": 1,
+   "cooldown": 40
   }
  ]
 }

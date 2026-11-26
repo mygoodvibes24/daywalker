@@ -173,9 +173,15 @@ func _set_r(v: float) -> void:
 func _apply() -> void:
 	global_position = center
 	if wall != null:
-		wall.scale = Vector3(radius, 1.0, radius)
+		# V5 (critic R2): once the wall closes round a boss arena it surrounds the camera on every
+		# side, and at full strength it washed the whole fight crimson. Small rings are lower and
+		# thinner, so the arena keeps its night colours and the wall reads as a wall.
+		var k := smoothstep(18.0, 70.0, radius)
+		wall.scale = Vector3(radius, lerpf(0.42, 1.0, k), radius)
+		wall.position.y = HEIGHT * 0.5 * lerpf(0.42, 1.0, k) - 1.0
 		base_ring.scale = Vector3(radius, 40.0, radius)
 		mat.set_shader_parameter("radius", radius)
+		mat.set_shader_parameter("intensity", lerpf(0.5, 1.35, k))
 
 
 ## How far outside the wall a point is (<= 0 inside).

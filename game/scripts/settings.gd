@@ -6,9 +6,10 @@ extends Node
 ##
 ## PERF / SETTINGS API (for the world builders and everyone else):
 ##   Settings.tier               the active graphics preset: 0 Very Low, 1 Low, 2 Medium, 3 High, 4 Custom
-##   Settings.view_distance      0.4..1.0 multiplier on every visibility range (LOD bias) and the camera far
-##   Settings.foliage_density    0..1 share of undergrowth instances drawn
-##   Settings.tree_density       0.3..1 share of trees drawn
+##   Settings.view_distance      metres the world is drawn to (35..200; presets: web 55/75/90/110,
+##                               Forward+ 70/100/130/160, as map/world_quality.gd expects)
+##   Settings.foliage_density    0..1 share of trees, bushes and undergrowth instances drawn
+##   Settings.prop_density       0..1 share of street clutter instances drawn
 ##   Settings.shadow_quality     0 off, 1 low, 2 high
 ##   Settings.vfx_amount         0.2..1 particles / debris multiplier (Settings.vfx_count(n))
 ##   Settings.crowd_density      0.6..1 multiplier on the live enemy cap (Settings.max_enemies(n))
@@ -59,9 +60,9 @@ static var resolution_scale := 1.0 # 3D render scale, 0.5..1.0
 static var dynamic_res := false
 static var shadow_quality := 2
 static var shadow_distance := 70.0 # m
-static var view_distance := 1.0 # LOD bias: x every visibility range, x the camera far
+static var view_distance := 110.0 # metres (map/world_quality.gd: city.gd scales its ranges by it)
 static var foliage_density := 1.0
-static var tree_density := 1.0
+static var prop_density := 1.0
 static var crowd_density := 1.0
 static var fog_quality := 2
 static var post_fx := true
@@ -108,7 +109,7 @@ const SPEC := {
 	"show_fps": ["video", "b"],
 	"tier": ["graphics", "i", 0, 4], "quality": ["video", "i", 0, 2], "resolution_scale": ["video", "f", 0.5, 1.0],
 	"dynamic_res": ["graphics", "b"], "shadow_quality": ["graphics", "i", 0, 2], "shadow_distance": ["graphics", "f", 20.0, 120.0],
-	"view_distance": ["graphics", "f", 0.4, 1.0], "foliage_density": ["graphics", "f", 0.0, 1.0], "tree_density": ["graphics", "f", 0.3, 1.0],
+	"view_distance": ["graphics", "f", 35.0, 200.0], "foliage_density": ["graphics", "f", 0.0, 1.0], "prop_density": ["graphics", "f", 0.2, 1.0],
 	"crowd_density": ["graphics", "f", 0.6, 1.0], "fog_quality": ["graphics", "i", 0, 2], "post_fx": ["graphics", "b"],
 	"ssao": ["graphics", "b"], "rain": ["video", "b"], "aa": ["graphics", "i", 0, 3], "coat_quality": ["graphics", "i", 0, 2],
 	"vfx_amount": ["graphics", "f", 0.2, 1.0], "light_quality": ["graphics", "i", 0, 2], "fps_cap": ["graphics", "i", 0, 2],
@@ -126,24 +127,24 @@ const SPEC := {
 ## The values each preset sets (Custom keeps whatever is there).
 const PRESET_VALUES := [
 	{ # Very Low: the weakest phone GPU
-		"resolution_scale": 0.55, "dynamic_res": true, "shadow_quality": 0, "shadow_distance": 25.0, "view_distance": 0.55,
-		"foliage_density": 0.1, "tree_density": 0.5, "crowd_density": 0.7, "fog_quality": 0, "post_fx": false, "ssao": false,
+		"resolution_scale": 0.55, "dynamic_res": true, "shadow_quality": 0, "shadow_distance": 25.0, 
+		"foliage_density": 0.3, "prop_density": 0.35, "crowd_density": 0.7, "fog_quality": 0, "post_fx": false, "ssao": false,
 		"rain": false, "aa": 0, "coat_quality": 0, "vfx_amount": 0.35, "light_quality": 0, "fps_cap": 0, "quality": 0},
 	{ # Low: phones
-		"resolution_scale": 0.7, "dynamic_res": true, "shadow_quality": 0, "shadow_distance": 35.0, "view_distance": 0.7,
-		"foliage_density": 0.35, "tree_density": 0.75, "crowd_density": 0.85, "fog_quality": 0, "post_fx": false, "ssao": false,
+		"resolution_scale": 0.7, "dynamic_res": true, "shadow_quality": 0, "shadow_distance": 35.0, 
+		"foliage_density": 0.5, "prop_density": 0.6, "crowd_density": 0.85, "fog_quality": 0, "post_fx": false, "ssao": false,
 		"rain": true, "aa": 0, "coat_quality": 1, "vfx_amount": 0.6, "light_quality": 1, "fps_cap": 1, "quality": 0},
 	{ # Medium: laptops, web desktop
-		"resolution_scale": 0.85, "dynamic_res": true, "shadow_quality": 1, "shadow_distance": 50.0, "view_distance": 0.9,
-		"foliage_density": 0.7, "tree_density": 1.0, "crowd_density": 1.0, "fog_quality": 1, "post_fx": true, "ssao": false,
+		"resolution_scale": 0.85, "dynamic_res": true, "shadow_quality": 1, "shadow_distance": 50.0, 
+		"foliage_density": 0.8, "prop_density": 0.85, "crowd_density": 1.0, "fog_quality": 1, "post_fx": true, "ssao": false,
 		"rain": true, "aa": 1, "coat_quality": 2, "vfx_amount": 0.85, "light_quality": 2, "fps_cap": 1, "quality": 1},
 	{ # High: native desktop
-		"resolution_scale": 1.0, "dynamic_res": false, "shadow_quality": 2, "shadow_distance": 70.0, "view_distance": 1.0,
-		"foliage_density": 1.0, "tree_density": 1.0, "crowd_density": 1.0, "fog_quality": 2, "post_fx": true, "ssao": true,
+		"resolution_scale": 1.0, "dynamic_res": false, "shadow_quality": 2, "shadow_distance": 70.0, 
+		"foliage_density": 1.0, "prop_density": 1.0, "crowd_density": 1.0, "fog_quality": 2, "post_fx": true, "ssao": true,
 		"rain": true, "aa": 2, "coat_quality": 2, "vfx_amount": 1.0, "light_quality": 2, "fps_cap": 2, "quality": 2},
 ]
 const GRAPHICS_KEYS := ["resolution_scale", "dynamic_res", "shadow_quality", "shadow_distance", "view_distance",
-	"foliage_density", "tree_density", "crowd_density", "fog_quality", "post_fx", "ssao", "rain", "aa", "coat_quality",
+	"foliage_density", "prop_density", "crowd_density", "fog_quality", "post_fx", "ssao", "rain", "aa", "coat_quality",
 	"vfx_amount", "light_quality", "fps_cap"]
 
 # foliage / tree MultiMeshes by node-name prefix (map/wilds.gd scatter_mm names)
@@ -151,6 +152,19 @@ const FOLIAGE_PREFIX := ["PineBush", "BayouBush", "Grass", "Fern", "Reeds", "Wee
 const TREE_PREFIX := ["Pines", "PineShadows", "PineCards", "Cypress", "CypressShadows", "CypressCards"]
 
 static var defaults := {}
+
+## View distance (m) per preset, as map/world_quality.gd's tables (web / Forward+).
+const VIEW_WEB := [55.0, 75.0, 90.0, 110.0]
+const VIEW_CINEMATIC := [70.0, 100.0, 130.0, 160.0]
+
+
+static func view_table() -> Array:
+	return VIEW_CINEMATIC if cinematic() else VIEW_WEB
+
+
+## The LOD factor for builder-authored visibility ranges (1 at the High view distance).
+static func lod_scale() -> float:
+	return clampf(view_distance / float(view_table()[3]), 0.3, 1.5)
 
 
 static func _me() -> GDScript:
@@ -278,6 +292,7 @@ static func set_tier_values(t: int) -> void:
 	var vals: Dictionary = PRESET_VALUES[tier]
 	for k in vals:
 		me.set(k, vals[k])
+	view_distance = view_table()[tier]
 
 
 ## True if the current graphics values match the preset exactly.
@@ -286,6 +301,8 @@ static func matches_tier(t: int) -> bool:
 		return false
 	var me := _me()
 	var vals: Dictionary = PRESET_VALUES[t]
+	if not is_equal_approx(view_distance, float(view_table()[t])):
+		return false
 	for k in vals:
 		if k == "quality":
 			continue
@@ -728,8 +745,15 @@ func _apply_light(l) -> void:
 		d.directional_shadow_max_distance = shadow_distance
 		d.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL if shadow_quality == 1 else qd[1]
 		return
-	# omni / spot: shadows only on High; fewer lights fade out sooner
+	# omni / spot: shadows only on High; fewer lights fade out sooner (city.gd fades its own lamps
+	# by the view distance; Few / Some cap that further)
 	l.shadow_enabled = b[0] and shadow_quality >= 2
+	if _managed(l):
+		if light_quality < 2:
+			var cap := 22.0 if light_quality == 0 else 45.0
+			l.distance_fade_enabled = true
+			l.distance_fade_begin = minf(l.distance_fade_begin, cap) if l.distance_fade_begin > 0.0 else cap
+		return
 	if light_quality >= 2:
 		l.distance_fade_enabled = b[1]
 		l.distance_fade_begin = b[2]
@@ -745,7 +769,7 @@ func _apply_light(l) -> void:
 ## LOD bias: every visibility range (begin and end, so LOD pairs stay matched) x view_distance;
 ## foliage / tree MultiMeshes draw only their density share of instances.
 func _apply_geo(g) -> void:
-	if not is_instance_valid(g) or not (g is GeometryInstance3D):
+	if not is_instance_valid(g) or not (g is GeometryInstance3D) or _managed(g):
 		return
 	if not g.has_meta("q_vr"):
 		if g.visibility_range_end <= 0.0 and g.visibility_range_begin <= 0.0:
@@ -756,9 +780,9 @@ func _apply_geo(g) -> void:
 	if vr != Vector4.ZERO:
 		# never closer than 40 m (or the builder's own range): camps and landmarks stay in sight;
 		# begin scales by the same factor so LOD pairs (near mesh / far impostor) stay matched
-		var f := view_distance
+		var f := lod_scale()
 		if vr.y > 0.0:
-			f = maxf(view_distance, minf(1.0, 40.0 / vr.y))
+			f = maxf(f, minf(1.0, 40.0 / vr.y))
 		g.visibility_range_begin = vr.x * f
 		g.visibility_range_end = vr.y * f
 	if g is MultiMeshInstance3D and g.multimesh != null:
@@ -770,18 +794,25 @@ func _apply_geo(g) -> void:
 		if dens < 0.0:
 			for p in TREE_PREFIX:
 				if nm.begins_with(p):
-					dens = tree_density
+					dens = foliage_density
 		if dens >= 0.0:
 			var mm: MultiMesh = g.multimesh
 			mm.visible_instance_count = -1 if dens >= 0.999 else int(mm.instance_count * dens)
 
 
-func _apply_camera(c) -> void:
-	if not is_instance_valid(c) or not (c is Camera3D):
-		return
-	if not c.has_meta("q_far"):
-		c.set_meta("q_far", c.far)
-	c.far = maxf(float(c.get_meta("q_far")) * lerpf(0.5, 1.0, inverse_lerp(0.4, 1.0, view_distance)), 60.0)
+## The camera far plane follows the view distance in atmosphere.gd (_set_far); nothing to do here.
+func _apply_camera(_c) -> void:
+	pass
+
+
+## city.gd (and the map builders it runs) scales its own visibility ranges, MultiMesh counts and
+## lamp fades from these settings (map/world_quality.gd, city.gd apply_quality): leave those alone.
+func _managed(n: Node) -> bool:
+	var w := world()
+	if w == null:
+		return false
+	var city := w.get_node_or_null("City")
+	return city != null and city.has_method("apply_quality") and city.is_ancestor_of(n)
 
 
 ## HUD opacity, high contrast and the subtitle style. hud.gd / hunt_hud.gd put their layers in the

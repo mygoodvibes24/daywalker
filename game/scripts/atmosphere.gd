@@ -15,6 +15,10 @@ const PostFxScript = preload("res://scripts/post_fx.gd")
 
 const SOL_LIGHT_LAYER := 1 << 19 # render layer 20: only Sol receives the rim and fill lights
 
+const WEB_LOD_THRESHOLD := 4.0 # px of allowed LOD error (default 1)
+const WQ = preload("res://scripts/map/world_quality.gd")
+var fog_quality := 1.0 # > 1 when the quality tier shortens the view distance
+var _wilds := 0.0 # 0 in the city .. 1 out in the pines and the bayou (north of z -62)
 var tier := "web"
 ## Exposed setting: scales the fog density (the map sets it so landmarks read at range).
 var fog_scale := 1.0
@@ -194,10 +198,33 @@ func _build_sun() -> void:
 		sun.shadow_blur = 1.5
 		sun.light_angular_distance = 0.6 # soft penumbrae (PCSS)
 	else:
-		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-		sun.directional_shadow_max_distance = 50.0
+		# frame budget (web): one orthogonal shadow pass over 40 m instead of two splits over
+		# 50 m; every shadow caster is drawn once per split
+		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+		sun.directional_shadow_max_distance = 40.0
 	sun.light_volumetric_fog_energy = 1.0
 	add_child(sun)
+	apply_quality()
+	var st := get_node_or_null("/root/Settings")
+	if st != null and st.has_signal("changed") and not st.is_connected("changed", apply_quality):
+		st.connect("changed", apply_quality)
+
+
+## Quality tiers (map/world_quality.gd): shadows off on Very Low, a short single pass on the
+## web's Low/Medium; thicker fog when the view distance is cut so the world's edge never shows.
+func apply_quality() -> void:
+	var sq := WQ.shadow_quality()
+	sun.shadow_enabled = sq > 0
+	if not cinematic:
+		sun.directional_shadow_max_distance = minf(40.0 if sq >= 2 else 28.0, float(WQ._read("shadow_distance", 40.0))) # SETTINGS HOOK: shadow distance slider
+	fog_quality = clampf(1.0 / WQ.range_scale(), 1.0, 2.2)
+	if main != null and main.player != null and main.player.camera != null:
+		_set_far(main.player.camera)
+
+
+## Nothing past the fog is worth sending to the GPU (the backdrop and landmarks included).
+func _set_far(cam: Camera3D) -> void:
+	cam.far = clampf(WQ.view_distance() * 5.5, 300.0, 900.0)
 
 
 func _setup_viewport() -> void:
@@ -211,6 +238,8 @@ func _setup_viewport() -> void:
 		RenderingServer.directional_shadow_atlas_set_size(4096, true)
 	else:
 		vp.msaa_3d = Viewport.MSAA_2X
+		# frame budget (web): imported meshes (characters, props) drop to their LODs sooner
+		vp.mesh_lod_threshold = WEB_LOD_THRESHOLD
 
 
 ## The street lamps exist only after main builds the city; dress them the first time we see them.
@@ -293,6 +322,7 @@ func _dress_sol() -> void:
 	fill.light_specular = 0.3
 	fill.position = Vector3(0.4, 0.8, 0.0)
 	p.camera.add_child(fill)
+	_set_far(p.camera)
 	_sol_done = true
 
 
@@ -324,10 +354,14 @@ func update_lighting(d: float, night: float, full_moon: bool) -> void:
 		env.volumetric_fog_emission = glow * night
 		env.volumetric_fog_emission_energy = 1.0
 	else:
-		env.fog_density = lerpf(0.009, 0.016, night) * fog_scale
-	# ambient: cool and present at night so the city never goes pitch black
+		env.fog_density = lerpf(0.009, 0.016, night) * fog_scale * fog_quality
+	# ambient: cool and present at night so the city never goes pitch black; a little more
+	# moon-blue out in the wilds (V8), where the only light is the sky
+	if main != null and main.player != null:
+		var pz: float = main.player.global_position.z
+		_wilds = move_toward(_wilds, clampf((-pz - 62.0) / 30.0, 0.0, 1.0), get_process_delta_time() * 0.5)
 	env.ambient_light_color = Color(0.3, 0.38, 0.6).lerp(Color(0.68, 0.7, 0.76), d)
-	env.ambient_light_energy = lerpf(0.55 if cinematic else 0.6, 0.65, d)
+	env.ambient_light_energy = lerpf(0.55 if cinematic else 0.6, 0.65, d) + 0.25 * _wilds * night
 	env.ambient_light_sky_contribution = 0.0
 	env.tonemap_exposure = (lerpf(1.25, 1.0, d) if cinematic else lerpf(1.3, 1.0, d)) * Settings.brightness
 	env.glow_intensity = lerpf(1.0, 0.45, d) * (1.0 if cinematic else 0.8)
@@ -340,7 +374,8 @@ func update_lighting(d: float, night: float, full_moon: bool) -> void:
 		sky_mat.sun_angle_max = 6.0
 	else:
 		sun.light_color = Color(0.6, 0.7, 1.0) if not full_moon else Color(0.85, 0.82, 0.95)
-		sun.light_energy = (0.7 if full_moon else 0.5)
+		# V8 (critic R2): no street lamps out in the pines and the bayou, so the moon does the work
+		sun.light_energy = (0.7 if full_moon else 0.5) * (1.0 + 0.6 * _wilds)
 		sun.light_volumetric_fog_energy = 1.4
 		sky_mat.sun_angle_max = 9.0 if full_moon else 5.0
 	_update_lightning(night)

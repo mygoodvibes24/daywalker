@@ -33,6 +33,8 @@ static func capsule(r: float, h: float) -> CapsuleMesh:
 	var c := CapsuleMesh.new()
 	c.radius = r
 	c.height = h
+	c.radial_segments = 16 # frame budget: the defaults (64 x 8) cost ~1k triangles a capsule
+	c.rings = 2
 	return c
 
 
@@ -40,6 +42,8 @@ static func sphere(r: float) -> SphereMesh:
 	var s := SphereMesh.new()
 	s.radius = r
 	s.height = r * 2.0
+	s.radial_segments = 16 # frame budget: the defaults (64 x 32) cost 4k triangles a sphere
+	s.rings = 8
 	return s
 
 
@@ -54,6 +58,8 @@ static func cyl(top: float, bottom: float, h: float) -> CylinderMesh:
 	c.top_radius = top
 	c.bottom_radius = bottom
 	c.height = h
+	c.radial_segments = 20 # frame budget: the defaults (64 x 4) cost ~640 triangles a cylinder
+	c.rings = 0
 	return c
 
 

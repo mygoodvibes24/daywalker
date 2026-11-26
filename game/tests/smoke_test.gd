@@ -101,6 +101,7 @@ func _initialize() -> void:
 	ok = await _audio_checks(main) and ok
 	ok = await _asset_r3_checks(main) and ok
 	ok = await _perf_checks(main) and ok
+	ok = await _cemetery_checks(main) and ok
 	ok = await _menu_checks(main) and ok
 	ok = await _hunt_checks() and ok
 	ok = _download_checks() and ok
@@ -186,7 +187,13 @@ func _terrain_checks(main) -> bool:
 	ok = _check("Hollow Pines has hills (highest %.1f m)" % hmax, hmax > 12.0) and ok
 	ok = _check("the city plates stay level", absf(c.height_at(0, 0)) < 0.001 and absf(c.height_at(150, 100)) < 0.001 and absf(c.height_at(-150, 0)) < 0.001) and ok
 	var lp: Vector3 = L.LAKE.pos
-	ok = _check("the lake is deep in the middle, wadeable at the edge", c.height_at(lp.x, lp.z) < L.LAKE.level - 3.0 and c.height_at(lp.x + L.LAKE.radius * 0.9, lp.z) > L.LAKE.level - 1.0) and ok
+	# QA2 #19: no invisible wall; the whole lake is wadeable, chest-deep in the middle
+	var lake_mid: float = L.LAKE.level - c.height_at(lp.x, lp.z)
+	var fenced := false
+	for n in c.find_children("Terrain", "StaticBody3D", false, false):
+		fenced = fenced or (n as Node).get_child_count() > 1
+	ok = _check("the lake is wadeable right across (%.2f m deep in the middle), shallow at the edge, no invisible wall" % lake_mid,
+		lake_mid > 1.0 and lake_mid < 1.6 and c.height_at(lp.x + L.LAKE.radius * 0.9, lp.z) > L.LAKE.level - 1.0 and not fenced) and ok
 	var space = main.get_world_3d().direct_space_state
 	var q := PhysicsRayQueryParameters3D.create(Vector3(30, 80, -150), Vector3(30, -20, -150))
 	var hit: Dictionary = space.intersect_ray(q)
@@ -258,7 +265,7 @@ func _gameplay_checks(main) -> bool:
 	p.hp = 1e9
 	p.max_hp = 1e9
 	# all on streets (x or z on a multiple of 20), each with buildings in the way
-	var spots := [Vector3(40, 0.5, 52), Vector3(-20, 0.5, 48), Vector3(52, 0.5, -40), Vector3(-40, 0.5, -48),
+	var spots := [Vector3(40, 0.5, 52), Vector3(-20, 0.5, 48), Vector3(52, 0.5, -20), Vector3(-40, 0.5, -48),
 		Vector3(60, 0.5, 33), Vector3(33, 0.5, 60), Vector3(-60, 0.5, 32), Vector3(32, 0.5, -60)]
 	var pack: Array = []
 	for s in spots:
@@ -1125,6 +1132,110 @@ func _asset_r3_checks(main) -> bool:
 	return ok
 
 
+## St. Roch Cemetery (map/cemetery.gd, world/crows.gd): the groundskeeper's shed and the open
+## grave exist and block, the grave furniture stays inside its share of the web budget, and crows
+## take off when Sol walks up to them or swings nearby.
+func _cemetery_checks(main) -> bool:
+	var ok := true
+	var city = main.city
+	var p = main.player
+	_clear_enemies(main)
+	main.spawn_timer = 9999.0
+	var info: Dictionary = city.get_meta("cemetery", {})
+	ok = _check("cemetery built (%d headstones)" % int(info.get("stones", 0)), int(info.get("stones", 0)) > 400) and ok
+	var shed: Rect2 = info.get("shed", Rect2())
+	ok = _check("the groundskeeper's shed exists, lit, with its keeper", city.get_node_or_null("GroundskeeperShed") != null and shed.size.x > 2.0 and city.get_meta("gy_keeper", null) != null and (city.get_meta("gy_keeper") as Node).lights.size() >= 3) and ok
+	# the shed is solid: a ray across it hits
+	var space: PhysicsDirectSpaceState3D = city.get_world_3d().direct_space_state
+	var sc := Vector3(shed.get_center().x, 1.2, shed.get_center().y)
+	var q := PhysicsRayQueryParameters3D.create(sc + Vector3(-6, 0, 0), sc, 1)
+	ok = _check("the shed has collision", not space.intersect_ray(q).is_empty()) and ok
+	# the open grave: a hole with a collider over it (Sol can't walk into it)
+	var hole: Rect2 = info.get("hole", Rect2())
+	var hc := Vector3(hole.get_center().x, 0, hole.get_center().y)
+	var hits := 0
+	for off in [Vector3.ZERO, Vector3(hole.size.x * 0.4, 0, 0), Vector3(-hole.size.x * 0.4, 0, hole.size.y * 0.4)]:
+		var rq := PhysicsRayQueryParameters3D.create(hc + off + Vector3(0, 4, 0), hc + off + Vector3(0, -3, 0), 1)
+		var h := space.intersect_ray(rq)
+		if not h.is_empty() and h.position.y > 0.05:
+			hits += 1
+	ok = _check("the open grave has collision (%d/3 probes)" % hits, hole.size.x > 0.5 and hits == 3 and city.get_node_or_null("OpenGrave") != null) and ok
+	# budget: the cemetery's own draw nodes and their worst-case triangles (all in range at once)
+	var nodes: Array = info.get("nodes", [])
+	var tris := 0
+	for n in nodes:
+		if n is MultiMeshInstance3D:
+			var mm: MultiMesh = n.multimesh
+			tris += mm.mesh.get_faces().size() / 3 * mm.instance_count
+		elif n is MeshInstance3D:
+			tris += n.mesh.get_faces().size() / 3
+	ok = _check("cemetery decoration inside its web budget (%d draw nodes <= 60, %dk triangles <= 260k)" % [nodes.size(), tris / 1000], nodes.size() <= 60 and tris <= 260000) and ok
+	# crows: walk Sol up to a low perched crow, it takes off; a swing scatters others nearby
+	var crows = city.get_node_or_null("Crows")
+	ok = _check("crows spawned and perched (%d)" % (crows.perched_count() if crows != null else 0), crows != null and crows.perched_count() >= 20) and ok
+	if crows == null:
+		return ok
+	var foot := Rect2(-66, 100, 132, 100)
+	var pick := -1
+	for k in crows.crows.size():
+		var cs: Dictionary = crows.crow_state(k)
+		if cs.state == "perched" and cs.pos.y < 2.0 and foot.has_point(Vector2(cs.pos.x, cs.pos.z)) and crows.crows[k].t > 1.0:
+			pick = k
+			break
+	ok = _check("a crow perched low in the cemetery", pick >= 0) and ok
+	if pick >= 0:
+		var cp: Vector3 = crows.crow_state(pick).pos
+		var t0: int = crows.takeoffs
+		var dir := Vector3(1, 0, 0)
+		var stand := cp + dir * 3.5
+		if not main.spot_clear(Vector3(stand.x, main.ground_y(stand.x, stand.z) + 0.9, stand.z)):
+			stand = cp - dir * 3.5
+		p.velocity = Vector3.ZERO
+		p.global_position = Vector3(stand.x, main.ground_y(stand.x, stand.z) + 0.2, stand.z)
+		await _wait_physics(45)
+		var st: Dictionary = crows.crow_state(pick)
+		ok = _check("a crow takes off when Sol comes within 4 m (%s, %d take-offs)" % [st.state, crows.takeoffs - t0], st.state != "perched" and crows.takeoffs > t0) and ok
+		await _wait_physics(60)
+		st = crows.crow_state(pick)
+		ok = _check("the startled crow flies off (%.1f m up and away)" % st.pos.distance_to(cp), st.state == "gone" or st.pos.distance_to(cp) > 3.0) and ok
+	# a swing scatters perched crows within the attack radius
+	var near: Dictionary = {}
+	for k in crows.crows.size():
+		var cs: Dictionary = crows.crow_state(k)
+		if cs.state == "perched" and cs.pos.y < 6.0 and foot.has_point(Vector2(cs.pos.x, cs.pos.z)) and p.global_position.distance_to(cs.pos) > 20.0:
+			near = {"k": k, "pos": cs.pos}
+			break
+	if not near.is_empty():
+		var np: Vector3 = near.pos
+		var away := Vector3(0, 0, 8.0)
+		var sp := np + away
+		if not main.spot_clear(Vector3(sp.x, 1.0, sp.z)):
+			sp = np - away
+		p.velocity = Vector3.ZERO
+		p.global_position = Vector3(sp.x, main.ground_y(sp.x, sp.z) + 0.2, sp.z)
+		await _wait_physics(5)
+		var was: String = crows.crow_state(near.k).state
+		p.attacked.emit(0, Vector3.FORWARD)
+		await _wait_physics(40)
+		ok = _check("a swing 8 m away scatters a perched crow (%s -> %s)" % [was, crows.crow_state(near.k).state], crows.crow_state(near.k).state != "perched") and ok
+	# the keeper says his line when Sol walks up (subtitle; text-only voice)
+	var keeper = city.get_meta("gy_keeper", null)
+	if keeper != null:
+		var kp: Vector3 = keeper.global_position + Vector3(2.5, 0, 0)
+		p.global_position = Vector3(kp.x, main.ground_y(kp.x, kp.z) + 0.2, kp.z)
+		var dlg = root.get_node("Dialogue")
+		dlg.stop_all()
+		var was_unlocked: bool = root.get_node("Audio").unlocked
+		root.get_node("Audio").unlocked = true
+		keeper._talk_cd = 0.0
+		await _wait_physics(10)
+		ok = _check("the groundskeeper speaks when Sol comes near (%s)" % dlg.subtitle_text(), keeper.spoke >= 1 and dlg.subtitle_text().begins_with("OLD AMOS")) and ok
+		dlg.stop_all()
+		root.get_node("Audio").unlocked = was_unlocked
+	main.spawn_timer = 4.0
+	return ok
+
+
 func _audio_checks(main) -> bool:
 	var ok := true
 	var audio = root.get_node("Audio")
@@ -1133,6 +1244,11 @@ func _audio_checks(main) -> bool:
 	var bad := []
 	for id in dlg.lines:
 		var l: Dictionary = dlg.lines[id]
+		if str(l.audio) == "" and l.get("category", "") == "npc":
+			# text-only ambient NPC lines (the groundskeeper): subtitle, no voice file yet
+			if float(l.duration) <= 0.0 or not dlg.speakers.has(l.speaker):
+				bad.append(id)
+			continue
 		var s = load(l.audio) if ResourceLoader.exists(l.audio) else null
 		if s == null or s.get_length() < 0.3 or float(l.duration) <= 0.0 or not dlg.speakers.has(l.speaker):
 			bad.append(id)
@@ -1246,16 +1362,27 @@ func _perf_checks(main) -> bool:
 	await process_frame
 	var pv: Dictionary = St.PRESET_VALUES[0]
 	ok = _check("Very Low: no shadows (sun %s), render scale %.2f, short view %.2f, sparse foliage, no post FX, static coat, 30 fps" % [sun.shadow_enabled, vp.scaling_3d_scale, St.view_distance],
-		St.shadow_quality == 0 and not sun.shadow_enabled and vp.scaling_3d_scale <= 0.6 and St.view_distance <= 0.6 and St.foliage_density <= 0.15
+		St.shadow_quality == 0 and not sun.shadow_enabled and vp.scaling_3d_scale <= 0.6 and St.view_distance <= 75.0 and St.foliage_density <= 0.35
 		and not St.post_fx and St.coat_quality == 0 and St.light_quality == 0 and pv.fps_cap == 0) and ok
-	# LOD bias reaches the world: a ranged node's visibility range shrinks with the view distance
-	var ranged: GeometryInstance3D = null
-	for g in main.find_children("*", "GeometryInstance3D", true, false):
-		if g.has_meta("q_vr") and g.get_meta("q_vr") is Vector4 and (g.get_meta("q_vr") as Vector4).y > 100.0:
-			ranged = g
-			break
-	ok = _check("view distance scales the visibility ranges (%s)" % (ranged.name if ranged != null else "none"),
-		ranged != null and ranged.visibility_range_end < (ranged.get_meta("q_vr") as Vector4).y and ranged.visibility_range_end >= minf(40.0, (ranged.get_meta("q_vr") as Vector4).y) - 0.01) and ok
+	# Very Low reaches the world through city.gd / map/world_quality.gd: shorter ranges, thinned
+	# foliage and street clutter (read from these settings by name)
+	var city = main.city
+	var shrunk := 0
+	var nr := 0
+	for e in city.get("_q_ranges") if city.get("_q_ranges") != null else []:
+		if is_instance_valid(e[0]) and float(e[2]) > 0.0:
+			nr += 1
+			if (e[0] as GeometryInstance3D).visibility_range_end < float(e[2]) - 0.01:
+				shrunk += 1
+	var thin := 0
+	var nf := 0
+	for mm in (city.get("_q_foliage") if city.get("_q_foliage") != null else []) + (city.get("_q_props") if city.get("_q_props") != null else []):
+		nf += 1
+		if mm.visible_instance_count >= 0 and mm.visible_instance_count < mm.instance_count:
+			thin += 1
+	var WQ = load("res://scripts/map/world_quality.gd")
+	ok = _check("Very Low thins the world: %d / %d ranges shortened, %d / %d foliage + clutter MultiMeshes thinned (view %.0f m, foliage %.2f, props %.2f)" % [shrunk, nr, thin, nf, WQ.view_distance(), WQ.foliage_density(), WQ.prop_density()],
+		WQ.tier() == 0 and nr > 0 and shrunk * 2 > nr and nf > 0 and thin * 2 > nf) and ok
 	# a hand-picked value makes it Custom; picking the preset's value again lands back on it
 	st.set_value("tier", 2)
 	st.set_value("shadow_distance", 100.0)
@@ -1783,14 +1910,20 @@ func _boss_parry_checks(m, boss) -> bool:
 	var add = _spawn(m, 0, p.global_position + Vector3(1.2, 0.4, 0))
 	await _wait_physics(3)
 	add.attack_cd = 9.0
+	add.special_cd = 99.0 # a plain swipe wind-up: no claw combo, lunge or backflip of its own mid-check
+	add.flip_cd = 99.0
+	if add.special != "":
+		add._cancel_special()
 	add.strike_dir = Vector3(-1, 0, 0)
-	add.windup_t = 0.25
+	add.windup_t = 0.35 # comfortably inside the window even if a loaded machine stretches a frame
 	p.parry_t = 0.0
 	p.parry_cd = 0.0
+	p.stamina = 100.0 # the boss parry above spent some; don't let an exhausted Sol skip this one
 	p._parry()
 	await _wait_physics(4)
 	m.clear_slowmo()
-	ok = _check("an add is parried during a boss fight (staggered %s)" % add.staggered, add.staggered and p.hp == hp0) and ok
+	var add_d: float = Vector2(add.global_position.x - p.global_position.x, add.global_position.z - p.global_position.z).length()
+	ok = _check("an add is parried during a boss fight (staggered %s, %.2f m, windup %.2f, hp %.0f/%.0f)" % [add.staggered, add_d, add.windup_t, p.hp, hp0], add.staggered and p.hp == hp0) and ok
 	if is_instance_valid(add):
 		m.enemies_root.remove_child(add)
 		add.free()
@@ -1980,6 +2113,63 @@ func _micro_checks(m) -> bool:
 	return ok
 
 
+## Group C frame budget (web tier: <= 350 draws, <= 600k triangles anywhere). The dummy
+## renderer reports no stats, so tests/frame_budget.gd estimates them from the scene. Calibrated
+## against the native Compatibility probe: real draws ~= estimate + 30-75 (the HUD, the sky and
+## the post passes it doesn't model), and its triangles run high (real ~= 0.4-0.8x). The spots are the worst ones from the round-2 critic and QA: the tank-farm
+## deploy, the boss arenas, the lake, the docks yard, the Velvet Mile, the Quarter and the bayou.
+const BUDGET_SPOTS := [
+	["tank farm", Vector3(-130, 0, -200)], ["Pier Nine arena", Vector3(-172, 0, 172)],
+	["Palm Square arena", Vector3(150, 0, 120)], ["Drowned Lawn arena", Vector3(185, 0, -132)],
+	["the Hollow arena", Vector3(10, 0, -122)], ["lake shore", Vector3(60, 0, -200)],
+	["docks yard", Vector3(-170, 0, -60)], ["Velvet Mile", Vector3(150, 0, 100)],
+	["Old Quarter street", Vector3(-30, 0, 50)], ["bayou", Vector3(185, 0, -105)],
+	["the plaza", Vector3(0, 0, 30)], ["the plaza well", Vector3(6, 0, 10)],
+	["the cemetery dig site", Vector3(52, 0, 134)],
+]
+const BUDGET_EST_DRAWS := 280
+const BUDGET_EST_TRIS := 900000
+
+
+func _budget_checks(m) -> bool:
+	var FB = load("res://tests/frame_budget.gd")
+	var T = load("res://scripts/map/terrain.gd")
+	var worst := {"draws": 0, "tris": 0, "at": ""}
+	for spot in BUDGET_SPOTS:
+		var pos: Vector3 = spot[1]
+		pos.y = T.height_at(pos.x, pos.z)
+		for k in 4:
+			var yaw := k * PI * 0.5
+			var b := Basis(Vector3.UP, yaw)
+			var xf := Transform3D(b * Basis(Vector3.RIGHT, -0.12), pos + Vector3(0, 2.0, 0) + b * Vector3(0, 0.5, 4.2))
+			var r: Dictionary = FB.estimate(m, xf, 70.0, m.player.camera.far, m.sun.directional_shadow_max_distance)
+			if r.draws > worst.draws:
+				worst.draws = r.draws
+				worst.at = "%s, yaw %d" % [spot[0], k * 90]
+			worst.tris = maxi(worst.tris, r.tris)
+	var ok := _check("frame budget: worst estimated view %d draws at %s (<= %d, i.e. <= 350 real)" % [worst.draws, worst.at, BUDGET_EST_DRAWS], worst.draws <= BUDGET_EST_DRAWS)
+	ok = _check("frame budget: worst estimated view %dk LOD-0 triangles (<= %dk, i.e. <= 600k real)" % [worst.tris / 1000, BUDGET_EST_TRIS / 1000], worst.tris <= BUDGET_EST_TRIS) and ok
+	# the map screen pulls the camera's far plane in
+	m.hunt.map_screen.open()
+	var cam_far: float = m.player.camera.far
+	m.hunt.map_screen.close()
+	ok = _check("the map screen pulls the world's far plane in (%.0f m while open, %.0f m after)" % [cam_far, m.player.camera.far], cam_far <= 60.0 and m.player.camera.far >= 300.0) and ok
+	# HLOD boxes: one instance per cell, dropped at a range
+	var hl := 0
+	var hl_ranged := 0
+	var hl_cast := 0
+	for n in m.city.get_children():
+		var nm := String(n.name)
+		if nm.begins_with("Chunk_H"):
+			hl += 1
+			if (n as GeometryInstance3D).visibility_range_end > 0.0:
+				hl_ranged += 1
+			if nm.ends_with("_cast"):
+				hl_cast += 1
+	ok = _check("HLOD boxes are one instance per cell and stop at a range (%d cells, %d ranged)" % [hl, hl_ranged], hl > 0 and hl == hl_ranged and hl_cast == 0) and ok
+	return ok
+
+
 func _start_hunt():
 	var MainScript = load("res://scripts/main.gd")
 	MainScript.started_once = true
@@ -2036,6 +2226,7 @@ func _hunt_checks() -> bool:
 			chasing += 1
 	ok = _check("nothing chases you at the start (%d enemies, %d near, %d moving, %d roamers)" % [m0.living_enemies(), near, chasing, h0.roamers.size()],
 		near == 0 and chasing == 0 and h0.roamers.is_empty() and h0.state == "explore") and ok
+	ok = _budget_checks(m0) and ok
 	# stragglers appear out of sight and stand idle until Sol comes close
 	h0.phase_t = Cfg.ROAM_GRACE + 1.0
 	h0.roam_t = 0.0

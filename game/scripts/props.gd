@@ -356,6 +356,7 @@ static func _build_multimesh(root: Node3D, name: String, prop: Dictionary, xform
 			if not spec.shadow: # small props vanish into the fog long before the far cells
 				mmi.visibility_range_end = 75.0
 				mmi.visibility_range_end_margin = 5.0
+			preload("res://scripts/map/world_quality.gd").tag_bounds(mmi, list.map(func(xf): return (xf as Transform3D) * local))
 			root.add_child(mmi)
 	return used
 
