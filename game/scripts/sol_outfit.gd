@@ -485,7 +485,7 @@ class SolOutfitSway extends Node:
 		var p := target.global_position
 		var v := (p - last) / delta
 		last = p
-		var local := target.get_parent().global_transform.basis.inverse() * v
+		var local: Vector3 = target.get_parent().global_transform.basis.inverse() * v
 		# accelerate opposite the motion, spring back, damp
 		var acc := Vector2(local.z, -local.x) * 1.6 - ang * 60.0 - vel * 7.0
 		vel += acc * delta

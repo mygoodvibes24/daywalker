@@ -422,7 +422,7 @@ func open_cache(c: Dictionary) -> void:
 func roll_clothing(source: String, force := false) -> String:
 	if main == null or main.get("hunt") == null:
 		return ""
-	var chance := float(CLOTH_CHANCE.get(source, 0.0)) * (1.0 + main.progression.stat("loot_luck"))
+	var chance: float = float(CLOTH_CHANCE.get(source, 0.0)) * (1.0 + main.progression.stat("loot_luck"))
 	if not force and rng.randf() >= chance:
 		return ""
 	var pool: Array = []
