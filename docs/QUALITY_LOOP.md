@@ -39,3 +39,7 @@ Target platform: **Steam** (desktop, mouse/keyboard/gamepad). The web build stay
 | R0 (prototype) | 3 | – | 4 | – | 0 | – | 7 | 5 | 6 | 4 |
 | R1 | 5 | 5 | 5 | 6 | 6 | 4 | 5 | 6 | 3 | 5 |
 | R2 | 5.5 | 5.5 | 6 | 6.5 | 6.5 | 6 | 6 | 6 | 5 | 6 |
+| R3 (old Elden Ring bar, for comparison) | 6 | 6.5 | 7 | 7 | 7.5 | 6.5 | 6 | 6.5 | 6 | 6.5 |
+| **R3** (owner's bar: Until Dawn / Blade / Nightreign, Steam desktop) | 5.5 | 5.5 | 6.5 | 6.5 | 7 | 6.5 | 5 | 6.5 | 6.5 | 6 |
+
+From R3 on, the bar is: **Until Dawn** for realism and atmosphere (Visuals, Characters' look, Story), **the Blade films** for animation and action movement (Characters' motion, Combat feel), and **Elden Ring Nightreign** for gameplay and features (Loop, Combat systems, UI). The target is Steam desktop (mouse and keyboard plus gamepad); phone touch UI is not scored.
