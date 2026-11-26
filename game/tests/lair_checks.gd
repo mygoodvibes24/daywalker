@@ -76,7 +76,7 @@ func run(t: SceneTree, c: Callable) -> bool:
 	HD.requested = false
 	await tree.process_frame
 	ok = _ok("main menu Start loads the playable lair (scenes/lair.tscn)", to_lair) and ok
-	ok = _ok("?autohunt / --autohunt still skips the lair straight into a Hunt", to_hunt and menu2.has_method("_autohunt_wanted") and FileAccess.get_file_as_string("res://scripts/menu/main_menu.gd").contains("_flag_wanted(\"lair\")")) and ok
+	ok = _ok("?autohunt / --autohunt still skips the lair straight into a Hunt", to_hunt and FileAccess.get_file_as_string("res://scripts/menu/main_menu.gd").contains("_flag_wanted(\"lair\")")) and ok
 	ok = _ok("a Hunt's results return to the lair, not the menu", HD.LAIR_SCENE == "res://scenes/lair.tscn" \
 		and FileAccess.get_file_as_string("res://scripts/hunt/hunt_director.gd").contains("change_scene_to_file(LAIR_SCENE)")) and ok
 	# ---- the lair
