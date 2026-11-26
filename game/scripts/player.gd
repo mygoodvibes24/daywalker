@@ -807,8 +807,8 @@ func _attack() -> void:
 	swing_t = 0.22
 	_lunge(float(step.lunge), 0.08)
 	# soft-lock prefers fighting enemies, so you don't kill the one you meant to bite
-	var target = _swing_target()
-	if target == null:
+	var target = _swing_target() if Settings.aim_assist else null # SETTINGS HOOK: aim assist off = no soft lock
+	if target == null and Settings.aim_assist:
 		target = _nearest_enemy(5.0, 1)
 	if target != null:
 		var tt: Vector3 = target.global_position - global_position
@@ -1530,11 +1530,12 @@ func _process(delta: float) -> void:
 	else:
 		camera.h_offset = 0.0
 		camera.v_offset = 0.0
-	var target_fov := 70.0
+	var target_fov: float = Settings.fov # SETTINGS HOOK: field of view (the dash / sprint kicks ride on it)
+	var kick := 0.35 if Settings.reduce_motion else 1.0
 	if dash_t > 0.0:
-		target_fov = 90.0
+		target_fov += 20.0 * kick
 	elif sprinting:
-		target_fov = 78.0
+		target_fov += 8.0 * kick
 	camera.fov = lerpf(camera.fov, target_fov, 10.0 * delta)
 	# the execution: the camera arm pulls in tight, then eases back out
 	if finisher_t > 0.0:

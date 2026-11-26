@@ -15,8 +15,22 @@ func _ready() -> void:
 	font = get_theme_default_font()
 
 
-func _process(_delta: float) -> void:
-	queue_redraw()
+var _last_key := Vector4.INF
+var _redraw_t := 0.0
+
+
+## PERF: redraw only when the view turned or Sol moved (or 4 times a second for the markers),
+## not every frame.
+func _process(delta: float) -> void:
+	_redraw_t -= delta
+	if main == null or main.player == null:
+		return
+	var p = main.player
+	var k := Vector4(p.cam_yaw, p.global_position.x, p.global_position.z, size.x)
+	if _redraw_t <= 0.0 or absf(k.x - _last_key.x) > 0.002 or Vector2(k.y - _last_key.y, k.z - _last_key.z).length() > 0.4 or k.w != _last_key.w:
+		_last_key = k
+		_redraw_t = 0.25
+		queue_redraw()
 
 
 static func heading(v: Vector3) -> float:

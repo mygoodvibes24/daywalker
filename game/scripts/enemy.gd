@@ -175,6 +175,7 @@ var hp_bar_mat: ShaderMaterial
 var engaged_t := 0.0
 # the execution: seconds the victim's half of Sword Judgment still owns his animation
 var exec_t := 0.0
+var _rest_n := 0 # PERF: physics frames spent resting (idle and parked)
 
 
 func _ready() -> void:
@@ -438,6 +439,9 @@ func _process(delta: float) -> void:
 	if cam != null:
 		var d2 := cam.global_position.distance_squared_to(global_position)
 		step = 3 if d2 > 2025.0 else (2 if d2 > 625.0 else 1)
+		# PERF: behind the camera and not right next to it: a slow tick
+		if d2 > 64.0 and (-cam.global_transform.basis.z).dot(global_position - cam.global_position) < 0.0:
+			step = 6
 	if step > 1 and (Engine.get_process_frames() + anim_slot) % step != 0:
 		return
 	if hitstop_t > 0.0:
@@ -702,6 +706,20 @@ func _physics_process(delta: float) -> void:
 	else:
 		main.release_attack_token(self)
 
+	# PERF: an idle, parked enemy (a camp member or straggler waiting for Sol, speed parked at 0)
+	# rests: no avoidance agent, and its body moves only every 6th physics frame
+	if hvel == Vector3.ZERO and knockback == Vector3.ZERO and windup_t <= 0.0 and speed <= 0.0 and is_on_floor() and not staggered:
+		if agent != null and agent.avoidance_enabled:
+			agent.avoidance_enabled = false
+		_rest_n += 1
+		if _rest_n % 6 != 0:
+			_animate(delta, 0.0)
+			_update_bar(player)
+			return
+	else:
+		_rest_n = 0
+		if agent != null and not agent.avoidance_enabled:
+			agent.avoidance_enabled = true
 	_move(hvel, delta)
 	_animate(delta, hvel.length())
 	_update_bar(player)
@@ -1116,7 +1134,8 @@ func _chase(goal: Vector3, to: Vector3, dist: float, delta: float) -> Vector3:
 		return to / dist * speed
 	repath_t -= delta
 	if repath_t <= 0.0:
-		repath_t = 0.25
+		# PERF: path queries staggered (random phase) and rarer for a far chaser
+		repath_t = (0.25 if dist < 20.0 else 0.6) + randf() * 0.08
 		agent.target_position = goal
 	var nxt := agent.get_next_path_position() - global_position
 	nxt.y = 0.0

@@ -216,7 +216,7 @@ func apply_quality() -> void:
 	var sq := WQ.shadow_quality()
 	sun.shadow_enabled = sq > 0
 	if not cinematic:
-		sun.directional_shadow_max_distance = 40.0 if sq >= 2 else 28.0
+		sun.directional_shadow_max_distance = minf(40.0 if sq >= 2 else 28.0, float(WQ._read("shadow_distance", 40.0))) # SETTINGS HOOK: shadow distance slider
 	fog_quality = clampf(1.0 / WQ.range_scale(), 1.0, 2.2)
 	if main != null and main.player != null and main.player.camera != null:
 		_set_far(main.player.camera)
@@ -260,6 +260,8 @@ func _dress_lamps() -> void:
 			l.shadow_enabled = false
 			lamp_cones.append(_cone_for(l))
 	_lamps_done = lamps.size()
+	if Settings.has_method("refresh_lights"):
+		Settings.refresh_lights(lamps) # SETTINGS HOOK: shadows / light distance per the graphics preset
 
 
 ## Web tier: an additive cone under each lamp stands in for volumetric light.
@@ -377,7 +379,7 @@ func update_lighting(d: float, night: float, full_moon: bool) -> void:
 		sun.light_volumetric_fog_energy = 1.4
 		sky_mat.sun_angle_max = 9.0 if full_moon else 5.0
 	_update_lightning(night)
-	sun.light_energy += _flash * 2.5
+	sun.light_energy += _flash * 2.5 * Settings.flash_scale() # SETTINGS HOOK: reduced flashing
 	# practical lights: warm against the cool night
 	var practical := night
 	main.window_mat.emission_energy_multiplier = practical * 1.8
@@ -386,7 +388,7 @@ func update_lighting(d: float, night: float, full_moon: bool) -> void:
 		l.light_energy = practical * (2.6 if cinematic else 2.4)
 		l.visible = practical > 0.02
 	for c in lamp_cones:
-		c.visible = practical > 0.02
+		c.visible = practical > 0.02 and not c.get_meta("q_off", false) # SETTINGS HOOK: fog quality
 	if cone_mat != null:
 		cone_mat.set_shader_parameter("strength", practical)
 	if rim != null:

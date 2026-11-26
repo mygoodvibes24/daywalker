@@ -101,6 +101,7 @@ func _initialize() -> void:
 	ok = await _undercroft_checks(main) and ok
 	ok = await _audio_checks(main) and ok
 	ok = await _asset_r3_checks(main) and ok
+	ok = await _perf_checks(main) and ok
 	ok = await _cemetery_checks(main) and ok
 	ok = await _menu_checks(main) and ok
 	ok = await _hunt_checks() and ok
@@ -1335,6 +1336,153 @@ func _audio_checks(main) -> bool:
 	St.subtitles = keep_sub
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	ok = _check("Voice bus exists", AudioServer.get_bus_index("Voice") >= 0) and ok
+	return ok
+
+
+# ---------------------------------------------------------------- performance, tiers, settings menu
+## PERF: the quality presets set their values and reach the scene, the settings persist, the pause
+## menu opens the shared tabbed panel, Very Low is truly minimal, dynamic resolution reacts, the
+## first-use loads are pre-warmed, and a generous per-frame time guard at a fixed spot.
+func _perf_checks(main) -> bool:
+	var ok := true
+	var St = load("res://scripts/settings.gd")
+	var st = root.get_node("Settings")
+	var keep: Dictionary = St.snapshot()
+	var vp := root.get_viewport()
+	var sun: DirectionalLight3D = main.sun
+	var bad := []
+	for t in 4:
+		st.set_value("tier", t)
+		await process_frame
+		if not (St.tier == t and St.matches_tier(t) and is_equal_approx(vp.scaling_3d_scale, St.PRESET_VALUES[t].resolution_scale)):
+			bad.append(St.PRESETS[t])
+		if Engine.max_fps != [30, 60, 60, 0][t]:
+			bad.append("%s fps %d" % [St.PRESETS[t], Engine.max_fps])
+	ok = _check("each quality preset applies its values %s" % [bad], bad.is_empty()) and ok
+	st.set_value("tier", 0)
+	await process_frame
+	var pv: Dictionary = St.PRESET_VALUES[0]
+	ok = _check("Very Low: no shadows (sun %s), render scale %.2f, short view %.2f, sparse foliage, no post FX, static coat, 30 fps" % [sun.shadow_enabled, vp.scaling_3d_scale, St.view_distance],
+		St.shadow_quality == 0 and not sun.shadow_enabled and vp.scaling_3d_scale <= 0.6 and St.view_distance <= 75.0 and St.foliage_density <= 0.35
+		and not St.post_fx and St.coat_quality == 0 and St.light_quality == 0 and pv.fps_cap == 0) and ok
+	# Very Low reaches the world through city.gd / map/world_quality.gd: shorter ranges, thinned
+	# foliage and street clutter (read from these settings by name)
+	var city = main.city
+	var shrunk := 0
+	var nr := 0
+	for e in city.get("_q_ranges") if city.get("_q_ranges") != null else []:
+		if is_instance_valid(e[0]) and float(e[2]) > 0.0:
+			nr += 1
+			if (e[0] as GeometryInstance3D).visibility_range_end < float(e[2]) - 0.01:
+				shrunk += 1
+	var thin := 0
+	var nf := 0
+	for mm in (city.get("_q_foliage") if city.get("_q_foliage") != null else []) + (city.get("_q_props") if city.get("_q_props") != null else []):
+		nf += 1
+		if mm.visible_instance_count >= 0 and mm.visible_instance_count < mm.instance_count:
+			thin += 1
+	var WQ = load("res://scripts/map/world_quality.gd")
+	ok = _check("Very Low thins the world: %d / %d ranges shortened, %d / %d foliage + clutter MultiMeshes thinned (view %.0f m, foliage %.2f, props %.2f)" % [shrunk, nr, thin, nf, WQ.view_distance(), WQ.foliage_density(), WQ.prop_density()],
+		WQ.tier() == 0 and nr > 0 and shrunk * 2 > nr and nf > 0 and thin * 2 > nf) and ok
+	# a hand-picked value makes it Custom; picking the preset's value again lands back on it
+	st.set_value("tier", 2)
+	st.set_value("shadow_distance", 100.0)
+	var was_custom: bool = St.tier == 4
+	st.set_value("shadow_distance", St.PRESET_VALUES[2].shadow_distance)
+	ok = _check("a hand-picked graphics value makes the preset Custom, and back", was_custom and St.tier == 2) and ok
+	# persist / reload every new key (scratch file)
+	var path := "user://smoke_perf_settings.cfg"
+	st.set_value("tier", 1)
+	St.fov = 88.0
+	St.colorblind = 2
+	St.toggle_sprint = true
+	St.hud_opacity = 0.55
+	St.subtitle_size = 3
+	St.mute_unfocused = false
+	var saved: bool = St.save_settings(path)
+	St.restore(keep)
+	var loaded: bool = St.load_settings(path)
+	ok = _check("settings persist and reload (tier, FOV, colour-blind, toggle sprint, HUD opacity, subtitle size)", saved and loaded and St.tier == 1 and St.matches_tier(1)
+		and is_equal_approx(St.fov, 88.0) and St.colorblind == 2 and St.toggle_sprint and is_equal_approx(St.hud_opacity, 0.55) and St.subtitle_size == 3 and not St.mute_unfocused) and ok
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	ok = _check("colour-blind palette remaps the red telegraph", St.cb(Color(1.0, 0.05, 0.15)) != Color(1.0, 0.05, 0.15) and St.cue("danger").g > 0.3) and ok
+	St.restore(keep)
+	# dynamic resolution: slow frames lower the render scale, steady frames give it back
+	St.dynamic_res = true
+	St.fps_cap = 1
+	St.dyn_scale = 1.0
+	for i in 90:
+		st.feed_frame_time(50.0, 1.0 / 60.0)
+	var low: float = St.dyn_scale
+	for i in 60 * 30:
+		st.feed_frame_time(10.0, 1.0 / 60.0)
+	ok = _check("dynamic resolution reacts (slow -> x%.2f, steady -> x%.2f)" % [low, St.dyn_scale], low < 1.0 and St.dyn_scale > low) and ok
+	St.restore(keep)
+	St.dyn_scale = 1.0
+	st.apply_all()
+	st.apply_graphics()
+	# the pause menu opens the shared tabbed panel; a choice row steps; tabs switch
+	main.ui_block_until = 0
+	main.pause_menu.open()
+	main.pause_menu._show("options")
+	await process_frame
+	var panel = main.pause_menu.options.get_child(0)
+	var t0: int = St.tier
+	var stepped: bool = panel.step_choice("tier", 1)
+	var t1: int = St.tier
+	panel.confirm_revert()
+	ok = _check("the pause menu opens the tabbed options panel (%d tabs), the preset row steps (%d -> %d) and reverts (%d)" % [panel.tab_buttons.size(), t0, t1, St.tier],
+		main.pause_menu.options.visible and panel.is_visible_in_tree() and panel.tab_buttons.size() == 5 and stepped and t1 != t0 and St.tier == t0) and ok
+	panel.show_tab(4)
+	ok = _check("tabs switch (Accessibility shows its rows)", panel.pages[4].visible and not panel.pages[0].visible and panel.row_control("colorblind") != null) and ok
+	panel.show_tab(0)
+	main.pause_menu.close()
+	St.restore(keep)
+	st.apply_all()
+	# pre-warm: every body is loaded before play
+	var PW = load("res://scripts/prewarm.gd")
+	var EnemyS = load("res://scripts/enemy.gd")
+	var BossS = load("res://scripts/hunt/bosses/boss_base.gd")
+	var cold := []
+	for k in EnemyS.ANIM_PATHS:
+		if not EnemyS._scene_cache.has(k):
+			cold.append(k)
+	for k in BossS.ANIM_PATHS:
+		if not BossS._scene_cache.has(k):
+			cold.append(k)
+	ok = _check("pre-warm loaded every body before play %s (%s)" % [cold, str(PW.last_report)], cold.is_empty() and int(PW.last_report.get("resources", 0)) > 5) and ok
+	# per-frame time guard (generous): 8 enemies fighting round Sol at a fixed spot
+	_clear_enemies(main)
+	var p = main.player
+	var keep_hp: Array = [p.hp, p.max_hp, p.global_position, main.time_of_day]
+	p.global_position = main.safe_ground(Vector3(0, 0, 30)) + Vector3(0, 0.2, 0)
+	p.max_hp = 1e9
+	p.hp = 1e9
+	main.time_of_day = 0.9
+	for i in 8:
+		var a := TAU * i / 8.0
+		_spawn(main, i % 2, main.safe_ground(p.global_position + Vector3(cos(a), 0, sin(a)) * 6.0) + Vector3(0, 0.3, 0))
+	for i in 30: await process_frame
+	var frames := PackedFloat32Array()
+	var last := Time.get_ticks_usec()
+	var t_end := Time.get_ticks_msec() + 2000
+	while Time.get_ticks_msec() < t_end:
+		await process_frame
+		var now := Time.get_ticks_usec()
+		frames.append((now - last) / 1000.0)
+		last = now
+	var tot := 0.0
+	for f in frames:
+		tot += f
+	var mean := tot / maxf(frames.size(), 1)
+	frames.sort()
+	var p99: float = frames[mini(int(frames.size() * 0.99), frames.size() - 1)] if frames.size() > 0 else 999.0
+	ok = _check("per-frame time guard: 8 enemies round Sol, mean %.2f ms, p99 %.2f ms over %d frames (limits 25 / 120)" % [mean, p99, frames.size()], mean < 25.0 and p99 < 120.0) and ok
+	_clear_enemies(main)
+	p.max_hp = keep_hp[1]
+	p.hp = keep_hp[0]
+	p.global_position = keep_hp[2]
+	main.time_of_day = keep_hp[3]
 	return ok
 
 

@@ -96,16 +96,30 @@ func _process(_delta: float) -> void:
 		_release_all()
 		# menus get taps as mouse clicks; play gets raw touches only
 		Input.emulate_mouse_from_touch = not active
+		_draw_key = Vector3.ZERO
 		if active and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	pad.visible = active
+	# PERF: redraw only when something changed (a touch, the layout settings), not every frame
 	if active:
-		pad.queue_redraw()
+		var k := Vector3(Settings.touch_size, Settings.touch_opacity, pad.size.x + pad.size.y * 10000.0)
+		if k != _draw_key:
+			_draw_key = k
+			pad.modulate.a = Settings.touch_opacity
+			pad.queue_redraw()
+
+
+var _draw_key := Vector3.ZERO
+
+
+## SETTINGS HOOK: touch control size (Preferences).
+func _k() -> float:
+	return Settings.touch_size
 
 
 func _button_center(b: Dictionary) -> Vector2:
 	var sz := pad.size
-	var p: Vector2 = b.pos
+	var p: Vector2 = b.pos * _k()
 	if b.anchor == "top":
 		return Vector2(sz.x + p.x, p.y)
 	return sz + p
@@ -113,7 +127,7 @@ func _button_center(b: Dictionary) -> Vector2:
 
 func _hit(pos: Vector2) -> Dictionary:
 	for b in buttons:
-		if pos.distance_to(_button_center(b)) <= b.r * 1.2:
+		if pos.distance_to(_button_center(b)) <= b.r * _k() * 1.2:
 			return b
 	return {}
 
@@ -121,6 +135,8 @@ func _hit(pos: Vector2) -> Dictionary:
 func _input(event: InputEvent) -> void:
 	if not active:
 		return
+	if event is InputEventScreenTouch or event is InputEventScreenDrag:
+		pad.queue_redraw()
 	if event is InputEventScreenTouch:
 		var t := event as InputEventScreenTouch
 		get_viewport().set_input_as_handled()
@@ -138,8 +154,8 @@ func _input(event: InputEvent) -> void:
 			if pl.get("lock_target") != null:
 				pl.lock_flick(d.relative.x * 1.5) # locked on: a swipe switches target
 				return
-			pl.cam_yaw -= d.relative.x * LOOK_SPEED * Settings.mouse_sensitivity
-			pl.cam_pitch = clampf(pl.cam_pitch - d.relative.y * LOOK_SPEED * Settings.mouse_sensitivity * Settings.y_sign(), -1.1, 0.35)
+			pl.cam_yaw -= d.relative.x * LOOK_SPEED * Settings.touch_sensitivity
+			pl.cam_pitch = clampf(pl.cam_pitch - d.relative.y * LOOK_SPEED * Settings.touch_sensitivity * Settings.y_sign(), -1.1, 0.35)
 
 
 func _touch_down(idx: int, pos: Vector2) -> void:
@@ -179,9 +195,10 @@ func _touch_up(idx: int) -> void:
 
 
 func _stick_to(pos: Vector2) -> void:
-	var v := (pos - stick_origin) / STICK_RADIUS
+	var sr := STICK_RADIUS * _k()
+	var v := (pos - stick_origin) / sr
 	if v.length() > 1.0:
-		stick_origin = pos - v.normalized() * STICK_RADIUS # the stick base follows the thumb
+		stick_origin = pos - v.normalized() * sr # the stick base follows the thumb
 		v = v.normalized()
 	stick_vec = v
 	_apply_stick()
@@ -239,16 +256,18 @@ func _release_all() -> void:
 func _draw_pad() -> void:
 	var sz := pad.size
 	# the stick: resting ghost bottom-left, or under the thumb
-	var base := stick_origin if stick_finger >= 0 else Vector2(150, sz.y - 150)
+	var kk := _k()
+	var sr := STICK_RADIUS * kk
+	var base := stick_origin if stick_finger >= 0 else Vector2(150.0 * kk, sz.y - 150.0 * kk)
 	var a := 0.5 if stick_finger >= 0 else 0.22
-	pad.draw_circle(base, STICK_RADIUS, Color(INK.r, INK.g, INK.b, a * 0.8))
-	pad.draw_arc(base, STICK_RADIUS, 0.0, TAU, 48, Color(GOLD.r, GOLD.g, GOLD.b, a), 2.0, true)
-	pad.draw_circle(base + stick_vec * STICK_RADIUS, 30.0, Color(0.75, 0.08, 0.1, a + 0.2))
+	pad.draw_circle(base, sr, Color(INK.r, INK.g, INK.b, a * 0.8))
+	pad.draw_arc(base, sr, 0.0, TAU, 48, Color(GOLD.r, GOLD.g, GOLD.b, a), 2.0, true)
+	pad.draw_circle(base + stick_vec * sr, 30.0 * kk, Color(0.75, 0.08, 0.1, a + 0.2))
 	var pressed_ids := held.values()
 	for b in buttons:
 		var c := _button_center(b)
 		var on: bool = b.id in pressed_ids or (b.toggle and sprint_on) or (b.id == "lock" and _main != null and _main.player.get("lock_target") != null)
-		var r: float = b.r
+		var r: float = b.r * kk
 		pad.draw_circle(c, r, Color(0.55, 0.04, 0.07, 0.75) if on else Color(INK.r, INK.g, INK.b, 0.5))
 		pad.draw_arc(c, r, 0.0, TAU, 40, Color(GOLD.r, GOLD.g, GOLD.b, 0.95 if on else 0.6), 2.0, true)
 		var fs := int(clampf(r * 0.42, 12.0, 22.0))
