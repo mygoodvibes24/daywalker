@@ -23,6 +23,14 @@ All on the same 24-joint Meshy rig of Sol's body. The build tool (`game/tools/bu
 | Weapon_Combo_2 | 241 | `sol_mod_anim_weapon_combo2.glb` | the combo for heavy blades (cleaver family), cut into 3 hits |
 | Combat_Stance | 89 | `sol_mod_anim_stance.glb` | combat idle with enemies within 10 m |
 | Right_Hand_Sword_Slash | 219 | `sol_mod_anim_quick_slash.glb` | sprint attack |
+| Heavy_Hammer_Swing | 128 | `sol_mod_anim_hammer_swing.glb` | the Arsenal (round 4): cut into `hammer` (0.3-1.87 s, the full overhead wind-up, slam at 1.55 s) and `hammer_slam` (1.05-1.87 s, just the drop). War hammer chain finisher and heavy, the Leaping Slam art, the plunge landing, the greatsword / cleaver finishers |
+| Axe_Spin_Attack | 238 | `sol_mod_anim_axe_spin.glb` | the Arsenal: cut into `axe_spin` (0.1-1.6 s, a full turn, the sweep at 0.92 s) and `axe_sweep` (0.6-1.35 s, the cut alone). Scythe and halberd sweeps, the chain-whip's circle, the Whirlwind art |
+| Double_Blade_Spin | 91 | `sol_mod_anim_double_spin.glb` | the Arsenal: cut into `dspin` (0.2-1.9 s, a 1.9 m lunging flurry: right 0.45 / spin 0.85 / left 1.35 / right 1.55 s), `dspin_a` and `dspin_b` (its halves). Twin-stake chain hits 3-4 and heavy, the Crimson Flurry dash-through art |
+
+The three Arsenal clips were bought in round 4 for 24 credits (one `3d_rigging` call each, 8 credits, on Sol's body
+model at 1.88 m; jobs d0dbe736 / 8f9f079f / 564f667d). Every other Arsenal move re-cuts and re-times the clips above
+(`game/scripts/items/arsenal_moves.gd` says which clip, window and speed each move uses). The build tool also adds
+a `BladeL` socket in the left fist for the twin stakes.
 
 The 11 MB rig downloads stay out of the repo; `game/tools/strip_rig_glb.gd <src> <dst> anim` makes the ~50 KB skeleton-only files.
 
