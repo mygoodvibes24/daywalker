@@ -33,7 +33,11 @@ Negative prompt:
   2026-11-18 Idle_02 (library id 11, same rig) was added as Sol's standing idle (`sol_mod_anim_idle02.glb`);
   the rig's original look-around idle is kept only as a long-idle fidget (`idle_look`).
   On 2026-11-26 Casual_Walk_inplace (library id 613, same body, 8 credits) was added as the walk
-  (`sol_mod_anim_walk.glb`).
+  (`sol_mod_anim_walk.glb`). The same day two crouch clips followed (same body, Higgsfield `3d_rigging`,
+  8 credits each): Cautious_Crouch_Walk_Forward_inplace (library id 616, job b775afe7-e189-41cb-92fc-440fbf727756)
+  as the crouch walk (`sol_mod_anim_crouch_walk.glb`) and CrouchLookAroundBow (library id 258, job
+  21f86dc5-baf8-46bc-8421-4acc24d8c376) as the crouch idle (`sol_mod_anim_crouch_idle.glb`; its bow arms are
+  replaced at load time, see `scripts/sol_locomotion.gd`).
 - **What ships:** `sol_modular.scn` and the four `sol_sword_*.scn` scenes, plus the extracted texture maps
   (`sol_mod_*_Color/NormalGL/ORM_*`; VRAM compressed, 2048 px max for body, head and coat, 1024 px for the hands
   and swords). The runtime loads nothing else: the `.glb` files are build sources and are excluded from exports.
