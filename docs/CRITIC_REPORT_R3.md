@@ -1,46 +1,62 @@
 # DAYWALKER: Blood and Moon — Critic Report, Round 3
 
 Reviewed: commit `143d4d6` (branch `claude/day-walker-game-concept-mz8vvv`, deployed as `index-143d4d6da0.pck`), 2026-11-26.
-Bar: **Elden Ring and Nightreign** for look, animation, action and gameplay. A 10 means "stands next to Elden Ring". A 5 means "a competent prototype with real assets".
-No game code was changed. Evidence is under `/tmp/claude-0/-home-user-daywalker/dd1b8b5c-f35a-5096-ac5f-5ff9b687f52e/scratchpad/critic_r3/`:
+No game code was changed.
+
+**Evidence** is under `/tmp/claude-0/-home-user-daywalker/dd1b8b5c-f35a-5096-ac5f-5ff9b687f52e/scratchpad/critic_r3/`:
 - `nat/`: native Compatibility captures.
 - `fwd/`: one Forward+ view through lavapipe.
 - `web/`: the deployed build in Playwright.
 - Contact sheets: `sheet_bosses.jpg`, `sheet_sol_a.jpg`, `sheet_sol_b.jpg`, `sheet_arts.jpg`, `sheet_web.jpg`.
 
-I also used the QA round 3 evidence (`scratchpad/qa_r3/`) for the tier views, the Undercroft, the phone and the settings.
+I also used the QA round 3 evidence (`scratchpad/qa_r3/`) for the tier views, the Undercroft and the settings.
 
-**The lair hub and wardrobe are in progress** (another agent is building them). They are noted, not scored.
+## The bar (set by the owner for this round)
+
+| Area | Categories | Compared with |
+|---|---|---|
+| Realism and atmosphere | Visuals, Characters (look), Story and presentation | **Until Dawn**: photoreal faces and performance capture, cinematic framing, volumetric horror lighting. |
+| Animation and action movement | Characters (animation), Combat (feel) | **The Blade films**: aggressive, fluid two-handed sword work, kicks, acrobatic martial-arts flair. |
+| Gameplay and features | Loop, Combat (systems), UI | **Elden Ring Nightreign**: a compact roguelite map, a shrinking ring, relics and build choices, class kits, map events, boss nights. |
+
+**Platform:** the game is headed for **Steam** (desktop, with mouse and keyboard and gamepad). Touch controls are being removed, so phone touch UI is not scored. Web and phone performance still count for testing, but desktop counts more.
+
+**In progress, noted and not scored:** the walkable lair hub and the wardrobe with clothing stat bonuses (another agent).
 
 ## Score table
 
-| # | Category | R2 | R3 | Δ | One-line reason |
+The "old bar" column is how R3 scores against R2's general "Elden Ring" bar, to show real progress. **The R3 score is against the owner's new bar** and goes into the score history. The new bar is harsher on realism and presentation (Until Dawn) and on movement flair (Blade). It is kinder to performance now that desktop is the target.
+
+| # | Category | R2 | R3 (old bar) | **R3** | One-line reason (against the new bar) |
 |---|---|---|---|---|---|
-| 1 | Visuals | 5.5 | **6** | +0.5 | **Up:** the plaza on High now reads as the concept: cathedral, rose window, galleries, sedans. The graveyard, crows, Undercroft crypt and plaza oaks are real places. **Still down:** the asphalt still glitters on Medium and High, the Velvet Mile is grey towers by day, every boss arena is drowned in Curfew red, and Sol is a black shape at night. |
-| 2 | Characters and animation | 5.5 | **6.5** | +1 | **Up:** Marcus and the Abomination have their own bodies and clips. Sol walks, crouches, carries the sword on his back, and draws and re-sheathes it with IK. **Still down:** he T-poses through every Descent, the Alpha, Knight and Abomination keep the lava veins and shield bubble, there is no face animation, and the 9 weapon types are mostly re-timed sword clips. |
-| 3 | Combat and feel | 6 | **7** | +1 | **Up:** lock-on, stamina, a Frenzy that costs, body-language telegraphs, the parry working in boss fights, bleed and poise, and 9 weapon types with Arts and combo routes. **Still down:** a halberd, scythe or whip moves like a sword, the Arts read as a label plus a white bloom disc, and the hit read is a flat orange silhouette. Feel at real frame rate is still unjudged. |
-| 4 | Loop and level design | 6.5 | **7** | +0.5 | **Up:** the Blood Rite (pick 1 of 3), night modifiers, micro-POIs, the Undercroft duel with a named rival, the graveyard, longer streets. **Still down:** no traversal or rooftops, and the Docks and Velvet Mile are still flat corridors. The lair hub isn't scored yet. |
-| 5 | Audio | 6.5 | **7.5** | +1 | **Up:** web audio is fixed. Every boss and the rival have their own hip-hop and industrial theme, and the creature SFX are wired. **Still down:** each theme is a 29–33 s loop (6+ repeats per fight) and nobody has listened to them yet. The crypt is silent, and there are no boss phase lines. |
-| 6 | UI/UX | 6 | **6.5** | +0.5 | **Up:** the 5-tab settings panel is the best UI in the game, and the Rite card, ART button and crouch prompt are clean. **Still down:** the Coat soft-locks on a phone. There's no message queue: DAY 1, the night card, "SITE CLEARED", Art names and the boss intro all stack in the centre. The HUD is still text-heavy, the map is still a schematic, and the boss bar sits on the key strip. |
-| 7 | Story and presentation | 6 | **6** | 0 | **Up:** Silas Crowe gets a name plate, Old Amos has a line, the bosses have names. **Still down:** none of R2's story items landed: no pre-fight beat, no Seraphine, no case files. The first shot of every Hunt is a T-posed hero behind a mirrored sign. |
-| 8 | Code | 6 | **6.5** | +0.5 | **Up:** 355 smoke checks, a CI audio guard, a clean settings API, 12 `class_name`s, typed hunt and UI fields. **Still down:** `city.gd` grew to 4,148 lines, there are 404 `.get()` / `has_method` calls, and lambda-capture and `"m" is null` engine errors remain. |
-| 9 | Web and performance | 5 | **6** | +1 | **Up:** gameplay views went from 500–1,000 draws to 107–295, with tiers, dynamic resolution and pre-warm. **Still down:** the `.pck` grew to 50.9 MB plus 8 MB of gzipped wasm, the map view is the most expensive frame (341–542 draws), there's no cache, and it has never been run on a real phone GPU. |
-| 10 | **Overall** | 6 | **6.5** | +0.5 | A real action-roguelite now: build choices, a weapon arsenal, lock-on and stamina, bespoke bosses with their own music, and a frame budget that fits a phone. The polish layer between systems (the first shot, overlapping text, weapon identity, the red wash) keeps it out of the 7s. |
+| 1 | Visuals | 5.5 | 6 | **5.5** | **Up:** the plaza on High, the graveyard, crows and the candle-lit crypt have real atmosphere. **Still down:** Until Dawn is photoreal, volumetric and close-framed. Here the asphalt glitters, the Velvet Mile is grey slabs, the boss arenas drown in Curfew red, and Sol is a black shape at night. Forward+ (the Steam path) is the moodier look and isn't the default. |
+| 2 | Characters and animation | 5.5 | 6.5 | **5.5** | **Up:** Marcus and the Abomination are real bodies. Sol walks, crouches and draws from his back. **Still down:** against Blade, Sol fights one-handed with library sword clips: no kicks, no two-handed grip, no acrobatics. He T-poses through every Descent. Against Until Dawn, there's no face animation at all. Three bosses still wear lava veins and a pink bubble. |
+| 3 | Combat and feel | 6 | 7 | **6.5** | **Systems (Nightreign) are about 7.5:** lock-on, stamina, a Frenzy that costs, body telegraphs, 9 weapon types, Arts, combo routes, bleed and poise, the Blood Rite. **Movement (Blade) is about 5:** weapons are re-timed sword clips, Arts read as a label plus a white bloom, and the hit read is a flat orange body. No kicks, no aerial moves. |
+| 4 | Loop and level design | 6.5 | 7 | **6.5** | **Up:** the Blood Rite, night modifiers, micro-POIs, the Undercroft rival duel, longer streets. **Still down:** Nightreign has class kits, map events, traversal (spirit springs, climbing) and enterable structures. Here there's one character, no traversal, no enterable buildings (the bayou plantation house is a solid facade), and flat Docks and Velvet Mile corridors. |
+| 5 | Audio | 6.5 | 7.5 | **7** | **Up:** web audio is fixed, every boss and the rival have a hip-hop or industrial theme, and the creature SFX are wired. **Still down:** the themes are 29–33 s loops (6+ repeats per fight) that nobody has heard yet. Sol's voice (preset "Brooks") is too soft for the owner's deep, menacing action-hero brief. The crypt is silent. |
+| 6 | UI/UX (desktop) | 6 | 6.5 | **6.5** | **Up:** the 5-tab settings panel is excellent, and the Rite card is clean. **Still down:** Nightreign's HUD is minimal, but here text stacks in the centre (DAY 1, SITE CLEARED, Art names, the night card over the boss intro). The HUD is all words, the map is a schematic, the boss bar covers the key strip, and there are no gamepad button glyphs. |
+| 7 | Story and presentation | 6 | 6 | **5** | Against Until Dawn's cinematic, performance-captured storytelling, nothing on screen is staged. Bosses never speak before the fight, Seraphine is never seen, there are no cutscenes and no faces move. Silas Crowe is the one good new hook. |
+| 8 | Code | 6 | 6.5 | **6.5** | **Up:** 355 smoke checks, a CI audio guard, a clean settings API, 12 `class_name`s. **Still down:** `city.gd` grew to 4,148 lines, there are 404 `.get()` / `has_method` calls, and engine errors remain. There's no Steam export path yet. |
+| 9 | Web and performance | 5 | 6 | **6.5** | **Up:** gameplay views are down to 107–295 draws, with tiers, dynamic resolution and pre-warm. That's easily fine on a desktop GPU. **Still down:** Forward+ costs 1,034 draws on the plaza with no budget of its own. There's no desktop export preset, the web `.pck` is 50.9 MB, and nothing has been measured on real hardware. |
+| 10 | **Overall** | 6 | 6.5 | **6** | A real action-roguelite with the right systems. Against Until Dawn's presentation and Blade's choreography, the gaps are faces and cinematics, kicks and two-handed flair, and the polish layer: the first-shot T-pose, stacked text, the red haze. |
 
 ### Owner's playtest complaints: status
 
 | Complaint | Status at `143d4d6` | Evidence |
 |---|---|---|
-| Frame rate | **Much better.** Draws are down 2–4×, with tiers from Very Low to High, dynamic resolution and pre-warm. The **map** (341–542 draws) and Forward+ (1,034 draws, 1.05M primitives on the plaza) are still heavy. Not measured on real hardware. | QA3 #8, `fwd/plaza_night.png` |
-| No sound | **Fixed** on desktop and phone after the first gesture. | QA3 summary |
-| Undercroft stairs and a rival | **Done.** A walkable spiral stair, a candle-lit crypt and Silas Crowe. The crypt itself is silent and dark (QA3 #9, #10). | `qa_r3/sheet_undercroft.jpg` |
-| Sword on his back | **Done.** The scabbard on the back, draw and sheathe IK, and per-weapon mounts. | `nat/sol_day_idle_back.png`, `sol_day_resheathed_back.png` |
-| Short streets | **Lengthened.** | Map |
-| Graveyard look and crows | **Done.** Shed, open grave, mausoleum mix and crows. | `qa_r3/nat_views/medium_cemetery.png` |
-| More weapons, moves, combos | **9 types, Arts and combo routes are in.** But most types re-cut the same ~12 sword clips, and the meshes are procedural (see C3). | `sheet_arts.jpg`, `arsenal_moves.gd` |
+| Frame rate | **Much better.** Draws are down 2–4×, with tiers, dynamic resolution and pre-warm. Forward+ (the desktop look) needs its own budget. Not measured on real hardware. | QA3 #8, `fwd/plaza_night.png` |
+| No sound | **Fixed.** | QA3 |
+| Undercroft stairs and a rival | **Done.** The crypt is silent and dark (QA3 #9, #10). | `qa_r3/sheet_undercroft.jpg` |
+| Sword on his back | **Done.** Scabbard, draw and sheathe IK, per-weapon mounts. | `nat/sol_day_idle_back.png`, `sol_day_resheathed_back.png` |
+| Short streets | **Lengthened.** | — |
+| Graveyard look and crows | **Done.** | `qa_r3/nat_views/medium_cemetery.png` |
+| More weapons, moves, combos | **9 types, Arts and routes are in.** But most types re-cut the same ~12 one-handed sword clips on procedural meshes. | `sheet_arts.jpg`, `arsenal_moves.gd` |
 | Settings for weak devices | **Done and good.** | `qa_r3/web_a/a02–a06` |
-| Real walk, crouch, arm at idle | **Done.** Bought walk and crouch clips, relaxed arm. The walk reads as a calm stroll (`sheet_sol_a.jpg`). | `nat/sol_day_walk_*.png`, `sol_day_crouch_*` |
-| Blade-style hip-hop boss music | **In and wired**, six themes. **Not listened to by anyone yet**, and the loops are only 29–33 s (A1). | `assets/audio/music/` |
+| Real walk, crouch, arm at idle | **Done** with the bought clips. A calm stroll and a low creep. | `nat/sol_day_walk_*`, `sol_day_crouch_*` |
+| Blade-style hip-hop boss music | **In and wired**, six themes. **Not listened to yet.** 29–33 s loops. | `assets/audio/music/` |
+| **New:** a more aggressive voice for Sol | **Open.** Sol is Higgsfield preset "Brooks" on `elevenlabs_v4` (24 lines). See A2 and Credits. | `assets/audio/CREDITS.md` |
+| **New:** two-handed swings and kicks | **Open.** None exist. See C2, G1 and Credits. | — |
+| **New:** enter the bayou plantation house, loot inside | **Open.** `wilds.gd:_plantation` places `plantation_facade.glb` as a solid prop. See L2. | `scripts/map/wilds.gd:498` |
 | Lair hub with a wardrobe | **In progress** (another agent). Not scored. | — |
 
 ### R2 fix groups: what landed
@@ -48,211 +64,238 @@ I also used the QA round 3 evidence (`scratchpad/qa_r3/`) for the tier views, th
 | R2 group | Landed | Still open |
 |---|---|---|
 | **A, asset integration** | Creature clips, Marcus and Abomination bodies (decimated to about 17k), Marcus without veins or bubble, the Alpha at 1.35×, boss themes, creature SFX, props and texture library. | The boss **pre-fight beat** (S1). The **Alpha, Knight and Abomination still wear the vein overlay and the shield bubble** (`sheet_bosses.jpg`). |
-| **B, combat and Sol** | Body telegraphs (G1), lock-on (G2), Frenzy cost and stamina (G3, G4), neck, boots and hem texture fixes (C2, C3), blood spray and hit-stop (G7), sheath mounts. | The **hit rim saturates into a flat orange body** (C7 half done). The **scanned head** is still off (`USE_SCANNED_HEAD := false`). G5's dither-fade was replaced by hiding camera blockers. |
-| **C, world and budget** | Frame budget (W1), HLOD, plaza oaks (V6), Velvet neon strips, graveyard and mausoleum (V7), the lake (V4, wadeable, boats). | **V1 glitter asphalt** (still on Medium and High, `qa_r3/nat_views/medium_quarter_st.png`). **V2** Velvet facades (still grey towers). **V3** Docks. **V5** red arena wash. **K1** split `city.gd` (it grew). |
-| **D, UI, story, audio, shell** | `set_boss` music switching (A1). | **Nearly none of it.** No message queue (U1), no HUD diet (U2), no parchment map (U3), no case files (S3), no Seraphine (S2), no service worker (W2). |
-| **E, loop and code** | Blood Rite (L1), modifiers (L4), micro-POIs (L2), dead assets removed (K4), `class_name`s and typing started (K2), `skip_to` boss in the arena (L5), navmesh errors gone on the web (K3). | Navmesh bake at import (W4). |
+| **B, combat and Sol** | Body telegraphs, lock-on, Frenzy cost and stamina, neck, boots and hem fixes, blood spray and hit-stop, sheath mounts. | The **hit rim saturates into a flat orange body**. The **scanned head** is still off. |
+| **C, world and budget** | Frame budget, HLOD, plaza oaks, Velvet neon strips, graveyard and mausoleum, the wadeable lake. | **Glitter asphalt** (third report running), Velvet facades, Docks, **red arena wash**, splitting `city.gd`. |
+| **D, UI, story, audio, shell** | Per-boss music switching. | **Nearly all of it:** the message queue, the HUD diet, the parchment map, case files, Seraphine, the cache. |
+| **E, loop and code** | Blood Rite, modifiers, micro-POIs, dead assets removed, `class_name`s, `skip_to` boss in the arena, the web navmesh errors. | The navmesh bake at import. |
 
 ## How this was reviewed
 
 **Native captures:**
-- Compatibility under xvfb, 1280×720, Medium and High tiers, seed 4242, with a temporary capture script (deleted).
+- Compatibility under xvfb, 1280×720, Medium and High, seed 4242, with a temporary capture script (deleted).
 - What was captured:
-  - Sol close up in daylight: 4 angles, face, walk ×6, run ×4, crouch idle and walk, draw ×6, drawn and re-sheathed.
-  - 7 weapon Arts × 5 frames (katana, greatsword, hammer, scythe, whip, halberd, daggers).
+  - Sol close up: 4 angles, face, walk ×6, run ×4, crouch idle and walk, draw ×6, drawn and re-sheathed.
+  - 7 weapon Arts × 5 frames.
   - All 4 night bosses in the arena: gameplay camera and portrait.
   - The plaza on High.
-- **Forward+:** one plaza view on High through the lavapipe Vulkan driver.
+- **Forward+:** one plaza view on High through lavapipe.
 
 **Web:**
-- The deployed `143d4d6` build in Playwright Chromium (SwiftShader), desktop 1280×720 and Pixel 7 landscape, with `?autohunt&nointro&debug`.
-- Both reached HUNT_READY (94 s desktop, 112 s phone). The console was clean.
+- The deployed `143d4d6` build in Playwright Chromium (SwiftShader), desktop 1280×720 and Pixel 7 landscape.
+- HUNT_READY at 94 s and 112 s. The console was clean.
 - **Download:** `.pck` 50,877,690 bytes, wasm 8.1 MB gzipped.
 
 **Also:**
-- QA round 3's tier views, the Undercroft and phone sheets, and its draw tables.
-- The code paths named below.
-- Boss-music length and loudness with ffprobe and ebur128 (-11.9 to -13.7 LUFS, consistent).
+- QA round 3's sheets and tables, and the code paths cited.
+- Music length and loudness with ffprobe and ebur128.
+- Higgsfield cost quotes for music and voice.
 
 **Limits:**
-- Software rendering runs at about 1 fps, so **feel and timing are judged from code and frame sequences, not from play at speed.** A real-GPU pass is still missing from every round.
-- My boss captures swap tonight's boss in by script, so the night card in those frames names Marcus over other bosses. That part is an artefact. The *stacking* of the night card with the boss intro is real.
+- Software rendering runs at about 1 fps, so **feel and timing are judged from code and frame sequences, not from play at speed.** No round has had a real-GPU pass yet.
+- My boss captures swap tonight's boss in by script, so the night card in those frames names Marcus over other bosses. That part is an artefact. The stacking itself is real.
 
 ---
 
-## 1. Visuals — 6 / 10 (R2: 5.5)
+## 1. Visuals — 5.5 / 10 (against Until Dawn)
 
 **What's good**
-- **The plaza on High** (`nat/plaza_night.png`): the cathedral with its rose window framed down a street of iron galleries, hanging moss, cobbles and 70s sedans. It's the closest frame yet to `01_plaza_night.jpg` and `12_old_quarter_avenue.jpg`.
-- **The graveyard** (`qa_r3/nat_views/medium_cemetery.png`, `medium_shed.png`): varied headstones, crosses, obelisks, iron fencing, the shed with a lit window, and crows. R2's grid of identical boxes is gone.
-- **The Undercroft crypt** (`qa_r3/sheet_undercroft.jpg`): candle clusters, warm stone and a gothic window. It reads as `08_undercroft.jpg` in mood.
-- **The bayou on the phone** (`web/phone_01.png`): cypress, moss and the Curfew glow. A strong silhouette.
-- **Forward+** (`fwd/plaza_night.png`) adds real fog depth and softer light. It's the better look for a desktop build, at 3.5× the draws.
+- **The plaza on High** (`nat/plaza_night.png`): the cathedral and rose window down a street of iron galleries, moss and sedans. The closest frame yet to `01_plaza_night.jpg` and `12_old_quarter_avenue.jpg`.
+- **The graveyard** (`qa_r3/nat_views/medium_cemetery.png`, `medium_shed.png`): varied headstones, obelisks, fencing, a shed with a lit window, and crows. It finally has a horror mood.
+- **The crypt** (`qa_r3/sheet_undercroft.jpg`): candle clusters and warm stone. The most Until-Dawn-like space in the game.
+- **Forward+** (`fwd/plaza_night.png`): real fog depth and softer light. That's the look a Steam build should ship with.
+
+**What Until Dawn has that this doesn't:**
+- volumetric light shafts and fog that catches torchlight;
+- close, low, cinematic camera framing;
+- photoreal skin and cloth;
+- deep blacks with a readable silhouette rim on the character.
 
 **Deductions**
 
 | # | Sev | Where | Evidence | Fix | Effort | Credits |
 |---|---|---|---|---|---|---|
-| V1 | High | `scripts/wet_materials.gd`, `scripts/city.gd` road materials | **Carried over from R2.** Medium and High asphalt and pavements are still white per-pixel glitter (`qa_r3/nat_views/medium_quarter_st.png`, `high_velvet.png` median). Very Low is clean, so it's the wet-specular path. | Roughness ≥0.3 on asphalt. Normal strength ≤0.3. Kill the sparkle noise above Medium or mip-bias it. Use the staged `cracked_asphalt` set with its own roughness map. | S | 0 |
-| V2 | High | `scripts/hunt/hunt_fx.gd` / `atmosphere.gd` (Curfew wall and boss grade) | **Every boss arena is a red-and-pink wash** (`sheet_bosses.jpg`). The Curfew band, a red sky tint and pink floor light make Marcus's crimson coat and the Knight's red veins disappear into the background. | Tint only the sky and the wall. Keep the arena floor and the characters in neutral moonlight. Drop the wall's emissive by 50% inside the boss state. | S | 0 |
-| V3 | High | `scripts/map/velvet.gd`, `city.gd` deco blocks | **Carried over from R2 (V2).** By day the Velvet Mile is grey slab towers with white-square windows. Neon is now a few thin strips (`high_velvet.png`). No marquee, canopies or warm windows, unlike `03_velvet_mile.jpg`. | Lit marquee canopies on the ground floors, cornice bands, sparse warm windows, and banner cards on the lamps. One fan marquee prop (5 credits) or build it procedurally. | M | 0–5 |
-| V4 | Med | Night readability: `player.gd` / `atmosphere.gd` | Sol is a black cut-out at night and backlit (`qa_r3/sheet_sol.jpg`, `fwd/plaza_night.png`, where he disappears entirely). **Owned by the QA-fix agent (QA3 #10).** | A moon rim light parented to the camera that lights only Sol's layer, plus fill light in the crypt. | S | 0 |
-| V5 | Med | Weapon Art VFX: `items/arsenal.gd` `_nova_fx`, `_wave_node` | **Silver Nova blows out a third of the screen as a flat white disc** (`web/desktop_04_art.png`). The other Arts are nearly invisible, a thin trail plus the move's name in the centre (`sheet_arts.jpg`). Elden Ring Arts read through shape, colour and light, not a label. | Per-Art meshes: a crescent wave (katana), a ground crack ring with debris (hammer), a red vortex ribbon (scythe), a chain arc (whip). Use additive alpha with HDR capped at 1.5, no full-screen bloom disc, and drop the name label. | M | 0 |
-| V6 | Med | `scripts/map/docks.gd` | **Carried over from R2 (V3).** The Pier Six deploy is a flat brown expanse with a few pilings (`web/desktop_01.png`). | Container stacks with the rusted texture, sodium floods, a crane silhouette, and wet planks with puddles. | M | 0 |
-| V7 | Low | Forward+ budget | `fwd/plaza_night.png`: 1,034 draws and 1.05M primitives (Compatibility on High: 299 / 337k). | Only matters for a desktop build (see Ceiling). Its own LOD and shadow distance. | M | 0 |
+| V1 | High | Renderer for Steam: `project.godot`, `scripts/settings.gd`, `export_presets.cfg` | The desktop target can use **Forward+**: volumetric fog, SSAO, SSR, glow and soft shadows (`fwd/plaza_night.png` already looks moodier). Today Forward+ is just the project default, with no tier of its own and 1,034 draws on the plaza. | A **desktop Forward+ export preset**. Settings tiers that switch volumetric fog (density 0.02–0.04, light shafts from the lamps and the rose window), SSAO, SSR on wet ground and glow. Its own LOD and shadow budget (target ≤1,500 draws on a GTX 1060). Keep Compatibility for the web test build. | M | 0 |
+| V2 | High | `scripts/wet_materials.gd`, `city.gd` road materials | **Carried over twice.** The asphalt and pavements on Medium and High still glitter white per pixel (`qa_r3/nat_views/medium_quarter_st.png`, `high_velvet.png`). | Roughness ≥0.3, normal ≤0.3, no sparkle noise. On Forward+, let SSR do the wet look instead. | S | 0 |
+| V3 | High | `hunt/hunt_fx.gd` / `atmosphere.gd` | **Every boss arena is a red-and-pink wash** (`sheet_bosses.jpg`). Marcus's crimson coat and the Knight's veins vanish into it. | Tint only the sky and the Curfew wall. Keep the floor and characters in cold moonlight. Cut the wall's emissive by 50% during the boss state. | S | 0 |
+| V4 | High | Character lighting: `player.gd`, `atmosphere.gd` | Sol is a black cut-out at night (`qa_r3/sheet_sol.jpg`) and disappears in Forward+ (`fwd/plaza_night.png`). Until Dawn always rims its characters. **The QA-fix agent owns the basic rim (QA3 #10).** | Beyond the QA fix: a camera-relative key and rim rig on the character layer, with a slightly warm key from the nearest lamp. | S | 0 |
+| V5 | Med | `scripts/map/velvet.gd`, `docks.gd` | The Velvet Mile is grey slabs by day. The Docks deploy is a flat brown plain (`web/desktop_01.png`). | Marquee canopies, sparse warm windows, container stacks with floods. | M | 0 |
+| V6 | Med | `items/arsenal.gd` `_nova_fx`, `_wave_node` | **Silver Nova blows out a third of the screen as a white disc** (`web/desktop_04_art.png`). The other Arts are nearly invisible (`sheet_arts.jpg`). | Per-Art meshes with HDR capped at 1.5, and no name label. | M | 0 |
 
-## 2. Characters and animation — 6.5 / 10 (R2: 5.5)
+## 2. Characters and animation — 5.5 / 10 (looks against Until Dawn, motion against Blade)
 
 **What's good**
-- **Marcus Crane is a character now** (`nat/boss_marcus_portrait.png`): his own tall, pale model in a crimson-lined frock coat, with his own lunge and 4-hit combo, and no veins or bubble. The biggest single gain since R2.
-- **The Abomination** (`boss_abomination_portrait_b.png`) is a 2.8 m bespoke creature with clawed feet, a slam and a roar.
-- **Sol's locomotion:**
-  - a relaxed idle with both arms down (`sol_day_idle_front.png`);
-  - a real stroll (`sol_day_walk_0..5`);
-  - a low crouch creep from the bought clips (`sol_day_crouch_walk_*`);
-  - the blade drawn from the back on attack and re-sheathed after 9 s (`sol_day_draw_*`, `sol_day_resheathed_back.png`).
-- **The face close-up** (`sol_day_face.png`) holds up in daylight: beard, round shades, coat and strap. The R2 neck smear and grey boots are fixed.
+- **Marcus Crane** (`nat/boss_marcus_portrait.png`): his own model in a crimson-lined frock coat, with his own lunge and 4-hit combo. The biggest single gain since R2.
+- **The Abomination** (`boss_abomination_portrait_b.png`): a 2.8 m bespoke creature.
+- **Sol's locomotion:** a relaxed idle, a real stroll, a low crouch creep, and the blade drawn from the back and re-sheathed with IK (`sheet_sol_a.jpg`, `sheet_sol_b.jpg`).
+- **His face in daylight** (`sol_day_face.png`) has a strong identity: beard, round shades, coat.
+
+**Blade comparison:** Blade fights in tight, aggressive bursts:
+- a two-handed sword cut;
+- a spinning back-kick into a slash;
+- a flip over an attacker;
+- a stomp finisher.
+
+Sol's library set is a polite one-handed fencing vocabulary: Triple_Combo, Thrust, Charged, Judgment, Left_Slash. None of the Blade verbs exist.
 
 **Deductions**
 
 | # | Sev | Where | Evidence | Fix | Effort | Credits |
 |---|---|---|---|---|---|---|
-| C1 | High | `scripts/hunt/deploy.gd` | **Sol T-poses through every Descent** (`web/desktop_02.png`, `desktop_03_walk.png` on the rooftop deploy; QA3 #2 on the trail and the boat). It's the first image of every Hunt. **Owned by the QA-fix agent.** | Tick the anim during the Descent with walk (trail, boat) or jump/fall (rooftop, manhole). | S | 0 |
-| C2 | High | `items/arsenal_moves.gd`, `items/weapon_forge.gd` | **The 9 weapon types are re-timed sword clips on procedural meshes.** The halberd thrusts with `thrust` (a sword clip), the scythe and the halberd share `axe_sweep`, and the whip has no lash motion. The katana is a thin rod with a red grip (`nat/art_katana_2.png`). In Elden Ring a weapon class *is* its moveset and silhouette. | (a) Buy 6 library clips that suit the types (see Credits). (b) Model 4 hero weapons (katana, greatsword, halberd, scythe) as real meshes: a Meshy text-to-3D prop at about 5 credits each, or a better procedural forge with a fuller, guard, wrap and bevel. (c) A two-handed grip IK for the polearms and the greatsword (left hand on the haft). | M–L | 48 + 20 |
-| C3 | High | `hunt/bosses/hollow_alpha.gd`, `blood_knight.gd`, `abomination.gd`, `boss_base.gd` | **The lava-vein overlay and the pink shield bubble are still on the Alpha, the Knight and the Abomination** (`sheet_bosses.jpg`). R2 C1 asked for the bubble only during intro invulnerability. | Show the aura only while `intro_t > 0`. Veins off on the Alpha (darker fur and eye glow instead). The Knight gets an emissive mask from his albedo, not the overlay. | S | 0 |
-| C4 | Med | `enemy.gd` hit rim shader (`FX_SHADER`, `rim`) | **The hit read is a flat, solid orange body** for several frames (`sheet_arts.jpg`, every dummy). `r / max(a, 0.001)` saturates the rim to full albedo. It's R2's white flash in orange. | Clamp the rim to a fresnel band (`pow(1 - NdotV, 3)`), at most 0.6 mix, for 60 ms. | S | 0 |
-| C5 | Med | Faces | Still no blinks or jaw movement on Sol, Nia, Marcus or Silas when they speak. | A jaw flap from voice amplitude, plus random blinks. | M | 0 |
-| C6 | Med | Scanned head | `USE_SCANNED_HEAD := false`. The cleanup stage from R2 §2 exists, but the A/B gate never ran. | Finish steps (a)–(f) and the ±30° re-capture. | M | 1 |
-| C7 | Low | Common enemies | Still 3 bodies. | Tint and accessory variants for the elites. | M | 0 |
+| C1 | High | `scripts/hunt/deploy.gd` | **Sol T-poses through every Descent** (`web/desktop_02.png`, `desktop_03_walk.png`, QA3 #2). It's the first image of every Hunt. **QA-fix agent.** | Keep the anim ticking during the Descent. | S | 0 |
+| C2 | High | `tools/build_sol_modular.gd`, `sol_draw_ik.gd`, `items/arsenal_moves.gd` | **No two-handed grip.** The Meshy library has almost no two-handed sword attacks (only `Two_Handed_Parry` 149 and the axe and hammer swings Sol already owns). So two-handed work has to come from **IK**: put the left hand on the hilt below the right fist. | (a) A left-hand two-bone IK target on the blade's grip (`GripPoint` + 0.12 m along −Z), blended in for the katana, greatsword, halberd, scythe and hammer, and for a "two-hand stance" toggle on the longsword (Elden Ring's two-handing). (b) Re-time the owned clips for two hands: `charged`, `hammer`, `axe_spin` and `judgment` already read as two-handed once the left hand holds. (c) Buy `Charged_Axe_Chop` (237) and `Two_Handed_Parry` (149). | M | 16 |
+| C3 | High | New moves: `items/arsenal_moves.gd`, `sol_moves.gd`, `player.gd` | **No kicks or acrobatics.** The library has a good kick set. | Buy Blade verbs, 8 credits each (see Credits): `Spartan_Kick` (206) as a guard-break push kick, `Lunge_Roundhouse_Kick_inplace` (649) as a combo ender, `Backflip_Sweep_Kick_inplace` (604) as an evade-attack, `Sweeping_Kick` (217) as a knockdown, `Rising_Flying_Kick` (422) as a launcher, and `Run_Jump_and_Roll` (459) as the dodge body. Bind the kick to a new input (F, or the pad's B while locked on). The kick staggers and opens the bite. Weave it into the combo routes ("slash, slash, kick"). | M | 48 |
+| C4 | High | `hunt/bosses/hollow_alpha.gd`, `blood_knight.gd`, `abomination.gd`, `boss_base.gd` | **Veins and pink bubble on three bosses** (`sheet_bosses.jpg`). Until Dawn monsters are grounded and real. | Aura only while `intro_t > 0`. No veins on the Alpha. An emissive mask instead of the overlay on the Knight. | S | 0 |
+| C5 | High | Faces: `sol_modular_anim.gd`, the Nia, Marcus and Silas rigs | **No face moves.** Until Dawn's whole presentation rests on faces. | Short term: a jaw flap from the voice amplitude plus blinks (about 40 lines per rig). Medium term: switch on the scanned head (C6) and add ARKit-style blendshapes from a phone capture for Sol and Nia. | M (L for blendshapes) | 0–1 |
+| C6 | Med | Scanned head | `USE_SCANNED_HEAD := false`. The cleanup stage exists, but the A/B gate never ran. | Finish R2 §2's steps (a)–(f) and the ±30° re-capture. | M | 1 |
+| C7 | Med | `enemy.gd` hit rim | **A flat orange body for several frames** (`sheet_arts.jpg`). | A fresnel band (`pow(1 - NdotV, 3)`), at most 0.6 mix, 60 ms. | S | 0 |
+| C8 | Med | `items/weapon_forge.gd` | The procedural weapons read as rods (`nat/art_katana_2.png`). | A better forge (fuller, guard, wrap, bevel), or 4 Meshy hero weapons. | M | 0–20 |
 
-## 3. Combat and feel — 7 / 10 (R2: 6)
+## 3. Combat and feel — 6.5 / 10 (systems against Nightreign, motion against Blade)
 
-**What's good (from code and smoke)**
-- **Stamina** (`player.gd:110`): per-move cost, exhaustion, recovery.
-- **Lock-on** (Q / MMB / the touch LOCK button) with strafe and twist (`sol_strafe.gd`).
-- **Frenzy now costs:** blood drain, more damage taken, no parry, no bite.
-- **Common enemies telegraph with the body** (no decals). Boss decals are faint and colour-blind aware.
-- **Arsenal depth:** bleed and hemorrhage, poise and stagger, affinities, special combo routes (sprint, dash, after a parry), plunges, Blood Rite synergies.
-- **The R2 bugs are gone:** the boss-fight parry, the charged double hit.
+**Systems, about 7.5 against Nightreign** (from code and smoke):
+- **Stamina** with exhaustion; **lock-on** with strafe; **a Frenzy that costs**.
+- **Body telegraphs.**
+- **The arsenal:** 9 types with Arts, combo routes (sprint, dash, after a parry), bleed and hemorrhage, poise and stagger, affinities.
+- **The Blood Rite** with weapon synergies.
+- **The parry** works in boss fights.
 
-**Deductions**
+**Motion, about 5 against Blade:** see C2 and C3. Plus:
 
 | # | Sev | Where | Evidence | Fix | Effort | Credits |
 |---|---|---|---|---|---|---|
-| G1 | High | Weapon identity (C2) | **Up close the arsenal is one sword in nine skins.** Range, speed and poise numbers differ, but the motion and silhouette barely do. This is the gap between "9 weapon types" and "Nightreign weapons". | C2, plus per-type swing SFX (heavy whoosh, chain rattle, polearm thrust). | M | (C2) |
-| G2 | Med | Art feedback (V5) | An Art should be the biggest moment of a fight. It reads as a HUD word plus a bloom. | V5, plus a 120 ms hit-stop and camera kick on the Art's strike, and a unique SFX per Art. | M | 0 |
-| G3 | Med | Boss move sets (`hunt/bosses/*.gd`) | Marcus has his combo and lunge, and the Abomination its slam and roar. The Alpha and the Knight still share the generic dash, slam, swipe and bolt logic. No delayed swings punish panic rolls. | One delayed-swing variant per boss, the Alpha's pounce plus summon roar, and the Knight's riposte stance. | M | 0 |
-| G4 | Med | No dodge-roll | The dash is a Blood Dash blink. Elden Ring's roll, with its i-frames and commitment, is missing as a verb. That's fine for identity, but the dash has no animation of its own. | `Run_Jump_and_Roll` (459) or `Backflip_inplace` (601) as the dash body motion and the back-step. | S | 8 |
-| G5 | Low | Feel at speed | Never judged on a real GPU, in any round. | One owner or real-device session with a short checklist: input latency, hit-stop, camera at lock-on. | S | 0 |
+| G1 | High | Combat verbs: `player.gd`, `sol_moves.gd` | Blade's style is close-quarters aggression: kick to break the guard, cut, flip out. The game has attack, heavy, Art, dash and parry, and nothing that mixes in the body. | (a) **A kick** (C3) that breaks poise and chains into the bite or execution. (b) **An aerial**: a jump attack from the existing jump into a `Rising_Flying_Kick` or plunge. (c) **A wall-flip evade** near walls (optional; `Wall_Flip` 450). (d) Contextual **stomp finishers** on downed enemies (re-cut `Sweeping_Kick`). | M | (C3) |
+| G2 | High | Weapon identity | The 9 types are mostly re-timed one-handed sword clips (`arsenal_moves.gd`: the halberd thrusts with a sword thrust; the scythe and halberd share `axe_sweep`). | Two-hand IK (C2) for the heavy types, the kicks woven into each type's routes, and per-type swing SFX. | M | (C2) |
+| G3 | Med | Art feedback | An Art reads as a HUD word plus a bloom (V6). | Per-Art meshes, a 120 ms hit-stop and camera kick, a unique SFX. | M | 0 |
+| G4 | Med | Boss move sets | The Alpha and the Knight still share the generic logic. There are no delayed swings. | A delayed swing per boss, the Alpha's pounce and summon, the Knight's riposte stance. | M | 0 |
+| G5 | Med | Gamepad feel (Steam) | Never tested on a pad at real frame rate. There's no rumble. | `Input.start_joy_vibration` on hits, parries and Arts. A real-device feel session with a checklist. | S | 0 |
 
-## 4. Loop and level design — 7 / 10 (R2: 6.5)
+## 4. Loop and level design — 6.5 / 10 (against Nightreign)
 
 **What's good**
-- **The Blood Rite** after each boss: 3 offers, one tuned to the carried weapon (`qa_r3/nat_views/blood_rite.png`).
-- **Seeded night modifiers:** Blood Moon, Hunting Party, Ashen Sky.
-- **Micro-POIs** on the map legend.
-- **The Undercroft Depths:** a duel with Silas Crowe, an elite tithe and a kill record. This is Nightreign's "optional lethal encounter".
-- **The graveyard** with Old Amos, longer streets, and a 3-boss pool plus a fixed Final Night.
+- **The Blood Rite** (pick 1 of 3, tuned to the weapon) and **seeded night modifiers**: this is Nightreign's relic and night-condition idea.
+- **Micro-POIs.**
+- **The Undercroft duel** with Silas Crowe (Nightreign's "optional lethal encounter").
+- **The graveyard,** a 3-boss pool plus a Final Night, the Curfew ring.
 
-**Deductions**
+**What Nightreign has that this doesn't:**
+- 8 classes with distinct kits;
+- map events (a meteor, a castle, a shifting earth);
+- fast traversal (spirit springs, wall-climbing);
+- enterable structures with loot (forts, churches, ruins);
+- 3-player co-op.
 
-| # | Sev | Where | Evidence | Fix | Effort | Credits |
-|---|---|---|---|---|---|---|
-| L1 | High | Traversal (R2 L3) | Still no vault, climb or rooftops (`11_rooftops.jpg`). Nightreign's map is about vertical routes and shortcuts. | A sprint-vault onto ledges up to 1.2 m, using `Parkour_Vault_with_Roll_inplace` (651). Two Quarter blocks with walkable roofs, joined by a "blood leap". | M–L | 8 |
-| L2 | Med | Docks and Velvet Mile (R2 L2) | Still flat corridors with POIs as markers. | Container-top cache routes. A club-basement micro-dungeon (`09_blood_den.jpg`) as a second Undercroft-style interior. | M | 0 |
-| L3 | Low | Lair hub | **In progress** (lair agent): walkable hub plus a wardrobe with stat bonuses. | Score next round. Make sure the wardrobe stats feed `stat()` like the Rites do. | — | — |
-
-## 5. Audio — 7.5 / 10 (R2: 6.5)
-
-**What's good**
-- **Web audio works:** silent until a gesture, then menu, Hunt and phone all play (QA3 RMS numbers), guarded by CI.
-- **A theme per boss** plus a rival duel theme and a shared field-boss theme, in one coherent vampire-hunter hip-hop and industrial style. Loudness is consistent (-11.9 to -13.7 LUFS integrated).
-- **Creature SFX** are timed to the new clips.
-
-**Deductions**
+Co-op is out of scope on this stack. The rest is reachable.
 
 | # | Sev | Where | Evidence | Fix | Effort | Credits |
 |---|---|---|---|---|---|---|
-| A1 | High | `assets/audio/music/boss_*.ogg`, `rival_crowe.ogg` | **Every boss theme is 29–33 s** (ffprobe). A 3-minute boss fight hears the same loop 6+ times. The 38 s length was set by the budget left at the time (`docs/assets_r4/LEDGER.md`). **And nobody has listened to them.** | The owner listens first. Then regenerate the 4 night-boss themes and the rival theme at 120 s with the same prompts (7.68 credits each, quoted). Optionally add a phase-2 intensity layer: `audio.gd` crossfades to a second stem below 50% HP. | S | 38.4 |
-| A2 | Med | `audio/audio.gd` (crypt context) | The crypt is near silent (RMS 0.00006). **Owned by the QA-fix agent (QA3 #9).** | A drip and drone bed, and the rival theme when he engages. | S | 0 |
-| A3 | Med | `data/dialogue.json` | Still no boss phase-change lines and no pre-fight exchange (R2 A3, S1). | 10–14 lines: a taunt and a phase line per boss, plus Sol's replies. | S | ~3.5 |
-| A4 | Low | Weapon SFX | All 9 types swing with the same sword SFX. | 4 swing families (blade, heavy, polearm, chain) from the existing hits, pitched and layered with ffmpeg. | S | 0 |
+| L1 | High | Traversal | No vault, climb or rooftops. | A sprint-vault with `Parkour_Vault_with_Roll_inplace` (651). Walkable roofs on 2 Quarter blocks. A "blood leap" between them. | M–L | 8 |
+| L2 | High | **The Belle Rive plantation house (owner request)**: `scripts/map/wilds.gd:_plantation`, new `scripts/map/plantation_interior.gd` | It's a solid `plantation_facade.glb` prop on the Drowned Lawn. The owner wants to go inside a two-storey white house and find loot. | **Build it like the Undercroft:** reuse `undercroft.gd`'s `Geo` kit (boxes, beams, shafts, merged per material, ≤40 meshes, ≤8 unshadowed lights).<br>- **Floors:** a ground-floor hall with a **grand double staircase**, a parlour and a dining room; an upper landing with 2–3 bedrooms and a balcony onto the columns.<br>- **Ruin and dressing:** a partly flooded ground floor (the bayou water plane reaches inside), collapsed ceiling holes with moonlight shafts, peeling wallpaper, dust sheets on furniture, a chandelier.<br>- **Loot:** a POI type `"manor"` via `register_poi`, with 3–5 loot coffins and chests (`loot.gd`), one rare-tier guaranteed upstairs, guarded by a vampire nest or a ghoul ambush, plus one locked room that opens after the guard dies.<br>- **Door:** cut the doorway into the facade (or replace the facade with a procedural shell matched to it) and add a `contains()` check for the interior grade and ambience, as `undercroft.gd` does.<br>- **Mood:** Until Dawn in miniature. Creaking SFX, lightning flashes through the windows, a candle path. | L | 0 (optional: chandelier and 4-poster bed props, about 10) |
+| L3 | Med | Docks and Velvet Mile | Flat corridors. | Container-top caches, and a club-basement interior (`09_blood_den.jpg`) using the same interior kit as L2. | M | 0 |
+| L4 | Med | Map events | Every night is the same structure plus a modifier. | One roaming map event per Hunt (Nightreign style): a "Blood Moon procession" convoy to ambush, or a burning church to loot before it collapses. Reuse POI and site APIs. | M | 0 |
+| L5 | Low | Lair hub | **In progress** (lair agent). | Make sure the wardrobe stats feed `stat()` like the Rites do. | — | — |
 
-## 6. UI/UX — 6.5 / 10 (R2: 6)
+## 5. Audio — 7 / 10
 
-**What's good**
-- **The Options panel:** 5 tabs, fits 720p and the phone, opens from the menu and from pause, with live presets.
-- **The Blood Rite card layout,** the ART button with its cooldown ring, and the crouch and walk prompts.
-- The Coat and Vigil remain the most Elden-Ring-like screens.
-
-**Deductions**
-
-| # | Sev | Where | Evidence | Fix | Effort | Credits |
-|---|---|---|---|---|---|---|
-| U1 | High | `ui/inventory_ui.gd` | **The Coat soft-locks the phone** (QA3 #1). **Owned by the QA-fix agent.** | Fit the panel to the viewport and add a ✕ button. | S | 0 |
-| U2 | High | `hud.gd` announce, `hunt/hunt_story.gd` card, `items/arsenal.gd` Art label, the boss title | **No message queue (R2 U1, still open).** In one frame (`nat/art_katana_2.png`): "DAY 1 / The Curfew falls at dusk", "BLOOD MARKET CLEARED" and "HEMORRHAGE", all centred over Sol. At the boss intro, the night card, the boss name, the boss subtitle and the boss bar stack (`sheet_bosses.jpg`). | One queue, one slot each: the centre for one big line at a time, the top-left for the night card (4 s, then collapse; QA3 #5), and the bottom for the boss name. Status words like HEMORRHAGE go over the enemy as a small world label. | S–M | 0 |
-| U3 | Med | `hud.gd` key-hint strip vs the boss bar | **The boss health bar is drawn over the key-hint strip** ("SPAC…" is cut, `boss_marcus_portrait.png`). | Hide the key strip in the boss state, or once its 30 s fade has passed. | S | 0 |
-| U4 | Med | `hud.gd` (R2 U2) | The HUD is still all words: BLOOD, HUNGER, DAYWALKER (sunlight heals you), DASH 3/3, RANK, TITHE, REVIVES, Bosses slain, Sites cleared, Kills. | Bars without labels, dash pips, Tithe bottom-right, and the counters only on the map or pause screen. | M | 0 |
-| U5 | Med | `ui/map_screen.gd` (R2 U3) | Still flat coloured rectangles (`qa_r3/web_e/e05_map.png`). It's also the most expensive frame (QA3 #8, owned by the QA-fix agent for the draws). | One `_draw()` canvas over a baked top-down parchment texture. That fixes the look and the draws together, so coordinate with the QA-fix agent. | M | 0 |
-| U6 | Low | `hunt/poi_dressing.gd` | The mirrored, floating "HOLLOW PINES" sign. **QA-fix agent (QA3 #3).** | — | S | 0 |
-
-## 7. Story and presentation — 6 / 10 (R2: 6)
-
-**What's good:** Silas Crowe as a pale rival daywalker is the strongest new story hook. The night cards still give each hunt a motive, and the menu lair still sets the tone (the lair hub will replace the text hub).
-
-**Deductions**
+**What's good:**
+- **Web audio is fixed.**
+- **A coherent hip-hop and industrial theme per boss and the rival,** at consistent loudness (-11.9 to -13.7 LUFS integrated).
+- **Creature SFX** are timed to the clips.
 
 | # | Sev | Where | Evidence | Fix | Effort | Credits |
 |---|---|---|---|---|---|---|
-| S1 | High | `boss_base.gd`, `hunt_director._spawn_boss` | **No pre-fight beat** (R2 S1, never built). The boss name appears over a gameplay camera, and the fight starts. | 4–6 s: a camera cut to the boss (roar or idle clip), one taunt, Sol's reply, then the bar. Marcus and the Abomination have the clips for it now. | M | (A3) |
-| S2 | Med | Seraphine | Still never on screen. | A rooftop silhouette over the Final arena with red eyes, plus 2 lines. | S–M | 0 |
-| S3 | Med | Meta | Still no case files, and wins add nothing to the story. | A case file per boss kill in the lair hub (a natural fit for the lair agent's work: a board in the hub). | S | 1.5 |
-| S4 | Med | Silas Crowe | A great hook with no follow-up: one duel, a name plate. | 3 lines before the duel, 1 after. His kill record unlocks a lair-hub item. | S | ~1 |
+| A1 | High | `assets/audio/music/boss_*.ogg`, `rival_crowe.ogg` | **Every theme is 29–33 s** (ffprobe), so a 3-minute fight repeats it 6+ times. **No one has listened to them.** | The owner listens first. Then 120 s versions of the 4 night-boss themes (7.68 each, quoted on `elevenlabs_music_v2`), the rival optional, plus a phase-2 crossfade below 50% HP in `audio.gd`. | S | 30.72 (+7.68) |
+| A2 | High | **Sol's voice (owner request)**: `assets/audio/voice/*`, `data/dialogue.json`, `assets/audio/CREDITS.md` | Sol is preset **Brooks** on `elevenlabs_v4`, with 24 lines. The owner wants a deep, menacing, gravelly action-hero delivery. | (1) **Audition** 3 deeper male presets with one line each: candidates by name are **Gideon, Knox, Barrett** (also Orion, Bram, Xavier). Use v4 delivery tags such as `[low, gravelly, menacing]` and present the takes to the owner. (2) **Regenerate all 24 Sol lines** with the chosen voice. Re-write the softer ones ("Sounds about right. Did it say thank you?") into clipped threats. (3) **Add combat efforts** (kick grunts, the Art shout, a parry exhale): 10 short lines. (4) Pitch-check against Nia and Marcus so the cast stays distinct. | S | about 18 (0.46 per short line, quoted) |
+| A3 | Med | `data/dialogue.json` | No boss phase lines and no pre-fight exchange. | 14 lines: a taunt and a phase line per boss, plus Sol's replies (in the new voice). | S | about 6.5 |
+| A4 | Med | `audio/audio.gd` | The crypt is silent. **QA-fix agent (QA3 #9).** | A drip and drone bed. | S | 0 |
+| A5 | Low | Weapon and kick SFX | All 9 types share the sword SFX, and kicks would need impact sounds. | 4 swing families plus a body-impact layer, made with ffmpeg from the existing hits. | S | 0 |
 
-## 8. Code — 6.5 / 10 (R2: 6)
+## 6. UI/UX (desktop) — 6.5 / 10 (against Nightreign)
+
+**What's good:**
+- **The Options panel** (5 tabs, live presets).
+- **The Blood Rite card.**
+- The Coat and Vigil screens.
+
+Phone touch UI isn't scored (touch is being removed). **The QA3 Coat-on-the-phone blocker becomes moot** once touch goes; the panel should still fit 720p.
+
+| # | Sev | Where | Evidence | Fix | Effort | Credits |
+|---|---|---|---|---|---|---|
+| U1 | High | `hud.gd` announce, `hunt/hunt_story.gd` card, `items/arsenal.gd` Art label, the boss title | **No message queue.** In one frame: "DAY 1 / The Curfew falls at dusk", "BLOOD MARKET CLEARED" and "HEMORRHAGE", all centred over Sol (`nat/art_katana_2.png`). The night card, the boss name and the boss bar stack at the boss intro (`sheet_bosses.jpg`). Nightreign shows one banner at a time. | One queue with three slots: the centre for one line at a time, the top-left for the night card (4 s, then collapse; QA3 #5), and the bottom for the boss name. Status words become world labels over the enemy. | S–M | 0 |
+| U2 | High | Gamepad glyphs (Steam) | Every prompt names keyboard keys ("[E] BITE", "V", the key strip). A Steam Deck or pad player sees the wrong labels. | An input-device detector that swaps glyphs (Xbox and PlayStation sets as textures or font icons) in the HUD, the prompts, Controls and the Rite. Rebinding exists in part. Finish it for the pad. | M | 0 |
+| U3 | Med | `hud.gd` | The HUD is all words: BLOOD, HUNGER, DAYWALKER (sunlight heals you), DASH 3/3, RANK, TITHE, REVIVES and 3 counters. The boss bar covers the key strip (`boss_marcus_portrait.png`). | Bars without labels, dash pips, Tithe bottom-right, counters only on the map. Hide the key strip in boss fights. | M | 0 |
+| U4 | Med | `ui/map_screen.gd` | Flat rectangles. The most expensive frame (QA3 #8; **QA-fix agent** for the draws). | A baked parchment texture plus one `_draw()` canvas. | M | 0 |
+| U5 | Low | `hunt/poi_dressing.gd` | The mirrored "HOLLOW PINES" sign. **QA-fix agent.** | — | S | 0 |
+
+## 7. Story and presentation — 5 / 10 (against Until Dawn)
+
+**What's good:**
+- Silas Crowe, a pale rival daywalker, is a strong hook.
+- The night cards give every hunt a motive.
+- The menu lair sets the tone.
+
+**What Until Dawn has:**
+- a cinematic camera for every beat;
+- faces that act;
+- choices with consequences;
+- dread built through pacing.
+
+The game has captions over gameplay.
+
+| # | Sev | Where | Evidence | Fix | Effort | Credits |
+|---|---|---|---|---|---|---|
+| S1 | High | `boss_base.gd`, `hunt_director._spawn_boss` | **No pre-fight beat** (asked for in R2, never built). | 4–6 s: a letterboxed camera cut to the boss (roar or idle clip), one taunt, Sol's reply in the new voice, then the bar. Marcus and the Abomination have the clips. | M | (A3) |
+| S2 | High | Cinematic camera kit: new `scripts/hunt/cine_cam.gd` | There's no reusable staging tool. Until Dawn's look comes from low, close, slow camera moves. | A small rail and look-at camera with letterbox, DoF (Forward+) and a vignette, driven by data (`[{at, look, fov, t}]`). Use it for boss intros, the plantation-house entry, Silas's duel and the epilogue. | M | 0 |
+| S3 | Med | Seraphine | Never seen. | A rooftop silhouette over the Final arena, plus 2 lines. | S–M | about 1 |
+| S4 | Med | Silas Crowe | One duel and a name plate. | 3 lines before and 1 after. His record unlocks a lair item (lair agent). | S | about 2 |
+| S5 | Low | Case files | No narrative reward for wins. | A case file per boss kill on the lair's board (lair agent). | S | about 1.5 |
+
+## 8. Code — 6.5 / 10
 
 **Good:**
-- `smoke_test.gd` PASS with 355 checks plus `arsenal_checks.gd`.
-- A frame-budget guard, a CI audio guard and a benchmark (`bench.gd`).
-- A clean settings API (`settings.gd` presets, `HFx.opt` hooks).
-- Dead assets deleted.
+- `smoke_test.gd` PASS (355 checks) plus `arsenal_checks.gd`.
+- A frame-budget guard, a CI audio guard and `bench.gd`.
+- A clean settings API.
 - 12 `class_name`s.
 
 | # | Sev | Where | Evidence | Fix | Effort |
 |---|---|---|---|---|---|
-| K1 | Med | `scripts/city.gd` | **4,148 lines** (R2: 3,943). The split from R1 and R2 has never happened. | `city/materials.gd`, `batcher.gd`, `quarter.gd`, `props_place.gd`. No behaviour change; smoke guards it. | M |
-| K2 | Med | Whole codebase | 404 `.get()` / `has_method` calls (R2: 154 counted more narrowly), and 20 untyped `main` / `director` fields left. | Type the cross-script calls in `player.gd`, `enemy.gd` and `arsenal.gd` first. | M |
-| K3 | Low | Engine errors | `Lambda capture at index 0 was freed` ×8 in smoke, and 6,734 `Parameter "m" is null` headless (QA3 #16). | Bind tweens to their node (`create_tween()` on the node itself), and guard the null mesh in the headless path. | S |
-| K4 | Low | `bench.gd:374` | Reports the project's renderer, not the running one (QA3 #15). | `RenderingServer.get_current_rendering_method()`. | S |
+| K1 | Med | `scripts/city.gd` | **4,148 lines** (R2: 3,943). | Split it into materials, batcher, quarter and props. | M |
+| K2 | Med | Whole codebase | 404 `.get()` / `has_method` calls and 20 untyped `main` / `director` fields. | Type `player.gd`, `enemy.gd` and `arsenal.gd` first. | M |
+| K3 | Med | **Steam path:** `export_presets.cfg`, a new `scripts/platform/steam.gd` | No Windows or Linux desktop preset, no Steamworks. | Windows and Linux presets (Forward+). GodotSteam (GDExtension) behind a feature flag: init, achievements (3 bosses, Silas, a flawless night), cloud saves for `user://`, rich presence. Save files under `user://` already, so check that the paths are platform-safe. | M |
+| K4 | Low | Engine errors | `Lambda capture … was freed` ×8, and 6,734 `"m" is null` (QA3 #16). | Bind tweens to their node, and guard the null mesh. | S |
+| K5 | Low | `bench.gd:374` | Reports the wrong renderer (QA3 #15). | `RenderingServer.get_current_rendering_method()`. | S |
 
-## 9. Web and performance — 6 / 10 (R2: 5)
+## 9. Web and performance — 6.5 / 10 (desktop weighted)
 
 **Good:**
-- Gameplay views at 107–295 draws and 108–335k primitives from Very Low to Medium (R2: 500–1,000 draws, 1.0–1.4M).
-- Auto-detect picks Medium on desktop and Low on the phone.
-- Dynamic resolution and pre-warm.
-- My boss arena captures on Medium: 187–220 draws and 305–430k primitives (R2: 800+ and 1.2M+).
+- **Gameplay views:** 107–295 draws and 108–335k primitives from Very Low to Medium (R2: 500–1,000 draws, 1.0–1.4M).
+- **Boss arenas** on Medium: 187–220 draws and 305–430k primitives in my captures.
+- On any desktop GPU this is light. Auto-detect, dynamic resolution and pre-warm all work.
 
 | # | Sev | Where | Evidence | Fix | Effort |
 |---|---|---|---|---|---|
-| W1 | High | Download | **`index-143d4d6da0.pck` is 50,877,690 bytes** (R2: 42 MB), plus 8.1 MB of gzipped wasm. The music is only 5.9 MB on disk, so the growth is meshes and textures. **The QA-fix agent owns the audit (QA3 #4).** | Audit with an export listing. Textures to 512 px except hero and ground. Lazy-load the boss bodies and themes at dusk with `load_threaded_request`. Target ≤40 MB. | M |
-| W2 | Med | `web/shell.html` | No service worker: every visit downloads 59 MB (R2 W2, D-group item never done). | Cache the `.pck` and wasm by hashed name. | S |
-| W3 | Med | Map view | 341–542 draws (QA3 #8). **QA-fix agent.** | See U5. | S–M |
-| W4 | Med | Very Low tier | Saves only 10–30 draws over Low (QA3 #8). | Shorter HLOD on Very Low, no undergrowth, and street clutter at 15%. | S |
-| W5 | Med | Never on a real phone | Every number is SwiftShader or llvmpipe. | One real mid-range Android (Chrome remote debugging) with `?bench`. The owner can run it and paste the `BENCH_RESULT` line. | S |
+| W1 | High | Desktop Forward+ budget | 1,034 draws and 1.05M primitives on the plaza (`fwd/`). Compatibility on High: 299 / 337k. | A Forward+ tier with its own LOD and shadow distance, and the volumetrics from V1. Bench on a real GTX 1060 / RX 580-class GPU and a Steam Deck. | M |
+| W2 | Med | Real hardware | Every number is software rendering. | The owner runs `?bench` (or `--bench` natively) on a desktop GPU and on a phone, and pastes the `BENCH_RESULT` line. | S |
+| W3 | Med | Web test build | The `.pck` is 50.9 MB (QA3 #4; **QA-fix agent**). The map is 341–542 draws (QA3 #8; **QA-fix agent**). | As in QA3. It matters less now: the web is for testing. | M |
+| W4 | Low | Very Low | Saves only 10–30 draws over Low. | Shorter HLOD on Very Low. | S |
 
-## 10. Overall — 6.5 / 10 (R2: 6)
+## 10. Overall — 6 / 10
 
-R3 is the round where the systems arrived: a build loop, an arsenal, stamina and lock-on, real boss bodies, music, a settings menu, and a phone-sized frame budget.
+Against R2's bar, R3 earns 6.5. The systems arrived:
+- a build loop and an arsenal;
+- stamina and lock-on;
+- bespoke bosses with music;
+- a settings menu and a desktop-friendly frame budget.
 
-What keeps it at 6.5 is the polish between the systems:
-- the first shot of every Hunt is a T-pose;
-- text piles up in the centre of the screen;
-- weapons look and move alike;
-- bosses fight inside a red haze and a pink bubble;
-- the download is 59 MB.
+Against the owner's sharper bar it's 6, because the two things the new bar measures most aren't there yet:
+- **cinematic, face-driven presentation** (Until Dawn);
+- **martial-arts body movement** (Blade).
 
-None of these is hard, and most are S or M. A round spent on polish rather than features is worth +0.5 to +1 overall.
+Both are reachable on this stack:
+- **Forward+ volumetrics, a cine camera, jaw flaps and boss beats** for the presentation;
+- **library kicks and acrobatics plus two-hand IK** for the movement.
+
+Most of the 6 → 7 gap is that, plus the polish layer: the first shot, stacked text, the red haze.
 
 ---
 
@@ -260,99 +303,119 @@ None of these is hard, and most are S or M. A round spent on polish rather than 
 
 ### Already covered (don't duplicate)
 - **The QA-fix agent owns the QA3 top 10:**
-  - #1 Coat on the phone (U1);
-  - #2 the Descent T-pose (C1);
-  - #3 the Hollow Pines sign (U6);
-  - #4 the `.pck` audit (W1);
-  - #8 the map draws (W3);
-  - #7 Rite overflow;
-  - #5 the night card collapse (part of U2);
-  - #6 touch buttons over the map;
-  - #9 the crypt ambience (A2);
-  - #10 Sol's rim light and crypt fill (V4).
-- **The lair agent owns** the walkable hub and the wardrobe. S3's case-file board and S4's Silas unlock are natural add-ons for it once the hub stands.
+  - the Descent T-pose (C1);
+  - the Hollow Pines sign (U5);
+  - the `.pck` audit and the map draws (W3);
+  - Rite overflow;
+  - the night-card collapse (part of U1);
+  - the crypt ambience (A4);
+  - Sol's rim and crypt fill (V4);
+  - the touch items (#1, #6), now low priority since touch is being removed.
+- **The lair agent owns** the walkable hub and the wardrobe. S4's Silas unlock and S5's case-file board fit there.
 
-### Group F — Weapon identity and Arts (agent 1)
-**Files:** `scripts/items/arsenal*.gd`, `weapon_forge.gd`, `weapon_visual.gd`, `tools/build_sol_modular.gd`, `assets/characters/sol/*`, `scripts/sol_draw_ik.gd`, `assets/audio/sfx/swing_*`.
+### Group F — Blade movement: kicks, two hands, acrobatics (agent 1; the top priority)
+**Files:** `tools/build_sol_modular.gd` (CUTS), `assets/characters/sol/*`, `scripts/sol_draw_ik.gd` (left-hand IK), `scripts/sol_moves.gd`, `scripts/items/arsenal_moves.gd`, `arsenal.gd`, `scripts/player.gd` (kick input and aerial only), `assets/audio/sfx/kick_*`, `swing_*`.
 
-1. **C2:** buy and cut the 6 clips (Credits §1). Re-map each type's chain so no two types share a primary clip. Add a two-handed grip IK for the polearms, greatsword and hammer. *(Characters +0.5, Combat +0.5.)*
-2. **V5 + G2:** per-Art VFX meshes, capped HDR (no white disc), Art hit-stop and camera kick, no centre label. *(Combat +0.25, Visuals +0.25.)*
-3. **C2b:** 4 hero weapon meshes (forge upgrade, or 4 Meshy props). *(Characters +0.25.)*
-4. **A4:** 4 swing SFX families. *(Audio +0.25.)*
+1. **C3 + G1:** buy and install the kick and acrobatic clips (Credits §1). Add a kick input. Weave kicks into every type's routes, plus a jump attack and stomp finishers. *(Characters +0.5, Combat +0.5.)*
+2. **C2:** left-hand IK for two-handed grips on the heavy types and a two-hand stance toggle. Buy `Charged_Axe_Chop` and `Two_Handed_Parry`. *(Characters +0.5, Combat +0.25.)*
+3. **G3 + V6:** per-Art VFX meshes, capped HDR, hit-stop and camera kick. *(Combat +0.25, Visuals +0.25.)*
+4. **A5:** swing families and kick impact SFX. **C7:** the fresnel hit rim. *(Combat +0.25.)*
 
-### Group G — Bosses and presentation (agent 2)
-**Files:** `scripts/hunt/bosses/*.gd`, `boss_base.gd`, `scripts/enemy.gd` (hit rim only), `data/dialogue.json`, `assets/audio/voice/*`, `assets/audio/music/*`.
+### Group G — Bosses, voice and cinematics (agent 2)
+**Files:** `scripts/hunt/bosses/*.gd`, `boss_base.gd`, new `scripts/hunt/cine_cam.gd`, `data/dialogue.json`, `assets/audio/voice/*`, `assets/audio/music/*`, `scripts/audio/audio.gd` (phase layer), `scripts/enemy.gd` (hit rim only, if Group F hasn't taken it).
 
-1. **C3:** the bubble only during the intro, and no veins on the Alpha, Knight or Abomination. **C4:** the hit rim as a fresnel band. *(Characters +0.5.)*
-2. **S1 + A3:** the pre-fight beat and phase lines for 4 bosses. **S4:** Silas's lines. *(Story +0.5, Audio +0.25.)*
-3. **G3:** a delayed swing per boss, and the Alpha's pounce plus summon. *(Combat +0.25.)*
-4. **A1:** after the owner listens, 120 s themes and a phase-2 layer. *(Audio +0.5.)*
-5. **S2:** Seraphine's silhouette on the Final Night. *(Story +0.25.)*
+1. **A2:** audition 3 voices for Sol, get the owner's pick, regenerate 24 lines and add 10 efforts. *(Audio +0.25, Story +0.25.)*
+2. **C4:** no bubble or veins outside the intro. *(Characters +0.25.)*
+3. **S2 + S1 + A3:** the cine camera kit, the boss pre-fight beats and phase lines. *(Story +1.)*
+4. **C5:** jaw flap plus blinks on Sol, Nia, Marcus and Silas. *(Characters +0.25, Story +0.25.)*
+5. **A1:** after listening, 120 s themes and a phase-2 layer. *(Audio +0.5.)*
+6. **G4, S3:** a delayed swing per boss, and Seraphine's silhouette. *(Combat +0.25, Story +0.25.)*
 
-### Group H — World polish (agent 3)
-**Files:** `scripts/wet_materials.gd`, `city.gd` (plus the K1 split), `scripts/map/velvet.gd`, `docks.gd`, `scripts/atmosphere.gd`, `scripts/hunt/hunt_fx.gd` (Curfew wall only).
+### Group H — Desktop look and Steam (agent 3)
+**Files:** `project.godot`, `export_presets.cfg`, `scripts/settings.gd` (Forward+ tier keys), `scripts/atmosphere.gd`, `scripts/wet_materials.gd`, `scripts/hunt/hunt_fx.gd` (Curfew wall only), new `scripts/platform/steam.gd`.
 
-1. **V1:** the glitter asphalt (third time listed; small fix). *(Visuals +0.25.)*
-2. **V2:** no red wash in the arenas. *(Visuals +0.25.)*
-3. **V3 + V6:** Velvet marquees and canopies, the Docks containers and floods. *(Visuals +0.25, Loop +0.25.)*
-4. **K1:** split `city.gd` while it's open. *(Code +0.5.)*
-5. **W4:** Very Low thinning. *(Web +0.25.)*
+1. **V1 + W1:** a desktop Forward+ preset with volumetric fog and light shafts, SSAO, SSR and glow, and its own LOD and shadow budget. *(Visuals +0.75, Web +0.25.)*
+2. **V2 + V3:** fix the glitter asphalt, and drop the red arena wash. *(Visuals +0.5.)*
+3. **K3:** Windows and Linux presets, plus GodotSteam behind a flag (achievements, cloud saves). *(Code +0.25.)*
+4. **G5:** gamepad rumble. *(Combat +0.1.)*
 
-### Group I — HUD and messaging (agent 4; after the QA-fix agent merges its night-card and map work)
-**Files:** `scripts/hud.gd`, `scripts/ui/*` (except `inventory_ui.gd` while the QA-fix agent has it), `scripts/hunt/hunt_story.gd`, `web/shell.html`.
+### Group I — The plantation house and level interiors (agent 4)
+**Files:** new `scripts/map/plantation_interior.gd`, `scripts/map/wilds.gd` (`_plantation` only), `scripts/hunt/poi*.gd` (the `"manor"` type via `register_poi`), `scripts/loot.gd` (a manor table if needed), `tests/smoke_test.gd` (manor checks).
 
-1. **U2:** one message queue with three slots, and status words moved to world labels. *(UI +0.5.)*
-2. **U3:** the key strip vs the boss bar. **U4:** the HUD diet. *(UI +0.5.)*
-3. **U5:** the parchment map canvas. Coordinate with the QA-fix agent's map draw fix, or take it over. *(UI +0.25.)*
-4. **W2:** a service-worker cache. *(Web +0.25.)*
+1. **L2:** the enterable two-storey Belle Rive house, with loot, a guard, a locked room, moonlight shafts and storm flashes. *(Loop +0.5, Visuals +0.25, Story +0.25.)*
+2. **L3:** a club-basement interior on the same kit. *(Loop +0.25.)*
 
-### Group J — Traversal (agent 5, optional, L)
-**Files:** `scripts/player.gd` (vault state), `scripts/sol_locomotion.gd`, two Quarter blocks in `city.gd` (sequence with Group H).
+### Group J — HUD, glyphs and code health (agent 5; after the QA-fix agent merges)
+**Files:** `scripts/hud.gd`, `scripts/ui/*` (except files the QA-fix agent holds), `scripts/hunt/hunt_story.gd`, `scripts/city.gd` (the K1 split only; sequence with Group H's `wet_materials` work).
 
-1. **L1:** sprint-vault with the bought clip, walkable roofs on 2 blocks, and the blood leap. *(Loop +0.5, Combat +0.25.)*
+1. **U1:** the message queue. **U3:** the HUD diet and the key strip. *(UI +0.75.)*
+2. **U2:** gamepad glyphs and pad rebinding. *(UI +0.25.)*
+3. **U4:** the parchment map. *(UI +0.25.)*
+4. **K1 + K2 + K4:** split `city.gd`, type the core scripts, fix the engine errors. *(Code +0.5.)*
 
-**Expected after round 4, if F–I land with the QA-fix and lair work:**
+### Later (L): traversal
+**L1:** the vault, rooftops and the blood leap (`player.gd`, `city.gd`). Run it after Groups F and H free those files. *(Loop +0.5.)*
+
+**Expected after round 4 (new bar), if F–J land with the QA-fix and lair work:**
 
 | Visuals | Chars/Anim | Combat | Loop | Audio | UI | Story | Code | Web | Overall |
 |---|---|---|---|---|---|---|---|---|---|
-| 6.5 | 7–7.5 | 7.5–8 | 7.5 (with the lair) | 8 | 7.5 | 6.5–7 | 7 | 6.5–7 | 7 |
+| 6.5 | 7 | 7.5 | 7.5 | 7.5–8 | 7.5 | 6.5 | 7 | 7 | 7 |
 
 ---
 
 ## Credits: the highest-value spends
 
-Balance: **142.62** (checked). The prices are the quotes or ledger prices below. Rigging and animation is 8 credits per clip on Sol's body (`docs/animation_reference/README.md`). Music is quoted at 7.68 credits for 120 s on `elevenlabs_music_v2`.
+**Balance: 142.62** (checked with `balance`). The prices are quotes or ledger prices:
+- **Library animation clip** on Sol's body (`generate_3d`, `3d_rigging`, `enable_animation`): **8 credits each** (ledger, `docs/animation_reference/README.md`). Check the GIF previews before buying.
+- **Music,** `elevenlabs_music_v2`, 120 s: **7.68** (quoted).
+- **Voice,** `elevenlabs_v4`, one short line: **0.46** (quoted). Longer lines cost more.
 
-| Priority | Spend | What it buys | Cost |
+| # | Spend | What it buys | Cost |
 |---|---|---|---|
-| 1 | **6 library clips for weapon identity** on Sol's body (`3d_rigging` with `enable_animation`, 8 each): `Charged_Axe_Chop` (237) for the greatsword and hammer heavy; `Double_Combo_Attack` (92) for the katana chain; `Two_Handed_Parry` (149) for the heavy-weapon parry; `Sword_Parry_Backward` (148) for the guard-break recoil; `Backflip_inplace` (601) for the back-step and the Art recovery; `Run_Jump_and_Roll` (459) as the dash body motion. Check the previews first; the library has no spear or whip attacks, so the halberd and whip keep re-cut clips, with the forge and IK doing the rest. | Combat and Characters: the biggest feel-per-credit gain left | **48** |
-| 2 | **Boss themes at 120 s**: Marcus, Abomination, Knight, Alpha, plus the rival. Only after the owner has listened to the current 30 s versions and approved the style. | Ends the 6× loop repetition in every boss fight | **38.40** (5 × 7.68) |
-| 3 | **Vault clip** `Parkour_Vault_with_Roll_inplace` (651) | Unlocks traversal (L1) | **8** |
-| 4 | **Voice lines**: 14 pre-fight and phase lines plus 4 for Silas | Story S1 and S4, Audio A3 | about **4.5** (preflight; R2's estimate was 0.25 per line) |
-| 5 | **Sol ±30° re-capture** for the scanned head | Characters C6 | **1** |
-| 6 | **4 hero weapon meshes** (Meshy text-to-3D props, about 5 each; preflight) | The weapon silhouette (C2b). Skip it if the forge upgrade looks good enough. | about **20** |
+| 1 | **Blade movement pack, 6 clips:** `Spartan_Kick` (206, guard-break push kick), `Lunge_Roundhouse_Kick_inplace` (649, combo ender), `Backflip_Sweep_Kick_inplace` (604, evade-attack), `Charged_Axe_Chop` (237, two-handed overhead), `Two_Handed_Parry` (149), `Run_Jump_and_Roll` (459, dodge body) | Kicks, two-handed weight and acrobatic evasion: the owner's Blade bar. The biggest gain per credit left. | **48** |
+| 2 | **Sol's new voice:** audition 3 presets (Gideon, Knox, Barrett) with 1 line each (about 1.4), regenerate 24 lines (about 11), plus 10 combat efforts (about 4.6) | The owner's deep, menacing, gravelly Sol | **about 17** |
+| 3 | **Boss and Silas lines in context:** 14 pre-fight and phase lines plus 4 for Silas, about 18 lines | The boss beats (S1) and Silas's arc | **about 8.5** |
+| 4 | **Boss themes at 120 s** for the 4 night bosses (after the owner listens and approves the style) | Ends the 6× loop repetition | **30.72** |
+| 5 | **Blade movement pack, tier 2:** `Sweeping_Kick` (217, knockdown), `Rising_Flying_Kick` (422, launcher and aerial) | Aerial and knockdown verbs | **16** |
+| 6 | **Vault clip** `Parkour_Vault_with_Roll_inplace` (651) | Traversal (L1) | **8** |
+| 7 | **Sol ±30° re-capture** for the scanned head | Face realism (C6) | **1** |
 
-**Recommended now: priorities 1, 3, 4 and 5 (61.5 credits), and 2 after the listening test (38.4). Total about 100, leaving about 42.** Keep that reserve for retakes and for the lair agent's wardrobe (clothing variants may need a model or two).
+**Recommended now: items 1, 2, 3, 5 and 7, about 90.5. Item 4 after the listening test (30.72). Total about 121, leaving about 21.** Keep that reserve for retakes, the vault clip if traversal starts (8), and the lair agent's wardrobe.
 
-Don't spend on Seedance or video clips (they only give 2D video), or on new enemy models before the weapon clips.
+**Optional, if credits free up:**
+- the rival theme at 120 s (7.68);
+- plantation interior props (a chandelier and a 4-poster bed, about 5 each);
+- 4 Meshy hero weapons (about 20).
+
+**Don't buy:** Seedance or other video (2D only), or new enemy bodies before the movement pack.
 
 ---
 
-## Ceiling vs Elden Ring (updated)
+## Ceiling (updated for Steam and the new bar)
 
-The stack is the same as in R2: Godot 4.3 on the WebGL2 Compatibility renderer, AI meshes, library mocap, AI voices and music, single-threaded wasm and a phone target. R3 shows the systems ceiling is higher than R2 assumed. The art ceiling hasn't moved.
+**What moving to desktop Steam changes:** Forward+ on a desktop GPU lifts the realism ceiling by about +1 over the WebGL2 Compatibility renderer:
+- volumetric fog, SSAO, SSR and glow;
+- higher triangle and shadow budgets;
+- no 50 MB download constraint.
 
-| Category | Realistic max on this stack | R3 | What stops it | What would raise it |
+**What doesn't change:**
+- AI meshes and textures;
+- no performance capture;
+- library-only motion;
+- AI voices and music.
+
+| Category | Realistic max (desktop Forward+, this pipeline) | R3 | What stops it | What would raise it |
 |---|---|---|---|---|
-| Visuals | **7** (7.5 native Forward+) | 6 | No GI, volumetrics or SSR on WebGL2. The phone triangle budget. AI textures with baked light. | A native desktop Forward+ build (the plaza shot already shows the gain). Hand-placed light per POI. |
-| Characters and animation | **7.5** | 6.5 | No facial rig. The library has no spear, whip or polearm sets, so paired moves are faked. | The scanned-head pipeline with ARKit blendshapes. A paid mocap session for about 20 weapon-class moves. |
-| Combat and feel | **8.5** | 7 | Library coverage for weapon classes and boss moves. Never tuned on real hardware. | The clips above, a real-device tuning pass, per-boss signatures. |
-| Loop and level design | **8** | 7 | Hand-made district content and traversal. | Rooftops and vaults, 2 more interiors, the lair hub. |
-| Audio | **8** | 7.5 | AI music and voice range. | Longer themes with phase stems, then a human composer for 2 themes. |
-| UI/UX | **8.5–9** | 6.5 | Nothing technical. | The queue, the HUD diet, the map. |
-| Story and presentation | **7** | 6 | No facial performance means no close-up cinematics. | Pre-fight beats, Seraphine, Silas's arc, case files in the lair. |
-| Code | **9** | 6.5 | Nothing. | The splits and the typing. |
-| Web and performance | **7.5** | 6 | A 40–50 MB download, single-threaded WebGL2 and phone thermals. | A cache, lazy boss assets, a real-phone bench. |
-| **Overall** | **about 7.5–8** | 6.5 | The browser and AI-asset stack. | A native desktop export adds about +0.5 to Visuals and Overall. |
+| Visuals (vs Until Dawn) | **7–7.5** | 5.5 | AI textures with baked light, no photogrammetry, no hand lighting pass. | The Forward+ volumetrics tier, a hand-lit pass on the 3 hero spaces (plaza, crypt, plantation house), photoscanned materials. |
+| Characters and animation (Until Dawn looks, Blade motion) | **7** | 5.5 | No facial capture. The library has few two-handed or martial-arts sword moves. | The scanned head plus blendshapes from a phone capture. A paid mocap session of 20–30 Blade-style moves (a stunt performer with a sword) is the single biggest lift available. |
+| Combat and feel | **8.5** | 6.5 | Motion coverage. Never tuned on real hardware. | The movement pack, two-hand IK, tuning on a pad. |
+| Loop and level design (vs Nightreign) | **8** | 6.5 | No co-op (out of scope). Hand-made content. | Interiors, traversal, map events, more character kits (the wardrobe is a start). |
+| Audio | **8** | 7 | AI voice range. | The new Sol voice, longer themes, a human actor for Sol later. |
+| UI/UX | **8.5–9** | 6.5 | Nothing technical. | The queue, glyphs, the HUD diet, the map. |
+| Story and presentation (vs Until Dawn) | **6.5–7** | 5 | No facial performance means no close-up drama. | The cine camera, boss beats, jaw flaps, then blendshape faces. |
+| Code | **9** | 6.5 | Nothing. | The splits, the typing, Steam integration. |
+| Desktop performance | **8.5** | 6.5 | Nothing hard on desktop. | A Forward+ budget and real benches. |
+| **Overall** | **about 7.5–8** | 6 | The AI-asset and library-mocap pipeline. | A mocap session and facial capture are the two investments that move the ceiling, not code. |
 
-**For the owner:** R3 moved the game from "a playable prototype" to "a real action-roguelite". The next point comes cheaply from polish: the first shot, overlapping text, weapon identity, the boss haze and the download. It doesn't need more features. Elden Ring's look stays out of reach in a phone browser. Its combat language is now within about 1.5 points.
+**For the owner:** the Steam move is the right call for this bar. Forward+ alone closes about a point of the Until Dawn gap. The Blade bar is mostly an animation problem: 6–8 library clips plus two-hand IK get you kicks and weight. Real Blade choreography needs a mocap session. The Nightreign bar is the closest: the systems are there, and interiors (starting with the plantation house), traversal and map events finish it.
