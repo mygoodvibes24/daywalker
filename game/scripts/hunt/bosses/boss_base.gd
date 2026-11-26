@@ -363,6 +363,9 @@ func wake() -> void:
 	anim_lock_t = 0.8
 	if director != null:
 		director.on_boss_woke(self)
+	var a := get_node_or_null("/root/Audio")
+	if is_field_boss and a != null:
+		a.engage(self, "boss") # AUDIO HOOK: the shared boss track while the guardian fights
 
 
 func _clamp_arena() -> void:

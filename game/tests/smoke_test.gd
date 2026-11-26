@@ -1119,13 +1119,57 @@ func _asset_r3_checks(main) -> bool:
 	var was_over: bool = main.game_over
 	main.game_over = false
 	audio.attach_world(main)
-	for id in ["marcus", "abomination"]:
+	var was_unl: bool = audio.unlocked
+	audio.unlocked = true
+	var themes := {"marcus": "boss_marcus", "abomination": "boss_abomination", "knight": "boss_knight", "alpha": "boss_hollow"}
+	var night_ids: Array = []
+	var HC = load("res://scripts/hunt/hunt_config.gd")
+	for bd in HC.NIGHT_BOSS_POOL + [HC.FINAL_BOSS]:
+		night_ids.append(bd.id)
+	ok = _check("boss music: every night boss has its own theme %s" % [night_ids], night_ids.all(func(i): return themes.has(i) and audio.theme_for(i) == themes[i])) and ok
+	for id in themes:
 		audio.set_boss(true, id)
 		var s: AudioStream = audio._music[audio._music_cur].stream
-		ok = _check("boss music: %s's theme plays in its fight (%s)" % [id, audio.context], audio.context == "boss_" + id and s != null and s.resource_path.ends_with("boss_%s.ogg" % id) and (s as AudioStreamOggVorbis).loop) and ok
-	audio.set_boss(true, "knight")
-	ok = _check("boss music: a boss without a theme keeps the boss track", audio.context == "boss") and ok
+		ok = _check("boss music: %s plays %s (%s)" % [id, themes[id], audio.context], audio.context == themes[id] and s != null and s.resource_path.ends_with(themes[id] + ".ogg") and (s as AudioStreamOggVorbis).loop and audio._music[audio._music_cur].bus == &"Music") and ok
+	audio.set_boss(true, "no_such_boss")
+	var sh: AudioStream = audio._music[audio._music_cur].stream
+	ok = _check("boss music: a boss without a theme plays the shared boss track", audio.context == "boss" and sh != null and sh.resource_path.ends_with("boss_shared.ogg")) and ok
 	audio.set_boss(false)
+	for k in ["boss", "boss_marcus", "boss_abomination", "boss_knight", "boss_hollow", "rival_crowe"]:
+		var ms = load(audio.DIR + audio.MUSIC[k] + ".ogg")
+		ok = _check("music loads and loops: %s (%.0f s)" % [k, ms.get_length() if ms != null else 0.0], ms is AudioStreamOggVorbis and ms.loop and ms.get_length() > 40.0 and ms.get_length() < 70.0) and ok
+	# a field boss and the Undercroft rival: engage() holds the duel music, death drops it
+	var fb = load("res://scripts/hunt/bosses/field_boss.gd").new()
+	fb.main = main
+	fb.home = main.player.global_position + Vector3(8, 0, 0)
+	fb.position = fb.home
+	main.enemies_root.add_child(fb)
+	await physics_frame
+	fb.dormant = true
+	fb.wake()
+	ok = _check("boss music: a woken field boss plays the shared boss track (%s)" % audio.context, audio.context == "boss") and ok
+	fb.dead = true
+	audio._calm_t = 99.0
+	audio._update_context()
+	ok = _check("boss music: a fallen field boss drops back to explore (%s)" % audio.context, audio.context == "explore") and ok
+	main.enemies_root.remove_child(fb)
+	fb.free()
+	var rv = load("res://scripts/map/undercroft_rival.gd").new()
+	rv.main = main
+	rv.position = main.player.global_position + Vector3(6, 0, 0)
+	main.enemies_root.add_child(rv)
+	await physics_frame
+	rv._taunt()
+	var rs: AudioStream = audio._music[audio._music_cur].stream
+	ok = _check("rival music: Silas Crowe's duel plays rival_crowe (%s)" % audio.context, audio.context == "rival_crowe" and rs != null and rs.resource_path.ends_with("rival_crowe.ogg")) and ok
+	rv.reset_to(rv.position)
+	audio._calm_t = 99.0
+	audio._update_context()
+	ok = _check("rival music: the duel ends when he goes back to his post (%s)" % audio.context, audio.context == "explore") and ok
+	main.enemies_root.remove_child(rv)
+	rv.free()
+	audio.duel = null
+	audio.unlocked = was_unl
 	audio.set_music("explore", 0.1)
 	main.game_over = was_over
 	for n in ["wolf_roar", "claw_swipe", "pounce_whoosh", "lunge_whoosh", "body_fall", "boss_slam_impact"]:

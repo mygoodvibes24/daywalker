@@ -435,6 +435,9 @@ func _taunt() -> void:
 		anim.play_move({"clip": "stance", "from": 0.0, "to": 1.4, "hit": 0.0, "speed": 1.0}, 1.0)
 	_say("rival_taunt_rematch" if rematch else "rival_taunt")
 	main.hud.popup(NAME_TITLE.to_upper())
+	var a := get_node_or_null("/root/Audio")
+	if a != null:
+		a.engage(self, "rival_crowe") # AUDIO HOOK: the duel theme (ends on his death or reset)
 
 
 func _say(id: String) -> void:

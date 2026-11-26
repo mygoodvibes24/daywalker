@@ -1,7 +1,8 @@
 extends Node
 ## Sound (autoload "Audio"): one-shot SFX from a small player pool with random pitch,
 ## 3D positional SFX for world events, the rain bed with distant thunder, footsteps, and
-## music that crossfades by context: "menu", "explore", "combat", "boss" ("" = silence).
+## music that crossfades by context: "menu", "explore", "combat", "boss", the boss themes
+## (BOSS_THEMES) and "rival_crowe" ("" = silence). Every music player is on the Music bus.
 ##
 ## In the game, main.gd calls `Audio.attach_world(self)`; from then on the music follows
 ## the fight on its own (enemies near and alive -> combat, none for a few seconds ->
@@ -54,12 +55,21 @@ const MUSIC := {
 	"menu": "music/menu_lair",
 	"explore": "music/explore",
 	"combat": "music/combat",
-	"boss": "music/combat",
-	# boss themes (asset round 3): "boss_<boss id>" plays in that fight, else "boss"
+	# the shared boss track: field bosses (Landmark guardians) and any boss without a theme
+	"boss": "music/boss_shared",
+	# boss themes (round 4: dark boom-bap / trap with Japanese instruments), see BOSS_THEMES
 	"boss_marcus": "music/boss_marcus",
 	"boss_abomination": "music/boss_abomination",
+	"boss_knight": "music/boss_knight",
+	"boss_hollow": "music/boss_hollow",
+	# Silas Crowe's duel in the Undercroft Depths (map/undercroft_rival.gd)
+	"rival_crowe": "music/rival_crowe",
 }
-const MUSIC_DB := {"menu": -4.0, "explore": -6.0, "combat": -5.0, "boss": -2.0, "boss_marcus": -4.0, "boss_abomination": -3.0}
+const MUSIC_DB := {"menu": -4.0, "explore": -6.0, "combat": -5.0, "boss": -4.5, "boss_marcus": -2.5, "boss_abomination": -3.5, "boss_knight": -2.5, "boss_hollow": -4.0, "rival_crowe": -4.5}
+## Boss id (hunt_config.gd) -> its music context; a boss not listed here plays "boss".
+const BOSS_THEMES := {"marcus": "boss_marcus", "abomination": "boss_abomination", "knight": "boss_knight", "alpha": "boss_hollow"}
+## A duel (a woken field boss, the Undercroft rival) keeps its music while Sol is this close.
+const DUEL_RADIUS := 40.0
 ## Creature SFX timing (seconds into the move), from the clip manifest and enemy.gd's SPECIALS.
 const POUNCE_DELAY := 0.5 # the leap's wind-up: the spring
 const LUNGE_DELAY := 0.55 # the lunge's wind-up: the dash
@@ -74,6 +84,8 @@ var unlocked := not OS.has_feature("web")
 var context := "" # the music context playing (or waiting for the unlock)
 var boss_active := false
 var boss_id := "" # the boss fight playing (its theme, if it has one)
+var duel: Node3D = null # a field boss or the rival fighting Sol (engage()), not a night boss
+var duel_ctx := ""
 var world: Node = null # main.gd while a game is running
 var _streams := {}
 var _pool: Array[AudioStreamPlayer] = []
@@ -243,7 +255,35 @@ func set_boss(on: bool, id := "") -> void:
 
 ## The music context for the boss fight playing: its own theme if it has one.
 func boss_context() -> String:
-	return "boss_" + boss_id if MUSIC.has("boss_" + boss_id) else "boss"
+	return theme_for(boss_id)
+
+
+## A boss id's music context ("boss" = the shared boss track).
+static func theme_for(id: String) -> String:
+	var t: String = BOSS_THEMES.get(id, "")
+	return t if MUSIC.has(t) else "boss"
+
+
+## A fight that is not a night boss: a woken field boss ("boss") or the Undercroft rival
+## ("rival_crowe"). The music holds `ctx` while `n` lives, is engaged and Sol is near it,
+## then drops back to combat / explore on its own.
+func engage(n: Node3D, ctx: String) -> void:
+	duel = n
+	duel_ctx = ctx
+	_update_context()
+
+
+## The duel's music context, or "" when there is no live duel.
+func duel_context() -> String:
+	if duel == null or not is_instance_valid(duel) or not duel.is_inside_tree() or duel.get("dead") == true:
+		duel = null
+		return ""
+	if duel.get("engaged") == false or duel.get("dormant") == true:
+		return ""
+	var p = world.get("player") if _world_ok() else null
+	if p != null and (p.dead or p.global_position.distance_to(duel.global_position) > DUEL_RADIUS):
+		return ""
+	return duel_ctx if MUSIC.has(duel_ctx) else "boss"
 
 
 # ---------------------------------------------------------------- the world
@@ -252,6 +292,7 @@ func attach_world(w: Node) -> void:
 	world = w
 	boss_active = false
 	boss_id = ""
+	duel = null
 	_calm_t = 99.0
 	var p = w.get("player")
 	if p != null and p.has_signal("dashed") and not p.dashed.is_connected(_on_dashed):
@@ -268,6 +309,7 @@ func _on_world_exit(w: Node) -> void:
 		world = null
 		boss_active = false
 		boss_id = ""
+		duel = null
 
 
 func _on_dashed(_dir: Vector3) -> void:
@@ -305,8 +347,15 @@ func _world_ok() -> bool:
 func _update_context() -> void:
 	if not _world_ok():
 		return
+	var p = world.get("player")
+	if p != null and p.dead: # Sol fell: the fight music sinks (on_player_died) until he rises
+		set_music("explore", 4.0)
+		return
+	var dc := duel_context()
 	if boss_active:
 		set_music(boss_context(), 1.2)
+	elif dc != "":
+		set_music(dc, 1.2)
 	elif _calm_t < COMBAT_HOLD:
 		set_music("combat", 1.2)
 	else:
@@ -368,7 +417,7 @@ func enemy_bark(e: Node3D) -> void:
 		return
 	if randf() < 0.3:
 		play_at("vamp_hiss", e.global_position, -4.0)
-	if randf() < 0.1 and context != "boss": # no street taunts over a boss fight's adds (QA2 #17)
+	if randf() < 0.1 and not boss_active and duel_context() == "": # no street taunts over a boss fight's adds (QA2 #17)
 		get_node("/root/Dialogue").play_group("court_taunt_" if randf() < 0.4 else "vamp_taunt_")
 
 
