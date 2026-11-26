@@ -141,7 +141,7 @@ func unequip(slot_kind: String, idx: int = 0) -> bool:
 	return true
 
 
-## Quick-use in the field: 1 / 2 on the keyboard, LB / R3 on a controller.
+## Quick-use in the field: 1 / 2 on the keyboard, LB / RB on a controller.
 func _process(_delta: float) -> void:
 	if main == null or not main.started or main.game_over or main.menu_open():
 		return

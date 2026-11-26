@@ -180,6 +180,59 @@ body {
 			<small>The hunt is played in landscape.</small>
 		</div>
 
+		<script>
+// Audio unlock. Browsers start an AudioContext "suspended" until a user gesture, and iOS also
+// needs a sound started inside a touchend. The engine resumes on its own input, but a gesture
+// the canvas never sees (the rotate overlay, the fullscreen/landscape tap) or a context that
+// the OS interrupted (phone call, app switch) would leave the game silent. So: keep every
+// AudioContext the engine makes, and on every gesture resume the ones not "running" and play
+// one silent sample. Also put iOS in "playback" mode so the ring/silent switch doesn't mute it.
+(function () {
+	const Base = window.AudioContext || window.webkitAudioContext;
+	if (!Base) {
+		return;
+	}
+	const contexts = [];
+	class TrackedAudioContext extends Base {
+		constructor(opts) {
+			super(opts);
+			contexts.push(this);
+		}
+	}
+	window.AudioContext = TrackedAudioContext;
+	if (window.webkitAudioContext) {
+		window.webkitAudioContext = TrackedAudioContext;
+	}
+	try {
+		if (navigator.audioSession) {
+			navigator.audioSession.type = 'playback';
+		}
+	} catch (e) { /* not supported */ }
+	const unlock = function () {
+		contexts.forEach(function (ctx) {
+			if (ctx.state === 'running' || ctx.state === 'closed') {
+				return;
+			}
+			ctx.resume().catch(function () {});
+			try {
+				const src = ctx.createBufferSource();
+				src.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+				src.connect(ctx.destination);
+				src.start(0);
+			} catch (e) { /* ignore */ }
+		});
+	};
+	['pointerdown', 'mousedown', 'touchstart', 'touchend', 'keydown', 'click'].forEach(function (type) {
+		window.addEventListener(type, unlock, { capture: true, passive: true });
+	});
+	document.addEventListener('visibilitychange', function () {
+		if (!document.hidden) {
+			unlock();
+		}
+	});
+	window.dwAudioContexts = contexts; // for debugging / the CI audio check
+}());
+		</script>
 		<script src="$GODOT_URL"></script>
 		<script>
 const GODOT_CONFIG = $GODOT_CONFIG;

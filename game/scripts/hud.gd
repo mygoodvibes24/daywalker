@@ -5,6 +5,8 @@ var main
 var root: Control
 var hp_bar: ProgressBar
 var hunger_bar: ProgressBar
+var stamina_bar: ProgressBar # slim, right under Blood (player.gd stamina)
+var stamina_fill: StyleBoxFlat
 var hunger_fill: StyleBoxFlat
 var dash_label: Label
 var form_label: Label
@@ -31,8 +33,8 @@ var lock_label: Label # desktop web: "Click to take the hunt" while the pointer 
 var started := false
 var using_pad := false
 var debug_label: Label # ?debug / --debug: camera, player and draw-call overlay (R2-A, W1)
-const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)   LMB combo (hold: charged)   RMB / Q dash   C parry\nM map   TAB the Coat   1 / 2 quick-use   ESC pause"
-const PAD_HELP := "L-stick move   LT sprint   A jump (x2)   X / RT combo (hold: charged)   B / RB dash   L3 parry\nBACK map   START the Coat   LB / R3 quick-use"
+const KEYS_HELP := "WASD move   SHIFT sprint   SPACE jump (x2)   LMB combo (hold: charged)   RMB / K dash   C parry   Q / MMB lock-on\nM map   TAB the Coat   1 / 2 quick-use   ESC pause"
+const PAD_HELP := "L-stick move   LT sprint   A jump (x2)   X / RT combo (hold: charged)   B dash   L3 parry   R3 lock-on\nBACK map   START the Coat   LB / RB quick-use"
 const ROAM_KEYS := "\nF drink at the Undercroft   T rain" # free roam (debug) only
 const ROAM_PAD := "\nLB drink at the Undercroft"
 ## one-shot tips, shown the first time the action becomes possible: [keyboard, pad]
@@ -59,6 +61,10 @@ func _ready() -> void:
 	box.add_child(_label("BLOOD", 14, Color(0.9, 0.85, 0.85)))
 	hp_bar = _bar(Color(0.75, 0.05, 0.08))
 	box.add_child(hp_bar)
+	stamina_bar = _bar(Color(0.78, 0.72, 0.55))
+	stamina_bar.custom_minimum_size = Vector2(240, 6)
+	stamina_fill = stamina_bar.get_theme_stylebox("fill") as StyleBoxFlat
+	box.add_child(stamina_bar)
 	box.add_child(_label("HUNGER", 14, Color(0.9, 0.85, 0.85)))
 	hunger_bar = _bar(Color(0.45, 0.1, 0.55))
 	hunger_fill = hunger_bar.get_theme_stylebox("fill") as StyleBoxFlat
@@ -249,6 +255,10 @@ func _process(delta: float) -> void:
 	hp_bar.max_value = p.max_hp # PROGRESSION HOOK: ranks raise max blood
 	hp_bar.value = p.hp
 	hunger_bar.value = p.hunger
+	stamina_bar.max_value = p.max_stamina()
+	stamina_bar.value = p.stamina
+	stamina_bar.custom_minimum_size.x = 240.0 * p.max_stamina() / 100.0 # a Blood Rite boon makes it longer
+	stamina_fill.bg_color = Color(0.85, 0.25, 0.15) if p.exhausted else (Color(0.95, 0.4, 0.3) if p.frenzy_t > 0.0 else Color(0.78, 0.72, 0.55))
 	hunger_fill.bg_color = Color(0.45, 0.1, 0.55).lerp(Color(1.0, 0.05, 0.1), p.hunger / 100.0)
 	# PERF: the text lines are formatted 10 times a second, not every frame
 	_text_t -= real_dt
@@ -278,7 +288,7 @@ var _text_t := 0.0
 func _update_texts(p) -> void:
 	var form := "DAYWALKER  (sunlight heals you)" if main.daylight() > 0.3 else "DAYWALKER"
 	if p.frenzy_t > 0.0:
-		form = "FRENZY  %.0fs" % p.frenzy_t
+		form = "FRENZY  %.0fs  (blood burns, no guard)" % p.frenzy_t
 	elif p.hunger >= 60.0:
 		form = "NIGHTBORN  (+25% damage)"
 	elif p.hunger >= 30.0:

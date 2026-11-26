@@ -3,13 +3,19 @@ extends CharacterBody3D
 ## Vampires of the Velvet Court and the Hollow Pack (who change at night).
 
 const U = preload("res://scripts/util.gd")
-const HFx = preload("res://scripts/hunt/hunt_fx.gd") # ground telegraphs, shockwave, blood puff
+const HFx = preload("res://scripts/hunt/hunt_fx.gd") # glints, blood spray, the soft landing cue
 enum { VAMPIRE, WEREWOLF }
 
-## Second attacks, as data (the swipe is the first). Each telegraphs on the ground for its wind-up.
-##   lunge (vampires): a crouched wind-up, then a straight dash of up to `dist` m at `speed`; the
-##     first contact strikes. Dodge sideways or Blood Dash through it; a parry still turns it aside.
-##   leap (wolves, changed): a crouch, then a jump onto where Sol stood (`radius` m slam ring).
+## Second attacks, as data (the swipe is the first). Round 3: they telegraph with the BODY, the way
+## Elden Ring does, never with floor decals: the clip's own wind-up played on a slow-in curve (a quick
+## rise into the cocked pose, a held coil, then the snap: HFx.tell_curve), a glint in the eyes and a
+## hiss or growl ~0.3 s before the strike (_tell). Only the leap's landing gets a soft shadow on the
+## ground (a big area attack).
+##   lunge (vampires): the vampire_anim_lunge clip's crouch, then a straight dash of up to `dist` m at
+##     `speed`; the first contact strikes (clip strike 0.77 s). Dodge sideways or Blood Dash through
+##     it; a parry still turns it aside.
+##   leap (wolves, changed): the pounce clip's crouch (take-off 0.6 s), the code flies the arc onto
+##     where Sol stood, landing on the clip's 1.3 s (`radius` m slam).
 ## min / max: the distance band it is used from. cd: seconds before it can come again. dmg: x damage.
 const SPECIALS := {
 	"lunge": {"windup": 0.55, "dist": 7.5, "speed": 17.0, "width": 1.4, "dmg": 1.25,
@@ -17,6 +23,38 @@ const SPECIALS := {
 	"leap": {"windup": 0.5, "air": 0.6, "height": 2.4, "radius": 2.4, "dmg": 1.4,
 		"min": 3.2, "max": 10.0, "cd": 5.5, "color": Color(1.0, 0.35, 0.05)},
 }
+## Vampires' close-range second pattern: the first two rakes of vampire_anim_claw_combo (clip strikes
+## 0.57 / 1.3 s, played at 1x after the tell), stepping in `advance` m and re-aiming between the rakes
+## (a panic dodge after the first one gets caught by the second). Each rake is parryable in its last
+## PARRY_LEAD s. Picked over the plain swipe with `chance` when it is off cooldown.
+const CLAW := {"windup": 0.5, "hits": [0.57, 1.3], "end": 1.8, "advance": 1.3, "dmg": 0.8,
+	"reach": 0.7, "cd": 4.5, "chance": 0.4}
+const PARRY_LEAD := 0.3
+## Vampires read a charged slash: when Sol holds attack (or swings the charge) close by, one may
+## backflip out of it (vampire_anim_backflip from `from`, at `speed`), untouchable between clip
+## i-frame times, carried `dist` m back by code. Then the lunge is ready to punish the whiff.
+const FLIP := {"from": 0.2, "speed": 1.3, "iframes": [0.55, 1.45], "air": [0.35, 1.5], "dist": 3.0,
+	"range": 4.8, "chance": 0.65, "cd": 6.0}
+## The tells: the cue (hiss / growl) and the eye glint come this long before the strike.
+const CUE_LEAD := 0.3
+const HIT_RIM := Color(1.0, 0.32, 0.18) # the hit read: a short hot rim on the body, not a white flash
+const RIM_TIME := 0.09
+const HITSTOP := 0.06 # the victim's own freeze on a hit (animation and slide hold)
+const FX_SHADER := """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_back, shadows_disabled, fog_disabled;
+uniform vec4 tint : source_color = vec4(0.0);
+uniform vec4 rim_color : source_color = vec4(1.0, 0.32, 0.18, 1.0);
+uniform float rim = 0.0;
+void fragment() {
+	float f = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.2);
+	float r = clamp(f * rim * 1.8, 0.0, 1.0);
+	float a = clamp(tint.a + r, 0.0, 1.0);
+	ALBEDO = mix(tint.rgb, rim_color.rgb, r / max(a, 0.001));
+	ALPHA = a;
+}
+"""
+static var _fx_shader: Shader
 ## QA2 #7: pressed up against Sol with the special ready, an enemy often hops back out of reach
 ## (BACKSTEP_CHANCE) and opens with it from there, so a player standing still sees it too.
 const BACKSTEP_CHANCE := 0.55
@@ -90,7 +128,10 @@ var model: Node3D
 var model_name := ""
 var skel: Skeleton3D
 var body_mesh: MeshInstance3D
-var overlay_mat: StandardMaterial3D # the only per-enemy material: flash / burn / death tint
+var overlay_mat: StandardMaterial3D # the ash-death overlay (shaded grey)
+var fx_mat: ShaderMaterial # burn / transform tint plus the hit rim (FX_SHADER)
+var eye_att: BoneAttachment3D # the head bone the eyes (and the tell glint) ride
+var eye_mid := Vector3.ZERO # between the eyes, in eye_att's space
 var bone := {}
 var run_blend := 0.0
 var windup_blend := 0.0
@@ -109,7 +150,25 @@ var special_cd := 0.0
 var special_from := Vector3.ZERO
 var special_to := Vector3.ZERO
 var special_hit := false # the lunge connects once
-var telegraph: Node3D
+var telegraph: Node3D # only the leap's soft landing shadow now (no decal for common attacks)
+# the body tell (_tell): a clip's wind-up driven on HFx.tell_curve so its strike lands on time
+var tell_clip := ""
+var tell_from := 0.0
+var tell_strike := 0.0
+var tell_total := 0.0
+var tell_t := 0.0
+var cue_t := -1.0 # seconds until the pre-strike glint and hiss (-1: none pending)
+var glints := 0 # tells that flashed (smoke test)
+var claw_cd := 0.0
+var claw_hit := 0 # rakes of the claw combo resolved so far
+var flip_cd := 0.0
+var flips := 0 # backflips taken (smoke test)
+var clip_t := 0.0 # clip-time position of a special that runs on its clip (claw, flip)
+# hit feedback
+var hitstop_t := 0.0
+var recoil := Vector2.ZERO # (pitch, roll) kick away from the blade, springing back
+var recoil_v := Vector2.ZERO
+var _soft_flash := false # settings: reduced flashing (read on each hit)
 # health bar over an engaged enemy (red at the stagger threshold)
 var hp_bar: MeshInstance3D
 var hp_bar_mat: ShaderMaterial
@@ -208,6 +267,13 @@ func _set_model(n: String) -> bool:
 		overlay_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		overlay_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		overlay_mat.albedo_color = Color(1, 1, 1, 0)
+	if fx_mat == null:
+		if _fx_shader == null:
+			_fx_shader = Shader.new()
+			_fx_shader.code = FX_SHADER
+		fx_mat = ShaderMaterial.new()
+		fx_mat.shader = _fx_shader
+		fx_mat.set_shader_parameter("rim_color", HIT_RIM)
 	# glowing eyes ride the head bone
 	var r: float = model.get_meta("eye_radius", 0.011)
 	if not _eye_meshes.has(r):
@@ -217,23 +283,28 @@ func _set_model(n: String) -> bool:
 	att.bone_name = model.get_meta("head_bone", "head")
 	var head_rest: Vector3 = model.get_meta("head_rest", Vector3(0, 1.5, 0))
 	att.visible = n != "civilian"
+	eye_att = att
+	eye_mid = Vector3.ZERO
 	for key in ["eye_l", "eye_r"]:
 		var off: Vector3 = model.get_meta(key + "_local") if model.has_meta(key + "_local") else model.get_meta(key, head_rest) - head_rest
 		var e := U.part(att, _eye_meshes[r], eye_mat, off)
 		e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		eye_mid += off * 0.5
 	return true
 
 
-func _set_overlay(c: Color) -> void:
-	if body_mesh == null:
+## The live overlay: a tint (burning, the change) and the hit rim. No pass at all when both are off.
+func _set_overlay(c: Color, rim := 0.0) -> void:
+	if body_mesh == null or fx_mat == null:
 		return
-	if c.a <= 0.01:
+	if c.a <= 0.01 and rim <= 0.01:
 		if body_mesh.material_overlay != null:
 			body_mesh.material_overlay = null # no extra pass when there is nothing to show
 		return
-	overlay_mat.albedo_color = c
-	if body_mesh.material_overlay == null:
-		body_mesh.material_overlay = overlay_mat
+	fx_mat.set_shader_parameter("tint", c)
+	fx_mat.set_shader_parameter("rim", rim)
+	if body_mesh.material_overlay != fx_mat:
+		body_mesh.material_overlay = fx_mat
 
 
 func _rot(b: String, q: Quaternion) -> void:
@@ -248,13 +319,60 @@ func _play(clip: String, blend := -1.0, spd := 1.0, from := -1.0) -> void:
 		anim.seek(from, true)
 
 
-## Wind-up started: run the slash so its strike frame lands when the wind-up ends.
+## Wind-up started: the attack clip's own wind-up as a body tell, its strike frame on the wind-up's end.
 func _anim_attack(windup: float) -> void:
-	if anim == null:
-		return
 	var lead := minf(strike_time, 0.9) # skip the clip's idle lead-in
-	_play("attack", 0.08, lead / maxf(windup, 0.05), strike_time - lead)
-	anim_lock_t = windup + 0.6
+	_tell("attack", strike_time - lead, strike_time, windup)
+	if anim != null:
+		anim_lock_t = windup + 0.6
+
+
+## The body tell: play `clip` from `from` so that its strike frame `strike` lands `total` s from now,
+## along HFx.tell_curve (rise into the cocked pose, hold the coil, snap). The eye glint and the hiss /
+## growl come CUE_LEAD s before the strike. No floor decal.
+func _tell(clip: String, from: float, strike: float, total: float, cue := true) -> void:
+	tell_total = maxf(total, 0.05)
+	tell_t = 0.0
+	tell_clip = clip
+	tell_from = maxf(from, 0.0)
+	tell_strike = maxf(strike, tell_from + 0.05)
+	cue_t = maxf(tell_total - CUE_LEAD, 0.0) if cue else -1.0
+	if anim != null and anim.has_animation(clip):
+		_play(clip, 0.08, (tell_strike - tell_from) / tell_total, tell_from)
+	else:
+		tell_clip = ""
+
+
+## Per physics frame while a tell runs: steer the clip's rate onto the curve; fire the cue on time.
+func _tell_tick(delta: float) -> void:
+	if tell_total <= 0.0:
+		return
+	tell_t += delta
+	if cue_t >= 0.0:
+		cue_t -= delta
+		if cue_t < 0.0:
+			_cue()
+	if tell_clip != "" and anim != null and anim_state == tell_clip:
+		var span := tell_strike - tell_from
+		var cock := clampf(1.0 - 0.16 / maxf(span, 0.01), 0.45, 0.85)
+		var k_next := (tell_t + delta) / tell_total
+		var want := tell_from + span * HFx.tell_curve(k_next, cock)
+		anim.speed_scale = clampf((want - anim.current_animation_position) / maxf(delta, 0.001), 0.0, 8.0)
+	if tell_t >= tell_total:
+		tell_total = 0.0
+		if tell_clip != "" and anim != null and anim_state == tell_clip:
+			anim.speed_scale = 1.0
+
+
+## The last beat before a strike: the eyes flare with a glint and the creature hisses or growls.
+func _cue() -> void:
+	glints += 1
+	var wolf := kind == WEREWOLF and transformed
+	if eye_att != null and (kind == VAMPIRE or wolf):
+		HFx.glint(eye_att, eye_mid + Vector3(0, 0, 0.02), Color(1.0, 0.22, 0.12) if kind == VAMPIRE else Color(1.0, 0.7, 0.2), 0.3 if wolf else 0.24, 0.24)
+	var a := get_node_or_null("/root/Audio")
+	if a != null:
+		a.play_at("wolf_growl" if wolf else ("vamp_hiss" if kind == VAMPIRE else "claw_swipe"), global_position, -5.0 if not wolf else -3.0, 0.12)
 
 
 func _anim_strike() -> void:
@@ -325,6 +443,9 @@ func _process(delta: float) -> void:
 		if d2 > 64.0 and (-cam.global_transform.basis.z).dot(global_position - cam.global_position) < 0.0:
 			step = 6
 	if step > 1 and (Engine.get_process_frames() + anim_slot) % step != 0:
+		return
+	if hitstop_t > 0.0:
+		anim_accum = 0.0 # the victim's hit-stop: the pose holds
 		return
 	anim.advance(anim_accum)
 	anim_accum = 0.0
@@ -486,6 +607,15 @@ func _physics_process(delta: float) -> void:
 	exec_t = maxf(exec_t - delta, 0.0)
 	engaged_t = maxf(engaged_t - delta, 0.0)
 	flash_t = maxf(flash_t - delta, 0.0)
+	claw_cd = maxf(claw_cd - delta, 0.0)
+	flip_cd = maxf(flip_cd - delta, 0.0)
+	_recoil_tick(delta)
+	if hitstop_t > 0.0:
+		hitstop_t -= delta # the victim's freeze: hold the pose and the slide for a beat
+		_animate(0.0, 0.0)
+		_update_bar(player)
+		return
+	_tell_tick(delta)
 	if not is_on_floor():
 		velocity.y -= 24.0 * delta
 	else:
@@ -520,7 +650,7 @@ func _physics_process(delta: float) -> void:
 			staggered = false
 			marker.visible = false
 			hp = max_hp * 0.45
-			flash_t = 0.12 # "recovered" flash: the bite window is gone
+			flash_t = RIM_TIME # "recovered" flash: the bite window is gone
 	elif player != null and not player.dead:
 		var to: Vector3 = player.global_position - global_position
 		to.y = 0.0
@@ -533,6 +663,12 @@ func _physics_process(delta: float) -> void:
 				_resolve_strike(player)
 		else:
 			var sp := _special_name()
+			if _wants_flip(player, dist):
+				_start_flip(to, dist)
+				_move(Vector3.ZERO, delta)
+				_animate(delta, 0.0)
+				_update_bar(player)
+				return
 			var band: float = attack_range + 4.0
 			if sp != "":
 				band = maxf(band, float(SPECIALS[sp].max))
@@ -551,9 +687,13 @@ func _physics_process(delta: float) -> void:
 				else:
 					special_cd = randf_range(1.0, 2.0) # swipe for now, think about it again soon
 			elif token and dist <= attack_range:
-				if attack_cd <= 0.0:
+				if attack_cd <= 0.0 and kind == VAMPIRE and claw_cd <= 0.0 and speed > 0.0 and randf() < float(CLAW.chance) \
+						and anim != null and anim.has_animation("claw_combo"):
+					_start_claw(to, dist)
+					look = strike_dir
+				elif attack_cd <= 0.0:
 					strike_dir = to / dist if dist > 0.01 else Vector3(sin(visual.rotation.y), 0, cos(visual.rotation.y))
-					windup_t = 0.38 if kind == VAMPIRE else 0.45
+					windup_t = 0.46 if kind == VAMPIRE else 0.6
 					attack_cd = 1.1 if kind == VAMPIRE else 1.3
 					_anim_attack(windup_t)
 					Audio.enemy_bark(self) # AUDIO HOOK
@@ -606,13 +746,17 @@ func _start_special(sp: String, player, to: Vector3, dist: float) -> void:
 	special_from = global_position
 	if telegraph != null and is_instance_valid(telegraph):
 		telegraph.queue_free()
+	telegraph = null
 	if sp == "lunge":
 		var reach := minf(dist + 1.5, float(d.dist))
 		special_to = global_position + strike_dir * reach
-		telegraph = HFx.line_telegraph(main, global_position, strike_dir, reach + 0.6, float(d.width), special_t, d.color)
-		# rear back: the slash clip's own wind-up, slowed into a crouch
-		if anim != null:
-			_play("attack", 0.1, 0.45, maxf(strike_time - 0.9, 0.0))
+		# the lunge clip's crouch on the tell curve; the dash itself plays the rest up to the 0.77 s strike
+		if anim != null and anim.has_animation("lunge"):
+			var travel := reach / float(d.speed)
+			var strike := LUNGE_STRIKE - travel * LUNGE_DASH_RATE
+			_tell("lunge", maxf(strike - special_t * 1.1, 0.0), strike, special_t)
+		else:
+			_tell("attack", maxf(strike_time - 0.9, 0.0), strike_time, special_t + 0.2)
 	else:
 		# onto where Sol is (a touch ahead of his run), never past the band
 		var tgt: Vector3 = player.global_position + Vector3(player.velocity.x, 0, player.velocity.z) * 0.25
@@ -621,10 +765,8 @@ func _start_special(sp: String, player, to: Vector3, dist: float) -> void:
 		if off.length() > float(d.max):
 			off = off.normalized() * float(d.max)
 		special_to = global_position + off
-		telegraph = HFx.circle_telegraph(main, special_to, float(d.radius), special_t + float(d.air), d.color)
-		# the crouch before the spring: the jump clip's take-off, slowed
-		if anim != null:
-			_play("jump", 0.1, 0.55, 0.0)
+		# the crouch before the spring: the pounce clip up to its take-off, on the tell curve
+		_tell("jump", 0.0, POUNCE_TAKEOFF, special_t)
 	Audio.enemy_bark(self) # AUDIO HOOK
 	knockback = Vector3.ZERO
 
@@ -641,9 +783,77 @@ func _start_backstep(sp: String, to: Vector3, dist: float) -> void:
 		anim_state = "run_back"
 
 
+## The pounce clip (werewolf "jump", tools/build_r3_anims.gd): take-off and landing, clip seconds.
+const POUNCE_TAKEOFF := 0.6
+const POUNCE_LAND := 1.3
+## The lunge clip: its strike, and the rate the dash plays it at.
+const LUNGE_STRIKE := 0.77
+const LUNGE_DASH_RATE := 1.0
+
+
+## Vampires up close: the two-rake claw string (CLAW) instead of the single swipe.
+func _start_claw(to: Vector3, dist: float) -> void:
+	special = "claw"
+	special_t = CLAW.windup
+	clip_t = 0.0
+	claw_hit = 0
+	claw_cd = float(CLAW.cd) * randf_range(0.85, 1.3)
+	attack_cd = maxf(attack_cd, 1.4)
+	strike_dir = to / dist if dist > 0.01 else Vector3(sin(visual.rotation.y), 0, cos(visual.rotation.y))
+	special_from = global_position
+	var hit0: float = CLAW.hits[0]
+	_tell("claw_combo" if anim != null and anim.has_animation("claw_combo") else "attack", 0.0, hit0, special_t)
+	windup_t = 0.0
+	Audio.enemy_bark(self) # AUDIO HOOK
+	knockback = Vector3.ZERO
+
+
+## Sol is charging a heavy cut close by: a vampire may backflip out of it (FLIP).
+func _start_flip(to: Vector3, dist: float) -> void:
+	special = "flip"
+	clip_t = float(FLIP.from)
+	special_t = (2.1 - clip_t) / float(FLIP.speed)
+	flip_cd = float(FLIP.cd)
+	flips += 1
+	windup_t = 0.0
+	tell_total = 0.0
+	cue_t = -1.0
+	main.release_attack_token(self)
+	strike_dir = to / dist if dist > 0.01 else Vector3(sin(visual.rotation.y), 0, cos(visual.rotation.y))
+	special_from = global_position
+	if anim != null and anim.has_animation("backflip"):
+		_play("backflip", 0.06, float(FLIP.speed), clip_t)
+	var a := get_node_or_null("/root/Audio")
+	if a != null:
+		a.play_at("vamp_hiss", global_position, -2.0, 0.1)
+	knockback = Vector3.ZERO
+
+
+## True while a backflip's i-frames run: the blade passes through.
+func evading() -> bool:
+	return special == "flip" and clip_t >= float(FLIP.iframes[0]) and clip_t <= float(FLIP.iframes[1])
+
+
+## Should this vampire backflip away from Sol right now? (He is winding or swinging a charged slash.)
+func _wants_flip(player, dist: float) -> bool:
+	if kind != VAMPIRE or flip_cd > 0.0 or special != "" or staggered or speed <= 0.0 or dist > float(FLIP.range):
+		return false
+	if anim == null or not anim.has_animation("backflip"):
+		return false
+	var charging: bool = float(player.get("hold_t")) > 0.16 or (player.get("move_name") == "charged" and float(player.get("swing_t")) > 0.25)
+	if not charging:
+		return false
+	if randf() > float(FLIP.chance):
+		flip_cd = 1.5 # read it, chose to stand: think again on the next charge
+		return false
+	return true
+
+
 func _cancel_special() -> void:
 	special = ""
 	special_t = 0.0
+	tell_total = 0.0
+	cue_t = -1.0
 	if telegraph != null and is_instance_valid(telegraph):
 		telegraph.queue_free()
 	telegraph = null
@@ -653,9 +863,20 @@ func _cancel_special() -> void:
 func _special_tick(player, delta: float) -> void:
 	special_t -= delta
 	var sp := special.get_slice("_", 0)
-	var d: Dictionary = SPECIALS[sp]
 	var to: Vector3 = player.global_position - global_position
 	to.y = 0.0
+	if sp == "claw":
+		if special == "claw":
+			_claw_tick(player, to, delta)
+		else:
+			_apply_velocity(Vector3.ZERO, delta)
+			if special_t <= 0.0:
+				_cancel_special()
+		return
+	if sp == "flip":
+		_flip_tick(delta)
+		return
+	var d: Dictionary = SPECIALS[sp]
 	match special:
 		"lunge_windup", "leap_windup":
 			_apply_velocity(Vector3.ZERO, delta)
@@ -663,11 +884,23 @@ func _special_tick(player, delta: float) -> void:
 				special = sp
 				special_t = (special_from.distance_to(special_to) / float(d.speed)) if sp == "lunge" else float(d.air)
 				special_from = global_position
+				tell_total = 0.0
 				if anim != null:
 					if sp == "lunge":
-						_play("sprint", 0.05, 1.7)
+						if anim.has_animation("lunge"):
+							# the rest of the lunge clip, its strike on contact
+							var rate := 1.0
+							if anim_state == "lunge":
+								rate = maxf(LUNGE_STRIKE - anim.current_animation_position, 0.05) / maxf(special_t, 0.05)
+							_play("lunge", 0.04, rate)
+						else:
+							_play("sprint", 0.05, 1.7)
 					else:
-						_play("jump", 0.05, 1.3, 0.35)
+						# the pounce from take-off to the landing frame, timed to the flight
+						var from := anim.current_animation_position if anim_state == "jump" else POUNCE_TAKEOFF
+						_play("jump", 0.04, maxf(POUNCE_LAND - from, 0.1) / float(d.air), from)
+				if sp == "leap":
+					telegraph = HFx.soft_ground_cue(main, special_to, float(d.radius) * 0.85, float(d.air))
 		"lunge":
 			_apply_velocity(strike_dir * float(d.speed), delta)
 			# the first contact strikes: Sol close and in front of the dash
@@ -699,13 +932,94 @@ func _special_tick(player, delta: float) -> void:
 				_cancel_special()
 
 
+## The claw string: tell into rake 1, rake 2 at 1x, re-aiming a little between them, a step in.
+func _claw_tick(player, to: Vector3, delta: float) -> void:
+	var hits: Array = CLAW.hits
+	if special_t > 0.0:
+		# the tell into the first rake (the clip runs on the curve); parryable in its last beat
+		windup_t = special_t if special_t <= PARRY_LEAD else 0.0
+		_apply_velocity(Vector3.ZERO, delta)
+		return
+	if clip_t < float(hits[0]):
+		clip_t = float(hits[0]) # the tell just ended on the first rake's strike frame
+		tell_total = 0.0
+	else:
+		clip_t += delta
+	if anim != null and anim_state == "claw_combo":
+		anim.speed_scale = 1.0
+	var nxt := claw_hit
+	if nxt < hits.size():
+		var until: float = float(hits[nxt]) - clip_t
+		windup_t = until if until > 0.0 and until <= PARRY_LEAD else 0.0
+		if nxt > 0 and until > PARRY_LEAD and to.length() > 0.1:
+			strike_dir = strike_dir.slerp(to.normalized(), minf(4.0 * delta, 1.0)) # tracks between rakes
+		if until <= 0.0:
+			claw_hit += 1
+			windup_t = 0.0
+			_claw_rake(player, to)
+			if nxt + 1 < hits.size():
+				_later_hiss(maxf(float(hits[nxt + 1]) - clip_t - CUE_LEAD, 0.0))
+	var step: float = float(CLAW.advance) / float(CLAW.end)
+	_apply_velocity(strike_dir * step if clip_t < float(hits[-1]) and to.length() > 1.1 else Vector3.ZERO, delta)
+	if clip_t >= float(CLAW.end):
+		windup_t = 0.0
+		special = "claw_recover"
+		special_t = 0.2
+		anim_state = ""
+
+
+## The second rake is called by a short hiss, not a glint.
+func _later_hiss(delay: float) -> void:
+	get_tree().create_timer(delay, false).timeout.connect(func():
+		if not dead and special == "claw":
+			var a := get_node_or_null("/root/Audio")
+			if a != null:
+				a.play_at("vamp_hiss", global_position, -6.0, 0.15))
+
+
+func _claw_rake(player, to: Vector3) -> void:
+	var dist := to.length()
+	var reach: float = attack_range + float(CLAW.reach)
+	var a := get_node_or_null("/root/Audio")
+	if a != null:
+		a.play_at("claw_swipe", global_position + strike_dir, -3.0)
+	if dist < reach and (dist < 0.6 or strike_dir.dot(to / dist) > 0.4):
+		player.take_damage(damage * float(CLAW.dmg), self) # a parry inside the window turns it aside
+	elif dist < reach + 3.0 and player.dashed_recently():
+		main.perfect_dodge()
+
+
+## The backflip: carried back along the clip's airborne stretch, untouchable in its i-frames; the
+## lunge comes ready for the landing.
+func _flip_tick(delta: float) -> void:
+	clip_t += delta * float(FLIP.speed)
+	var air: Array = FLIP.air
+	var v := Vector3.ZERO
+	if clip_t >= float(air[0]) and clip_t <= float(air[1]):
+		var span: float = (float(air[1]) - float(air[0])) / float(FLIP.speed)
+		v = -strike_dir * float(FLIP.dist) / span
+	_apply_velocity(v, delta)
+	if special_t <= 0.0:
+		_cancel_special()
+		special_cd = minf(special_cd, 0.25) # the lunge punishes the whiffed charge
+		attack_cd = minf(attack_cd, 0.2)
+
+
 func _recover(t: float) -> void:
-	special = special.get_slice("_", 0) + "_recover"
+	var sp := special.get_slice("_", 0)
+	special = sp + "_recover"
 	special_t = t
+	tell_total = 0.0
 	if telegraph != null and is_instance_valid(telegraph):
 		telegraph.queue_free()
 	telegraph = null
-	if anim != null:
+	if anim == null:
+		return
+	if sp == "lunge" and anim.has_animation("lunge"):
+		_play("lunge", 0.05, 1.4, LUNGE_STRIKE) # the lunge's own follow-through
+	elif sp == "leap" and anim_state == "jump":
+		_play("jump", 0.04, 1.5, POUNCE_LAND) # the pounce's landing
+	else:
 		_play("attack", 0.06, 1.5, maxf(strike_time - 0.12, 0.0)) # the swipe's follow-through
 
 
@@ -802,7 +1116,7 @@ func execution_victim(by: Node3D, strike_delay: float) -> void:
 			return
 		_play("hit", 0.05, 0.9, 0.12)
 		anim_state = "executed"
-		flash_t = 0.12)
+		flash_t = RIM_TIME)
 
 
 ## The killing cut: thrown back along Sol's swing with a blood burst (the death clip is already playing).
@@ -897,13 +1211,18 @@ func _animate(delta: float, spd: float) -> void:
 			lean = -0.25 # rear back before the strike
 		elif transformed:
 			lean = 0.3
-	visual.rotation.x = lerpf(visual.rotation.x, lean, 10.0 * delta)
+	visual.rotation.x = lerpf(visual.rotation.x, lean, 10.0 * delta) + recoil.x * minf(60.0 * delta, 1.0)
+	if not burning:
+		visual.rotation.z = recoil.y
+	var rim := clampf(flash_t / RIM_TIME, 0.0, 1.0)
+	if rim > 0.0 and _soft_flash:
+		rim *= 0.45 # settings: reduced flashing
 	if transform_t <= 0.0:
 		var c := body_color
 		if burning:
 			c = c.lerp(Color(1.0, 0.35, 0.05), 0.5 + 0.5 * sin(phase * 3.0))
-		if flash_t > 0.0:
-			c = c.lerp(Color.WHITE, flash_t / 0.12)
+		if rim > 0.0:
+			c = c.lerp(HIT_RIM, rim * 0.35)
 		body_mat.albedo_color = c
 	if model != null:
 		var o := Color(1, 1, 1, 0)
@@ -911,9 +1230,7 @@ func _animate(delta: float, spd: float) -> void:
 			o = Color(body_color.r, body_color.g, body_color.b, clampf(transform_t, 0.0, 1.0) * 0.7)
 		if burning:
 			o = Color(1.0, 0.35, 0.05, 0.4 + 0.3 * sin(phase * 3.0))
-		if flash_t > 0.0:
-			o = o.lerp(Color(1, 1, 1, 0.9), flash_t / 0.12)
-		_set_overlay(o)
+		_set_overlay(o, rim)
 		if anim != null:
 			_anim_update(delta, spd)
 		else:
@@ -923,14 +1240,40 @@ func _animate(delta: float, spd: float) -> void:
 		marker.position.y = 2.7 + sin(phase * 0.6) * 0.12
 
 
+## The directional stagger: a kick of the whole body away from the blade that springs back (~0.25 s).
+func _recoil_tick(delta: float) -> void:
+	if recoil == Vector2.ZERO and recoil_v == Vector2.ZERO:
+		return
+	recoil_v += (-recoil * 260.0 - recoil_v * 22.0) * delta
+	recoil += recoil_v * delta
+	if recoil.length() < 0.002 and recoil_v.length() < 0.02:
+		recoil = Vector2.ZERO
+		recoil_v = Vector2.ZERO
+
+
+func _hit_feedback(amount: float, dir: Vector3) -> void:
+	flash_t = RIM_TIME
+	_soft_flash = bool(HFx.opt("reduce_flashing", false))
+	hitstop_t = HITSTOP
+	var d := Vector3(dir.x, 0, dir.z)
+	if d.length() < 0.01:
+		d = -Vector3(sin(visual.rotation.y), 0, cos(visual.rotation.y))
+	d = d.normalized()
+	var local := visual.global_transform.basis.inverse() * d
+	var k := clampf(amount / 20.0, 0.5, 1.4)
+	recoil_v += Vector2(local.z, -local.x) * 5.5 * k
+	var h := 2.0 if model_name == "werewolf" else 1.25
+	HFx.blood_spray(main, global_position + Vector3(0, h, 0) - d * 0.15, d, 12 if amount < 25.0 else 18, k)
+
+
 func take_hit(amount: float, dir: Vector3) -> void:
-	if dead:
+	if dead or evading():
 		return
 	if staggered:
 		_die(false)
 		return
 	hp -= amount
-	flash_t = 0.12
+	_hit_feedback(amount, dir)
 	windup_t = 0.0
 	engaged_t = 5.0
 	if special != "":
@@ -972,14 +1315,16 @@ func _die(_drained: bool) -> void:
 	if anim != null:
 		visual.rotation.z = 0.0
 		_play("death", 0.1, 2.0 if kind == VAMPIRE else 1.25, 0.0)
+	if body_mesh != null:
+		body_mesh.material_overlay = null
 	if kind == VAMPIRE:
 		if anim != null: # crumple into the fall while greying, then collapse to ash
 			overlay_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-			_set_overlay(Color(0.3, 0.3, 0.3, 0.05))
+			_ash_overlay()
 			tw.tween_property(overlay_mat, "albedo_color", Color(0.3, 0.3, 0.3, 0.92), 0.7)
 		elif model != null: # turn to ash: grey, shaded overlay
 			overlay_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-			_set_overlay(Color(0.3, 0.3, 0.3, 0.05))
+			_ash_overlay()
 			tw.tween_property(overlay_mat, "albedo_color", Color(0.3, 0.3, 0.3, 0.92), 0.25)
 			tw.parallel()
 		tw.tween_property(body_mat, "albedo_color", Color(0.25, 0.25, 0.25), 0.25)
@@ -994,3 +1339,12 @@ func _die(_drained: bool) -> void:
 			tw.tween_interval(1.2)
 		tw.tween_property(visual, "scale", Vector3.ZERO, 0.4)
 	tw.tween_callback(queue_free)
+
+
+
+## The vampire's ash death: a shaded grey overlay faded in by _die's tween.
+func _ash_overlay() -> void:
+	if body_mesh == null:
+		return
+	overlay_mat.albedo_color = Color(0.3, 0.3, 0.3, 0.05)
+	body_mesh.material_overlay = overlay_mat
