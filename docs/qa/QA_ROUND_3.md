@@ -125,7 +125,7 @@
   | **Map open** | **341** / 127k | **377** / 166k | **415** / 283k |
   | Marcus fight / Blood Rite | — | — | 178 / 360k · 260 / 373k |
 
-  High: plaza 328 draws / 364k. The rest of the High run was still rendering at the time of writing; see `nat_views_high.log`.
+  High (stopped after 4 views under llvmpipe): plaza 328 / 364k, plaza oaks 303 / 369k, Quarter street 297 / 331k, Velvet Mile 215 / 284k. High is the only tier over about 300 draws in the city.
 - **Benchmark (`bench_<tier>.json`, mean draws per segment):**
   - Very Low: drop-in 208, roam 162, camp 179, boss 165, map 325.
   - Low: 230 / 176 / 205 / 181 / 320.
