@@ -2,6 +2,7 @@ extends SceneTree
 ## Headless smoke test: godot --headless -s res://tests/smoke_test.gd
 
 const SMOKE_SAVE := "user://smoke_save.json"
+const W_DATA = preload("res://scripts/items/wardrobe_data.gd")
 
 func _initialize() -> void:
 	# never touch the player's real save; start from a fresh one
@@ -105,6 +106,7 @@ func _initialize() -> void:
 	ok = await _cemetery_checks(main) and ok
 	ok = await _locomotion_checks(main) and ok
 	ok = await _menu_checks(main) and ok
+	ok = await load("res://tests/lair_checks.gd").new().run(self, _check) and ok # the walkable lair + the wardrobe
 	ok = await _hunt_checks() and ok
 	ok = _download_checks() and ok
 	if FileAccess.file_exists(SMOKE_SAVE):
@@ -2389,11 +2391,13 @@ func _hunt_checks() -> bool:
 	HD.force_freeroam = false
 	HD.requested = false
 	HD.force_short = false
-	HD.seed_override = 77
+	HD.seed_override = -1
+	HD.next_seed = 77 # LAIR: the seed the lair's briefing drew
 	var m0 = await _start_hunt()
 	var h0 = m0.hunt
 	var p0 = m0.player
 	ok = _check("main.tscn without flags starts a Hunt", h0 != null and not m0.free_roam and h0.state == "deploy") and ok
+	ok = _check("the Hunt uses the lair briefing's seed once (seed %d, next %d)" % [h0.seed, HD.next_seed], h0.seed == 77 and HD.next_seed == -1) and ok
 	var dp0: Vector3 = h0.deploy_point.pos
 	ok = _check("...and deploys away from the plaza (point %.0f m out, Sol %.0f m out)" % [Vector2(dp0.x, dp0.z).length(), Vector2(p0.global_position.x, p0.global_position.z).length()],
 		Vector2(dp0.x, dp0.z).length() > 50.0 and Vector2(p0.global_position.x, p0.global_position.z).length() > 40.0) and ok
@@ -2451,6 +2455,14 @@ func _hunt_checks() -> bool:
 	HD.requested = true
 	HD.force_short = true
 	HD.seed_override = 4242
+	# WARDROBE: the outfit picked in the lair is worn into the Hunt (stats and look)
+	for cid in ["hunter_duster", "courier_boots", "wide_brim"]:
+		if not cid in Meta.data.clothes:
+			Meta.data.clothes.append(cid)
+	Meta.data.outfit["coat"] = "hunter_duster"
+	Meta.data.outfit["boots"] = "courier_boots"
+	Meta.data.outfit["hat"] = "wide_brim"
+	Meta.save_meta()
 	var m = await _start_hunt()
 	var h = m.hunt
 	var p = m.player
@@ -2464,6 +2476,14 @@ func _hunt_checks() -> bool:
 	ok = _check("the Descent hands over control (state %s)" % h.state, h.state == "explore" and p.is_physics_processing() and p.camera.current) and ok
 	ok = _check("player starts far from the plaza centre (%.0f m)" % Vector2(p.global_position.x, p.global_position.z).length(), Vector2(p.global_position.x, p.global_position.z).length() > 40.0) and ok
 	ok = _check("hub charm worn into the Hunt", m.inventory.charms[0].get("id", "") == "john_root") and ok
+	var o_meta: Dictionary = p.model_root.get_meta("outfit", {}) if p.model_root != null else {}
+	ok = _check("the lair outfit applies in the Hunt: speed %+.2f, health %+.2f, notice %+.2f, max blood %.0f, coat %s" % [m.progression.stat("speed"), m.progression.stat("max_hp_pct"), m.progression.stat("notice"), p.max_hp, o_meta.get("coat", "")],
+		is_equal_approx(m.progression.stat("speed"), 0.05) and is_equal_approx(m.progression.stat("max_hp_pct"), 0.12) and is_equal_approx(m.progression.stat("notice"), -0.1)
+		and is_equal_approx(p.max_hp, 112.0) and o_meta.get("coat", "") == "hunter_duster" and p.detect_mult() < 0.95) and ok
+	var found: String = m.loot.roll_clothing("boss", true)
+	ok = _check("rare clothes drop in the Hunt and go to the wardrobe (%s)" % found, found != "" and Meta.owns_cloth(found) and W_DATA.get_def(found).get("drop", false)) and ok
+	Meta.data.outfit = W_DATA.DEFAULT_OUTFIT.duplicate()
+	Meta.save_meta()
 	ok = _check("run starts fresh (rank 1, 0 Tithe, no save writes)", m.progression.level == 1 and m.progression.tithe == 0 and not m.progression.persist) and ok
 	# POIs
 	var with_enemies := 0

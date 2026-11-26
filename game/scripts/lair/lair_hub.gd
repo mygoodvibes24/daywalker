@@ -26,12 +26,12 @@ const MainScript = preload("res://scripts/main.gd")
 const Meta = preload("res://scripts/hunt/hunt_meta.gd")
 const Cfg = preload("res://scripts/hunt/hunt_config.gd")
 const GAME_SCENE := "res://scenes/main.tscn"
-const SPAWN := Vector3(1.25, 0.2, 1.7) # in the front bay, looking down the lab toward the fridges
+const SPAWN := Vector3(1.7, 0.2, 0.7) # in the front bay, looking down the lab toward the fridges
 const SPAWN_YAW := PI # facing -Z
 
 ## Station framing: camera position, look target, fov, panel side.
 const SHOTS := {
-	"rack": [Vector3(1.85, 1.75, 3.35), Vector3(3.55, 1.45, 1.55), 50.0, "left"],
+	"rack": [Vector3(0.75, 1.8, 0.75), Vector3(3.9, 1.55, 2.45), 50.0, "left"],
 	"bench": [Vector3(-0.35, 1.85, -0.85), Vector3(1.55, 0.9, -3.1), 52.0, "right"],
 	"mirror": [Vector3(-0.45, 1.3, 1.3), Vector3(0.62, 1.05, 2.12), 42.0, "right"],
 	"table": [Vector3(1.25, 1.85, -4.35), Vector3(1.0, 1.45, -6.9), 52.0, "right"],
@@ -107,6 +107,17 @@ func _ready() -> void:
 	player.hp = player.max_hp
 	if player.sheath != null:
 		player.sheath.sheathe(true)
+	if player.arsenal != null and player.arsenal.get("hud") != null:
+		player.arsenal.hud.visible = false # no Weapon Art here
+	# a soft warm fill that walks with him, so he reads in the dark bays (no shadows: cheap)
+	var fill := OmniLight3D.new()
+	fill.name = "SolFill"
+	fill.position = Vector3(0.0, 2.3, 0.9)
+	fill.light_color = Color(1.0, 0.72, 0.5)
+	fill.light_energy = 0.7
+	fill.omni_range = 3.2
+	fill.omni_attenuation = 1.4
+	player.add_child(fill)
 	var idle = set_.get_node_or_null("NiaIdle")
 	if idle != null:
 		idle.face = player
@@ -208,7 +219,7 @@ func use_station(id: String) -> void:
 		if rooms != null and rooms.mirror != null:
 			rooms.mirror.get_parent().visible = false
 	elif id == "rack":
-		_place_sol(LairRooms.STATIONS.rack.pos, PI * 0.5 + 0.35) # back to the camera, the blade on show
+		_place_sol(LairRooms.STATIONS.rack.pos, PI * 0.5 - 0.25) # facing the board, the blade on his back on show
 	_frame(shot[0], shot[1], shot[2])
 	panel.open(id, shot[3])
 
@@ -320,6 +331,8 @@ func _load_game() -> void:
 
 
 func _process(_delta: float) -> void:
+	if player != null and player.arsenal != null and player.arsenal.get("hud") != null:
+		player.arsenal.hud.visible = false # no Weapon Art indicator in the lair
 	if not _load_threaded:
 		return
 	var st := ResourceLoader.load_threaded_get_status(GAME_SCENE)

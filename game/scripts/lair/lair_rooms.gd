@@ -58,18 +58,26 @@ func build(s) -> void:
 ## After Nia and the lights: the front bay's light, colliders, then batching.
 func finish(s) -> void:
 	set_ = s
-	var l := OmniLight3D.new()
-	l.position = Vector3(1.3, 2.35, 2.1)
-	l.light_color = Color(1.0, 0.62, 0.34)
-	l.light_energy = 2.3
-	l.omni_range = 6.5
-	l.omni_attenuation = 1.3
-	set_.add_child(l)
-	set_.flicker_lights.append([l, l.light_energy, 2.7])
+	# the front bay: one warm candle light over the rug, and (above the lowest light setting) a lantern
+	# in the armoury alcove; everything else there glows through emission and halos
+	_light(Vector3(1.0, 2.4, 2.0), 3.4, 7.5)
+	if Settings.light_quality >= 1:
+		_light(Vector3(2.9, 2.6, 2.0), 1.1, 4.0)
 	_colliders()
 	batch()
 	refresh_rack()
 	refresh_wardrobe()
+
+
+func _light(pos: Vector3, energy: float, rng: float) -> void:
+	var l := OmniLight3D.new()
+	l.position = pos
+	l.light_color = Color(1.0, 0.62, 0.34)
+	l.light_energy = energy
+	l.omni_range = rng
+	l.omni_attenuation = 1.1
+	set_.add_child(l)
+	set_.flicker_lights.append([l, energy, pos.x * 3.1])
 
 
 # ---------------------------------------------------------------- the front bay

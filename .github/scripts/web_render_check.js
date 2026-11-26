@@ -11,6 +11,9 @@
 // (buses added at runtime with AudioServer.add_bus()), and the browser silences such a cycle: no
 // sound at all on the web. See settings.gd ensure_buses() and default_bus_layout.tres.
 //
+// Last, the walkable lair (?lair, scenes/lair.tscn: where Start and a Hunt's results land) must load
+// (LAIR_READY in the console) and draw the room, not a black or uniform screen.
+//
 // usage (run from a directory where playwright is installed):
 //   node web_render_check.js http://localhost:8060/index.html <screenshot dir>
 const path = require('path');
@@ -22,7 +25,8 @@ const outDir = process.argv[3] || 'web-render-check';
 const READY_TIMEOUT_MS = 240000; // SwiftShader on CI runners is slow (about 1 fps)
 const SETTLE_MS = 15000; // the Hunt's fade-in and first frames after HUNT_READY
 const MIN_STDDEV = 12; // broken (sky only) measures about 5.5; a drawn city 25-85
-const MIN_RMS = 0.002; // the Hunt after a click (music, rain, a sword swing) measures about 0.05-0.15; broken 0
+const MIN_RMS = 0.002;
+const LAIR_MIN_STDDEV = 8; // the lair is a dark crypt: a drawn room measures well above this, black ~0 // the Hunt after a click (music, rain, a sword swing) measures about 0.05-0.15; broken 0
 
 // Injected before the page loads: tap every AudioContext's destination with an analyser and
 // record the audio graph's edges, so the check can measure the output and find a cycle.
@@ -183,8 +187,35 @@ async function centreStddev(browser, png) {
     audioOk = false;
   }
 
+  // the lair: Start / results land here (?lair goes straight in)
+  const lp = await browser.newPage({ viewport: { width: 960, height: 540 } });
+  let lairReady = false;
+  lp.on('console', (m) => {
+    log.push('lair ' + m.type() + ': ' + m.text());
+    if (m.text().includes('LAIR_READY')) lairReady = true;
+  });
+  lp.on('pageerror', (e) => log.push('lair PAGEERROR: ' + e.message));
+  await lp.goto(url + sep + 'lair', { timeout: 120000 });
+  const t1 = Date.now();
+  while (!lairReady && Date.now() - t1 < READY_TIMEOUT_MS) await lp.waitForTimeout(2000);
+  let lairSd = 0;
+  if (lairReady) {
+    await lp.waitForTimeout(SETTLE_MS);
+    const png = await lp.screenshot({ path: path.join(outDir, 'lair.png'), timeout: 120000 });
+    lairSd = await centreStddev(browser, png);
+    console.log(`lair: centre luminance stddev ${lairSd.toFixed(1)} (need >= ${LAIR_MIN_STDDEV})`);
+  }
+
   fs.writeFileSync(path.join(outDir, 'console.txt'), log.join('\n'));
   await browser.close();
+  if (!lairReady) {
+    console.error('::error::the lair did not load (no LAIR_READY in the console)');
+    process.exit(1);
+  }
+  if (lairSd < LAIR_MIN_STDDEV) {
+    console.error('::error::the lair renders as a near-uniform screen: see web-render-check/lair.png');
+    process.exit(1);
+  }
   if (best < MIN_STDDEV) {
     console.error('::error::web build renders the Hunt as a near-uniform screen (no city / Sol): see the web-render-check screenshots');
     process.exit(1);

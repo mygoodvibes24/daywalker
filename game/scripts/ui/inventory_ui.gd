@@ -321,6 +321,23 @@ func _stats_text() -> String:
 			extra.append(ItemDB.mod_line(k, v))
 	if not extra.is_empty():
 		lines.append("  ·  ".join(extra))
+	# WARDROBE: the totals the clothes feed into (all sources, capped: progression.gd)
+	var W = preload("res://scripts/items/wardrobe_data.gd")
+	var tot: Array[String] = []
+	for row in W.STAT_ROWS:
+		var v: float = prog.stat(row[0])
+		if absf(v) > 0.001 and row[0] in ["max_hp_pct", "dmg", "stamina", "stamina_regen", "notice"]:
+			tot.append(W.stat_text(row[0], v))
+	tot.append("stamina %d" % roundi(p.max_stamina()))
+	lines.append("Totals:  " + "  ·  ".join(tot))
+	var o: Dictionary = preload("res://scripts/hunt/hunt_meta.gd").outfit()
+	var worn: Array = []
+	for slot in ["hat", "scarf", "coat", "gloves", "boots"]:
+		var d: Dictionary = W.get_def(String(o.get(slot, "")))
+		if not d.get("mods", {}).is_empty():
+			worn.append(String(d.name))
+	if not worn.is_empty():
+		lines.append("Wearing:  " + ", ".join(worn))
 	var names: Array = []
 	for id in prog.vows:
 		names.append(prog.VOWS[id].name)
