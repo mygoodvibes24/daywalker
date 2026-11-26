@@ -1757,9 +1757,10 @@ func _boss_parry_checks(m, boss) -> bool:
 	await _wait_physics(3)
 	add.attack_cd = 9.0
 	add.strike_dir = Vector3(-1, 0, 0)
-	add.windup_t = 0.25
+	add.windup_t = 0.35 # comfortably inside the window even if a loaded machine stretches a frame
 	p.parry_t = 0.0
 	p.parry_cd = 0.0
+	p.stamina = 100.0 # the boss parry above spent some; don't let an exhausted Sol skip this one
 	p._parry()
 	await _wait_physics(4)
 	m.clear_slowmo()
