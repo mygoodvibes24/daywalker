@@ -101,6 +101,7 @@ func _initialize() -> void:
 	ok = await _audio_checks(main) and ok
 	ok = await _asset_r3_checks(main) and ok
 	ok = await _cemetery_checks(main) and ok
+	ok = await _locomotion_checks(main) and ok
 	ok = await _menu_checks(main) and ok
 	ok = await _hunt_checks() and ok
 	ok = _download_checks() and ok
@@ -812,6 +813,128 @@ func _sheath_checks(main) -> bool:
 	ok = _check("every weapon mount preset (%s) sheathes on its bone and draws" % ", ".join(SS.MOUNTS.keys()), all_ok) and ok
 	p.set_weapon_visual(keep)
 	p.auto_sheathe = false # the move checks below want the sword out
+	return ok
+
+
+## Round 3 locomotion: the empty right arm hangs while sheathed, a walk is a walk (the walk blend
+## point), and the crouch lowers the capsule, the camera and the enemies' notice, and can't stand up
+## under a ceiling.
+func _locomotion_checks(main) -> bool:
+	var p = main.player
+	var ok := true
+	main.clear_slowmo()
+	_clear_enemies(main)
+	p.dead = false
+	p.hp = p.max_hp
+	p.frenzy_t = 0.0
+	p.speed_boost_t = 0.0
+	p.lock_target = null
+	p.global_position = Vector3(12.0, 0.1, 12.0)
+	p.velocity = Vector3.ZERO
+	p.walk_vel = Vector3.ZERO
+	await _wait_physics(5)
+	if p.mod_anim == null or p.sheath == null or p.mod_anim.arm_pose == null:
+		return _check("the modular Sol has the arm pose and the sheath", false)
+	var ma = p.mod_anim
+	ma.arm_pose.record = true
+	# 1. sheathed: the right hand hangs well below the shoulder (the clip's sword grip has it ~0.24 m)
+	p.sheath.sheathe(true)
+	for i in 40:
+		await physics_frame
+		await process_frame
+	ok = _check("sheathed: the right arm hangs (hand %.2f m below the shoulder, relax %.2f)" % [ma.arm_pose.last_drop, ma.relax],
+		ma.relax > 0.99 and ma.arm_pose.last_drop > 0.38) and ok
+	p.sheath.draw(true)
+	for i in 20:
+		await physics_frame
+	ok = _check("drawn: the sword grip is back (relax %.2f)" % ma.relax, ma.relax < 0.05) and ok
+	p.sheath.sheathe(true)
+	# 2. the walk: the toggle caps the speed at the walk, which is its own blend point
+	var Loco = load("res://scripts/sol_locomotion.gd")
+	p.walk_mode = true
+	Input.action_press("move_forward")
+	for i in 40:
+		await physics_frame
+	var hs := Vector2(p.velocity.x, p.velocity.z).length()
+	var bp: float = ma.tree.get("parameters/loco/blend_position")
+	var loco = ma.bt.get_node("loco")
+	var walk_pt := -1.0
+	for i in loco.get_blend_point_count():
+		if loco.get_blend_point_node(i).animation == ma.walk_clip:
+			walk_pt = loco.get_blend_point_position(i)
+	ok = _check("walk toggle: %.2f m/s on the walk blend point (%s at %.1f, blend %.2f)" % [hs, ma.walk_clip, walk_pt, bp],
+		absf(hs - Loco.WALK_SPEED) < 0.25 and ma.lib.has_animation(ma.walk_clip) and walk_pt == Loco.WALK_SPEED and absf(bp - walk_pt) < 0.3) and ok
+	Input.action_release("move_forward")
+	p.walk_mode = false
+	# a stick tilted part way walks too
+	Input.action_press("move_forward", 0.5)
+	for i in 30:
+		await physics_frame
+	hs = Vector2(p.velocity.x, p.velocity.z).length()
+	ok = _check("a half-tilted stick walks (%.2f m/s)" % hs, hs > 0.3 and hs <= Loco.WALK_SPEED + 0.05) and ok
+	Input.action_release("move_forward")
+	await _wait_physics(10)
+	# 3. the crouch: lower capsule and camera, slower, harder to notice
+	var cam0: float = p.pivot.position.y
+	Input.action_press("crouch")
+	await physics_frame
+	Input.action_release("crouch")
+	for i in 30:
+		await physics_frame
+		await process_frame
+	ok = _check("crouch: capsule %.2f m, camera %.2f m (from %.2f), hips down %.2f m, notice x%.2f" % [p.capsule.height, p.pivot.position.y, cam0, ma.crouch_pose.last_drop, p.detect_mult()],
+		p.crouched and p.capsule.height < 1.5 and p.pivot.position.y < cam0 - 0.3 and ma.crouch_pose.last_drop > 0.2 and p.detect_mult() < 0.75) and ok
+	var HCfg = load("res://scripts/hunt/hunt_config.gd")
+	var HDir = load("res://scripts/hunt/hunt_director.gd")
+	var hd = HDir.new()
+	hd.main = main
+	var aggro: float = hd.aggro_range()
+	hd.free()
+	ok = _check("crouched, a camp notices him at %.1f m (standing %.1f)" % [aggro, HCfg.AGGRO_RANGE], aggro < HCfg.AGGRO_RANGE * 0.75) and ok
+	Input.action_press("move_forward")
+	for i in 40:
+		await physics_frame
+	hs = Vector2(p.velocity.x, p.velocity.z).length()
+	ok = _check("crouch walk %.2f m/s" % hs, absf(hs - Loco.CROUCH_SPEED) < 0.25) and ok
+	Input.action_release("move_forward")
+	await _wait_physics(10)
+	# 4. a low ceiling keeps him down
+	var lid := StaticBody3D.new()
+	lid.collision_layer = 1
+	var lcs := CollisionShape3D.new()
+	var lbox := BoxShape3D.new()
+	lbox.size = Vector3(3, 0.2, 3)
+	lcs.shape = lbox
+	lid.add_child(lcs)
+	main.add_child(lid)
+	lid.global_position = p.global_position + Vector3(0, 1.55, 0)
+	await _wait_physics(2)
+	Input.action_press("crouch")
+	await physics_frame
+	Input.action_release("crouch")
+	await _wait_physics(3)
+	var stuck: bool = p.crouched and not p.can_stand()
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	await _wait_physics(3)
+	stuck = stuck and p.crouched and not p.sprinting
+	Input.action_release("sprint")
+	Input.action_release("move_forward")
+	ok = _check("under a low ceiling he can't stand (crouch press or sprint)", stuck) and ok
+	lid.queue_free()
+	p.velocity = Vector3.ZERO
+	await _wait_physics(5)
+	# 5. sprint stands him up in the open
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	await _wait_physics(5)
+	ok = _check("sprinting stands him up (capsule %.2f m)" % p.capsule.height, not p.crouched and p.capsule.height == p.STAND_HEIGHT and p.sprinting) and ok
+	Input.action_release("sprint")
+	Input.action_release("move_forward")
+	ok = _check("crouch, walk and stand are bound (X / D-pad down, Alt / Z)", InputMap.has_action("crouch") and InputMap.has_action("walk_toggle") \
+		and InputMap.action_get_events("crouch").size() >= 2) and ok
+	ma.arm_pose.record = false
+	await _wait_physics(10)
 	return ok
 
 

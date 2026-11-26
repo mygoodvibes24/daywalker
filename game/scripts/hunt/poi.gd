@@ -146,7 +146,7 @@ func tick(delta: float, ppos: Vector3, budget: int) -> int:
 			if not is_instance_valid(e) or e.dead:
 				roused = true
 				break
-			if e.global_position.distance_to(ppos) < (director.aggro_range() if director != null else Cfg.AGGRO_RANGE) or e.hp < e.max_hp - 0.01 or e.staggered:
+			if e.global_position.distance_to(ppos) < (director.aggro_range() if director != null else Cfg.AGGRO_RANGE * (main.player.detect_mult() if main.player.has_method("detect_mult") else 1.0)) or e.hp < e.max_hp - 0.01 or e.staggered:
 				roused = true
 				break
 		if roused and director != null:

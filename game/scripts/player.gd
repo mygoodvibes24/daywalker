@@ -9,6 +9,7 @@ const SolMoves = preload("res://scripts/sol_moves.gd") # the sword moves as data
 const WeaponVisual = preload("res://scripts/items/weapon_visual.gd")
 const HFx = preload("res://scripts/hunt/hunt_fx.gd") # settings hooks (shake, sprint toggle)
 const SolSheath = preload("res://scripts/sol_sheath.gd") # the sword on his back: draw / sheathe
+const SolLoco = preload("res://scripts/sol_locomotion.gd") # walk / crouch speeds, the stick's walk band
 const SHEATHE_AFTER := 7.0 # seconds of calm (no enemy near, no blows) before he puts the sword away
 const THREAT_RANGE := 6.0 # an enemy winding up this close makes him draw
 const HEAVY_HOLD := 0.4 # hold attack this long for the charged slash
@@ -137,6 +138,20 @@ var _threat_t := 0.0
 var _sprint_toggle := false
 var _sprint_toggle_t := 0.0
 var _sprint_latched := false
+# ---- crouch and walk (round 3 locomotion). Crouch: X (Ctrl too off the web) / D-pad down / CROUCH.
+# Walk toggle: Alt / Z; a part-tilted stick walks anyway.
+const STAND_HEIGHT := 1.85
+const CROUCH_HEIGHT := 1.3
+const CAM_STAND := 1.8
+const CAM_CROUCH := 1.3
+const CROUCH_DETECT := 0.5 # camps and stragglers notice a crouched Sol at this share of their range
+var crouched := false
+var walk_mode := false # the walk toggle
+var col_shape: CollisionShape3D
+var capsule: CapsuleShape3D
+var _stand_probe: PhysicsShapeQueryParameters3D
+var _hold_crouch_t := 0.0
+var _hold_crouch := false
 
 
 func _ready() -> void:
@@ -145,10 +160,12 @@ func _ready() -> void:
 	var col := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = 0.35
-	cap.height = 1.85
+	cap.height = STAND_HEIGHT
 	col.shape = cap
-	col.position.y = 0.925
+	col.position.y = STAND_HEIGHT * 0.5
 	add_child(col)
+	col_shape = col
+	capsule = cap
 	_build_body()
 	_setup_combat_input()
 	pivot = Node3D.new()
@@ -311,12 +328,20 @@ func _physics_process(delta: float) -> void:
 			_sprint_latched = false # stopping (or running out of breath) ends the run
 		sprint_held = _sprint_latched
 	sprinting = sprint_held and dir.length() > 0.1 and (not exhausted or frenzy_t > 0.0)
+	if sprinting and crouched and not set_crouch(false):
+		sprinting = false # no room to stand: he stays low
+	_crouch_input(delta)
+	if Input.is_action_just_pressed("walk_toggle"):
+		walk_mode = not walk_mode
 	if sprinting and frenzy_t <= 0.0 and walk_vel.length() > WALK:
 		_drain_stamina(SPRINT_STAMINA * delta, 0.25)
 	_lock_tick(delta)
-	var spd := SPRINT if sprinting else WALK
+	# a part-tilted stick walks, a full push runs; the walk toggle and the crouch cap it
+	var tilt := minf(dir.length(), 1.0)
+	var cap_v := SolLoco.CROUCH_SPEED if crouched else (SolLoco.WALK_SPEED if walk_mode else INF)
+	var spd := SPRINT if sprinting else SolLoco.speed_for_tilt(tilt, WALK, cap_v)
 	if lock_target != null and not sprinting:
-		spd = WALK * LOCK_STRAFE # locked on: a measured strafe (sprint breaks into a run)
+		spd = SolLoco.speed_for_tilt(tilt, WALK * LOCK_STRAFE, cap_v) # locked on: a measured strafe (sprint breaks into a run)
 	if speed_boost_t > 0.0:
 		spd *= 1.3
 	if frenzy_t > 0.0:
@@ -326,6 +351,7 @@ func _physics_process(delta: float) -> void:
 	# Blood Dash (recharges faster in sunlight)
 	dash_charges = minf(dash_charges + delta / (0.7 if day else 1.1) * (1.0 + stat("dash_rate")), MAX_DASH) # PROGRESSION HOOK
 	if Input.is_action_just_pressed("dash") and dash_charges >= 1.0 and bite_t <= 0.0 and spend_stamina(DASH_STAMINA):
+		set_crouch(false) # the dodge stands him up (unless a ceiling keeps him low)
 		dash_charges -= 1.0
 		dash_t = DASH_TIME
 		since_dash = 0.0
@@ -339,12 +365,12 @@ func _physics_process(delta: float) -> void:
 		jumps_left = 2
 	else:
 		velocity.y -= GRAVITY * delta
-	if Input.is_action_just_pressed("jump") and jumps_left > 0 and bite_t <= 0.0:
+	if Input.is_action_just_pressed("jump") and jumps_left > 0 and bite_t <= 0.0 and set_crouch(false):
 		velocity.y = JUMP if jumps_left == 2 else JUMP * 0.85
 		jumps_left -= 1
 
 	# the run ramps up over ACCEL_TIME and down over STOP_TIME (dash, lunge and the bite stay instant)
-	var want := dir * spd
+	var want := (dir / tilt if tilt > 0.001 else Vector3.ZERO) * spd
 	if swing_t > 0.0:
 		want *= 0.3
 	var ramp := spd / ACCEL_TIME if want.length() >= walk_vel.length() - 0.01 else maxf(walk_vel.length(), WALK) / STOP_TIME
@@ -388,6 +414,7 @@ func _physics_process(delta: float) -> void:
 	# input buffer: a press up to ATTACK_BUFFER s early (mid-swing, mid-bite) comes out the moment Sol can
 	if Input.is_action_just_pressed("attack") and Time.get_ticks_msec() >= attack_block_until:
 		attack_buffer_t = ATTACK_BUFFER
+		set_crouch(false) # an attack stands him up (unless a ceiling keeps him low)
 	if attack_buffer_t > 0.0:
 		if attack_cd <= 0.0 and bite_t <= 0.0 and finisher_t <= 0.0 and (not exhausted or frenzy_t > 0.0) and _sword_ready():
 			attack_buffer_t = 0.0
@@ -869,6 +896,7 @@ func _resolve_pending(p: Dictionary) -> void:
 ##            key: the dash keeps right mouse and gains K; on a pad it keeps B, and RB (also a dash
 ##            before) now takes quick-use slot 2, which R3 had.
 func _setup_combat_input() -> void:
+	_setup_locomotion_input()
 	if InputMap.has_action("parry"):
 		return
 	InputMap.add_action("parry", 0.25)
@@ -912,6 +940,101 @@ func _setup_combat_input() -> void:
 		qb.button_index = JOY_BUTTON_RIGHT_SHOULDER
 		qb.device = -1
 		InputMap.action_add_event("quick_2", qb)
+
+
+## Crouch and walk bindings (round 3). C is the parry and B / R3 are taken (dash, lock-on), so:
+##   crouch       X; Left Ctrl too on desktop builds (in a browser Ctrl+W would close the tab while W
+##                is held); D-pad down on a pad (it no longer walks back: the stick does); CROUCH on touch
+##   walk_toggle  Alt / Z (a pad or the touch stick walks when tilted part way)
+static func _setup_locomotion_input() -> void:
+	if InputMap.has_action("crouch"):
+		return
+	InputMap.add_action("crouch", 0.25)
+	var keys := [KEY_X]
+	if not OS.has_feature("web"):
+		keys.append(KEY_CTRL)
+	for kc in keys:
+		var k := InputEventKey.new()
+		k.physical_keycode = kc
+		InputMap.action_add_event("crouch", k)
+	var pb := InputEventJoypadButton.new()
+	pb.button_index = JOY_BUTTON_DPAD_DOWN
+	pb.device = -1
+	InputMap.action_add_event("crouch", pb)
+	if InputMap.has_action("move_back"):
+		for ev in InputMap.action_get_events("move_back"):
+			if ev is InputEventJoypadButton and ev.button_index == JOY_BUTTON_DPAD_DOWN:
+				InputMap.action_erase_event("move_back", ev)
+	if not InputMap.has_action("walk_toggle"):
+		InputMap.add_action("walk_toggle", 0.25)
+		for kc in [KEY_ALT, KEY_Z]:
+			var k := InputEventKey.new()
+			k.physical_keycode = kc
+			InputMap.action_add_event("walk_toggle", k)
+
+
+# ---------------------------------------------------------------- crouch
+## Toggle (or, with the settings' hold_crouch, hold) the crouch. Only on the ground, not mid-bite or
+## mid-execution. Pressing again stands, unless something low is overhead.
+func _crouch_input(delta: float) -> void:
+	_hold_crouch_t -= delta
+	if _hold_crouch_t <= 0.0:
+		_hold_crouch_t = 1.0
+		_hold_crouch = bool(HFx.opt("hold_crouch", false)) # settings may add a hold option (polled 1/s)
+	var busy := bite_t > 0.0 or finisher_t > 0.0 or dash_t > 0.0
+	if _hold_crouch:
+		var want := Input.is_action_pressed("crouch") and is_on_floor() and not busy
+		if want != crouched and (want or not sprinting):
+			set_crouch(want)
+	elif Input.is_action_just_pressed("crouch") and not busy:
+		if crouched:
+			if not set_crouch(false) and main != null and main.hud != null:
+				main.hud.popup("NO ROOM TO STAND")
+		elif is_on_floor():
+			set_crouch(true)
+
+
+## Crouch or stand. Standing fails (returns false) under anything lower than his full height.
+func set_crouch(on: bool) -> bool:
+	if on == crouched:
+		return true
+	if not on and not can_stand():
+		return false
+	crouched = on
+	capsule.height = CROUCH_HEIGHT if on else STAND_HEIGHT
+	col_shape.position.y = capsule.height * 0.5
+	if on:
+		sprinting = false
+	return true
+
+
+## Is there room over a crouched Sol to stand up (the world's static colliders, layer 1)?
+func can_stand() -> bool:
+	if not is_inside_tree():
+		return true
+	if _stand_probe == null:
+		var sh := CapsuleShape3D.new()
+		sh.radius = 0.3
+		sh.height = STAND_HEIGHT - CROUCH_HEIGHT + 0.6
+		_stand_probe = PhysicsShapeQueryParameters3D.new()
+		_stand_probe.shape = sh
+		_stand_probe.collision_mask = 1
+		_stand_probe.exclude = [get_rid()]
+	var h: float = (_stand_probe.shape as CapsuleShape3D).height
+	_stand_probe.transform = Transform3D(Basis(), global_position + Vector3(0, STAND_HEIGHT - h * 0.5 - 0.02, 0))
+	return get_world_3d().direct_space_state.intersect_shape(_stand_probe, 1).is_empty()
+
+
+func _force_stand() -> void:
+	crouched = false
+	if capsule != null:
+		capsule.height = STAND_HEIGHT
+		col_shape.position.y = STAND_HEIGHT * 0.5
+
+
+## How far idle enemies notice Sol, as a share of their range (hunt_director.gd aggro_range, poi.gd).
+func detect_mult() -> float:
+	return CROUCH_DETECT if crouched and not dead else 1.0
 
 
 # ---------------------------------------------------------------- lock-on
@@ -1479,6 +1602,7 @@ func _die() -> void:
 		return
 	dead = true
 	hp = 0.0
+	_force_stand()
 	Audio.on_player_died() # AUDIO HOOK
 	if mod_anim != null:
 		mod_anim.die()
@@ -1500,6 +1624,7 @@ func _process(delta: float) -> void:
 		cam_yaw -= curve.x * Settings.pad_yaw() * real_dt
 		cam_pitch = clampf(cam_pitch - curve.y * Settings.pad_pitch() * Settings.y_sign() * real_dt, -1.1, 0.35)
 	pivot.rotation = Vector3(cam_pitch, cam_yaw, 0.0)
+	pivot.position.y = move_toward(pivot.position.y, CAM_CROUCH if crouched else CAM_STAND, delta * 3.0)
 	if shake > 0.0:
 		var sk := shake * 0.25 * HFx.shake_scale() # settings: reduced camera shake
 		camera.h_offset = randf_range(-1.0, 1.0) * sk
@@ -1550,6 +1675,8 @@ func _process(delta: float) -> void:
 	if mod_anim != null:
 		lean *= 0.5 # small additive tilt on top of the clips (dash lunge, bite lean)
 		mod_anim.armed = sheath == null or sheath.drawn
+		mod_anim.relaxed = sheath != null and (not sheath.drawn or sheath.phase == "reach") # the hand is empty
+		mod_anim.crouching = crouched
 		mod_anim.in_combat = mod_anim.armed and _nearest_enemy(COMBAT_RANGE, 0) != null # the sword stance needs the sword
 		mod_anim.update(delta, {"speed": hs, "on_floor": is_on_floor()})
 	visual.rotation.x = lerpf(visual.rotation.x, lean, 12.0 * delta)

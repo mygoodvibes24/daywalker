@@ -50,7 +50,7 @@ const CUTS := {
 	"parry": [["parry", 0.0, 1.2, false]], # Sword_Parry: a held guard
 	"quick_slash": [["quick_slash", 0.1, 1.25, false]], # Right_Hand_Sword_Slash: strike at 0.57 s
 }
-const LOOPED := ["idle", "run", "sprint", "stance"]
+const LOOPED := ["idle", "run", "sprint", "stance", "walk", "crouch_idle", "crouch_walk"] # (the last three: clips to buy, see docs/animation_reference/README.md)
 ## Sol's standing idle: Idle_02 (a calm, grounded breathing stance, 1.9 s loop) replaced the rig's own
 ## look-around idle in round 2. The old one stays in the library as "idle_look", played only as an
 ## occasional long-idle fidget (scripts/sol_modular_anim.gd).

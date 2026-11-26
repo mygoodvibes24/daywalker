@@ -6,9 +6,11 @@ extends RefCounted
 
 const ROWS := [
 	["# Movement", "", ""],
-	["Move", "W A S D / arrows", "Left stick / D-pad"],
+	["Move", "W A S D / arrows", "Left stick / D-pad (not down)"],
 	["Camera", "Mouse", "Right stick"],
+	["Walk (stick: tilt part way)", "Alt / Z (toggle)", "Tilt the left stick part way"],
 	["Sprint", "Shift", "LT (hold)"],
+	["Crouch / stand (quieter: enemies notice you later)", "X  (Ctrl on desktop)", "D-pad down"],
 	["Jump (double jump)", "Space", "A / Cross"],
 	["# Combat", "", ""],
 	["Blade combo (3 hits)", "Left mouse / J", "X / Square  or  RT"],
