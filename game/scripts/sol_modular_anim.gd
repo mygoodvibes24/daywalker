@@ -19,7 +19,8 @@ extends RefCounted
 ## Round 3 (locomotion): the walk is a real blend point (the bought "walk" clip, Casual_Walk; without it
 ## sol_locomotion.gd bakes a stand-in from the run); ArmPose (sol_arm_pose.gd) lets the empty right arm
 ## hang and swing while the sword is sheathed; Crouch (sol_crouch_pose.gd) bends the pose into a
-## crouch until "crouch_idle" / "crouch_walk" clips exist. Skeleton modifier order:
+## crouch only when the "crouch_idle" / "crouch_walk" clips are missing (both are bought; the crouch
+## BlendSpace carries it and the pose stays off). Skeleton modifier order:
 ## Strafe, Crouch, ArmPose, DrawIK (sol_sheath.gd), SwordWrist.
 
 const SolMoves = preload("res://scripts/sol_moves.gd")
@@ -50,7 +51,7 @@ const FIDGET_AFTER := 12.0 # seconds standing still (out of combat) before the l
 var still_t := 0.0
 var fidgeting := false
 var arm_pose: Node # sol_arm_pose.gd: the relaxed right arm while sheathed
-var crouch_pose: Node # sol_crouch_pose.gd: the procedural crouch (no crouch clips yet)
+var crouch_pose: Node # sol_crouch_pose.gd: the procedural crouch (only without the crouch clips)
 var relaxed := false # player.gd: the hand is empty (sheathed, or reaching for the hilt)
 var crouching := false # player.gd: Sol is crouched
 var crouch := 0.0 # eased 0..1
@@ -362,7 +363,7 @@ func update(delta: float, s: Dictionary) -> void:
 	tree.set("parameters/combat/blend_amount", combat)
 	# the long-idle fidget: only standing still, out of combat, no move playing
 	if _has_fidget:
-		var calm := speed < 0.2 and not in_air and not in_combat and not move_playing() and not dead
+		var calm := speed < 0.2 and not in_air and not in_combat and not move_playing() and not dead and not crouching and crouch < 0.01
 		if calm:
 			still_t += delta
 			if still_t >= FIDGET_AFTER:

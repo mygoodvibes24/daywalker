@@ -11,15 +11,16 @@ extends RefCounted
 ## is used as is. Until then bake_walk() builds "walk_proc" once from the run: played at WALK_RATE of
 ## its speed, each joint pulled back toward a calm pose (legs toward the straight rest legs, spine,
 ## head and arms toward the idle), so the stride shortens, the knees lift less, the forward lean and
-## the bounce mostly go. The same goes for "crouch_idle" / "crouch_walk" (sol_crouch_pose.gd is the
-## stand-in).
+## the bounce mostly go. The same goes for "crouch_idle" / "crouch_walk": both are bought now
+## (sol_crouch_pose.gd is the stand-in without them).
 
 const WALK_SPEED := 1.1 # the walk (a slow, calm walk)
 const CROUCH_SPEED := 1.0 # the crouch walk
 ## Each walk clip's own planted-foot speed (m/s): the clip plays at WALK_SPEED / this, so the feet don't
 ## slide. "walk": Casual_Walk_inplace (library id 613, a slow stroll, ~1.4 s a stride); "walk_proc": the
-## stand-in baked below.
-const CLIP_SPEED := {"walk": 0.73, "walk_proc": 1.6, "crouch_walk": 1.0}
+## stand-in baked below; "crouch_walk": Cautious_Crouch_Walk_Forward_inplace (616, 1.17 s a cycle, planted
+## foot measured at 1.30 m/s, so it plays at 0.77x for the 1.0 m/s crouch walk).
+const CLIP_SPEED := {"walk": 0.73, "walk_proc": 1.6, "crouch_walk": 1.3}
 const RUN_POINT := 4.6 # where the blend is all run (the run clip's own pace is ~3-4 m/s)
 const WALK_RATE := 0.62 # walk_proc plays the run's cycle at this share of its speed (1.18 s a cycle)
 const STICK_WALK := 0.55 # stick tilt up to here walks; full speed from STICK_RUN
@@ -122,6 +123,7 @@ static func ensure_crouch_idle(lib: AnimationLibrary) -> bool:
 	if not lib.has_animation("crouch_walk"):
 		return false
 	if lib.has_animation("crouch_idle"):
+		_unbow_crouch_idle(lib)
 		return true
 	var walk := lib.get_animation("crouch_walk")
 	var out := Animation.new()
@@ -140,3 +142,56 @@ static func ensure_crouch_idle(lib: AnimationLibrary) -> bool:
 				out.position_track_insert_key(nt, k, walk.position_track_interpolate(t, 0.0))
 	lib.add_animation("crouch_idle", out)
 	return true
+
+
+## The bought crouch idle (CrouchLookAroundBow, library 258) holds a bow: both arms reach forward at
+## chest height. Its arm joints (clavicle to hand, both sides) are replaced, once per library, with the
+## arms of clip `from` at its first frame, held. The standing idle's arms won the side-by-side: they hang
+## loose, the fists by the knees, a crouched rest; the crouch walk's arms (reaching forward at shoulder
+## height, tried too) read as a sleepwalker when held still. sol_arm_pose.gd still rebuilds the right arm
+## (the mirror of this left arm) while the sword is sheathed, and the crouch walk's own arms come in as he
+## moves off (the crouch BlendSpace). Its head and spine keep the clip's slow look around.
+const CROUCH_ARMS_FROM := "idle"
+const ARM_BONES := ["LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand", "RightShoulder", "RightArm", "RightForeArm", "RightHand"]
+
+
+static func _unbow_crouch_idle(lib: AnimationLibrary, from: String = CROUCH_ARMS_FROM) -> void:
+	var a := lib.get_animation("crouch_idle")
+	if a.has_meta("unbowed") or not lib.has_animation(from):
+		return
+	var src := lib.get_animation(from)
+	for bone in ARM_BONES:
+		var path := NodePath("Skeleton3D:" + bone)
+		var st := src.find_track(path, Animation.TYPE_ROTATION_3D)
+		var t := a.find_track(path, Animation.TYPE_ROTATION_3D)
+		if st < 0 or t < 0:
+			continue
+		var q := src.rotation_track_interpolate(st, 0.0)
+		for k in range(a.track_get_key_count(t) - 1, -1, -1):
+			a.track_remove_key(t, k)
+		a.rotation_track_insert_key(t, 0.0, q)
+	# the bow stance stands ~20 deg further side-on than the crouch walk: turn its hips to the walk's
+	var d := _mean_hips_yaw(src if from == "crouch_walk" else lib.get_animation("crouch_walk")) - _mean_hips_yaw(a)
+	var turn := Quaternion(Vector3.UP, d)
+	var hr := a.find_track(NodePath("Skeleton3D:Hips"), Animation.TYPE_ROTATION_3D)
+	if hr >= 0:
+		for k in a.track_get_key_count(hr):
+			a.track_set_key_value(hr, k, (turn * (a.track_get_key_value(hr, k) as Quaternion)).normalized())
+	var hp := a.find_track(NodePath("Skeleton3D:Hips"), Animation.TYPE_POSITION_3D)
+	if hp >= 0:
+		for k in a.track_get_key_count(hp):
+			a.track_set_key_value(hp, k, turn * (a.track_get_key_value(hp, k) as Vector3))
+	a.set_meta("unbowed", true)
+	a.set_meta("yaw_fit", rad_to_deg(d))
+
+
+## The mean facing (radians about +Y) of a clip's hips: its side axis, averaged over the keys.
+static func _mean_hips_yaw(a: Animation) -> float:
+	var t := a.find_track(NodePath("Skeleton3D:Hips"), Animation.TYPE_ROTATION_3D)
+	if t < 0:
+		return 0.0
+	var s := Vector2.ZERO
+	for k in a.track_get_key_count(t):
+		var v := Basis(a.track_get_key_value(t, k) as Quaternion) * Vector3.RIGHT
+		s += Vector2(v.x, -v.z).normalized()
+	return atan2(s.y, s.x)

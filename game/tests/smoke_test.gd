@@ -878,14 +878,37 @@ func _locomotion_checks(main) -> bool:
 	await _wait_physics(10)
 	# 3. the crouch: lower capsule and camera, slower, harder to notice
 	var cam0: float = p.pivot.position.y
+	var skel: Skeleton3D = p.visual.find_child("Skeleton3D", true, false)
+	var hips_bone := skel.find_bone("Hips")
+	var hips0 := skel.get_bone_global_pose(hips_bone).origin.y
 	Input.action_press("crouch")
 	await physics_frame
 	Input.action_release("crouch")
 	for i in 30:
 		await physics_frame
 		await process_frame
-	ok = _check("crouch: capsule %.2f m, camera %.2f m (from %.2f), hips down %.2f m, notice x%.2f" % [p.capsule.height, p.pivot.position.y, cam0, ma.crouch_pose.last_drop, p.detect_mult()],
-		p.crouched and p.capsule.height < 1.5 and p.pivot.position.y < cam0 - 0.3 and ma.crouch_pose.last_drop > 0.2 and p.detect_mult() < 0.75) and ok
+	# the bought crouch clips carry it (crouch idle / crouch walk BlendSpace); the procedural pose
+	# (sol_crouch_pose.gd) is only the stand-in without them
+	var drop := hips0 - skel.get_bone_global_pose(hips_bone).origin.y
+	if not ma.has_crouch_clips:
+		drop = ma.crouch_pose.last_drop
+	ok = _check("crouch: capsule %.2f m, camera %.2f m (from %.2f), hips down %.2f m, notice x%.2f" % [p.capsule.height, p.pivot.position.y, cam0, drop, p.detect_mult()],
+		p.crouched and p.capsule.height < 1.5 and p.pivot.position.y < cam0 - 0.3 and drop > 0.2 and p.detect_mult() < 0.75) and ok
+	var cl = ma.bt.get_node("crouch_loco") if ma.bt.has_node("crouch_loco") else null
+	var cw_pt := -1.0
+	var cw_rate := 0.0
+	if cl != null:
+		for i in cl.get_blend_point_count():
+			if absf(cl.get_blend_point_position(i) - Loco.CROUCH_SPEED) < 0.01:
+				cw_pt = cl.get_blend_point_position(i)
+				cw_rate = float(ma.tree.get("parameters/crouch_loco/%d/rate/scale" % i))
+	ok = _check("crouch clips: crouch blend %.2f, crouch walk point at %.1f m/s played x%.2f, procedural pose %.2f, unbowed idle %s" % [
+			float(ma.tree.get("parameters/crouch/blend_amount")), cw_pt, cw_rate, ma.crouch_pose.amount, ma.lib.get_animation("crouch_idle").has_meta("unbowed")],
+		ma.has_crouch_clips and ma.lib.has_animation("crouch_walk") and ma.lib.has_animation("crouch_idle") \
+		and float(ma.tree.get("parameters/crouch/blend_amount")) > 0.99 and absf(cw_pt - Loco.CROUCH_SPEED) < 0.01 \
+		and absf(cw_rate - Loco.clip_rate("crouch_walk", Loco.CROUCH_SPEED)) < 0.01 and ma.crouch_pose.amount < 0.001 \
+		and ma.lib.get_animation("crouch_idle").has_meta("unbowed")) and ok
+	ok = _check("crouched and still: the standing look-around fidget waits (%.1f s)" % ma.still_t, ma.still_t < 0.01 and not ma.fidgeting) and ok
 	var HCfg = load("res://scripts/hunt/hunt_config.gd")
 	var HDir = load("res://scripts/hunt/hunt_director.gd")
 	var hd = HDir.new()
@@ -897,7 +920,8 @@ func _locomotion_checks(main) -> bool:
 	for i in 40:
 		await physics_frame
 	hs = Vector2(p.velocity.x, p.velocity.z).length()
-	ok = _check("crouch walk %.2f m/s" % hs, absf(hs - Loco.CROUCH_SPEED) < 0.25) and ok
+	var cbp: float = ma.tree.get("parameters/crouch_loco/blend_position")
+	ok = _check("crouch walk %.2f m/s (crouch blend position %.2f)" % [hs, cbp], absf(hs - Loco.CROUCH_SPEED) < 0.25 and absf(cbp - hs) < 0.3) and ok
 	Input.action_release("move_forward")
 	await _wait_physics(10)
 	# 4. a low ceiling keeps him down
