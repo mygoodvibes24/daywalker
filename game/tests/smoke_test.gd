@@ -1654,7 +1654,6 @@ func _boss_parry_checks(m, boss) -> bool:
 	p._parry()
 	await _wait_physics(4)
 	m.clear_slowmo()
-	print("DBG add dead %s windup %.2f hp %.1f/%.1f parry_t %.2f frenzy %.2f d %.2f exh %s st %.0f move %s" % [add.dead, add.windup_t, p.hp, hp0, p.parry_t, p.frenzy_t, add.global_position.distance_to(p.global_position), p.exhausted, p.stamina, p.move_name])
 	ok = _check("an add is parried during a boss fight (staggered %s)" % add.staggered, add.staggered and p.hp == hp0) and ok
 	if is_instance_valid(add):
 		m.enemies_root.remove_child(add)
