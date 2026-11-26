@@ -65,7 +65,7 @@ const MUSIC := {
 	# Silas Crowe's duel in the Undercroft Depths (map/undercroft_rival.gd)
 	"rival_crowe": "music/rival_crowe",
 }
-const MUSIC_DB := {"menu": -4.0, "explore": -6.0, "combat": -5.0, "boss": -4.5, "boss_marcus": -2.5, "boss_abomination": -3.5, "boss_knight": -2.5, "boss_hollow": -4.0, "rival_crowe": -4.5}
+const MUSIC_DB := {"menu": -4.0, "explore": -6.0, "combat": -5.0, "boss": -4.5, "boss_marcus": -2.5, "boss_abomination": -5.0, "boss_knight": -2.5, "boss_hollow": -4.0, "rival_crowe": -4.5}
 ## Boss id (hunt_config.gd) -> its music context; a boss not listed here plays "boss".
 const BOSS_THEMES := {"marcus": "boss_marcus", "abomination": "boss_abomination", "knight": "boss_knight", "alpha": "boss_hollow"}
 ## A duel (a woken field boss, the Undercroft rival) keeps its music while Sol is this close.

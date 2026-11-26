@@ -5,16 +5,17 @@ instrumentals: dark boom-bap / half-time trap with Japanese instruments (shamise
 shakuhachi) over gothic synths and strings. The prompts describe the style only; they name no song,
 artist or soundtrack.
 
-Balance: 198.45 credits before, 176.91 after. **Spent: 21.54 credits** (cap: 30). No retries.
+Balance: 198.45 credits before, 173.20 after. **Spent: 25.25 credits** (cap: 30). One retry (the Abomination).
 
 | # | Track | Model | Settings | Credits | Job id | Result |
 |---|---|---|---|---|---|---|
 | 1 | `boss_marcus` | elevenlabs_music_v2 | 56 s, force_instrumental | 3.59 | f1b5330b-7c37-49c7-a253-ea76def1431a | ok (10.7 s quiet intro skipped: the loop starts on the drop) |
-| 2 | `boss_abomination` | elevenlabs_music_v2 | 56 s, force_instrumental | 3.59 | 7fc7ef81-0066-417f-8ca6-7a623038496a | ok (11 s quiet intro and the fade-out tail cut: 14-bar loop) |
+| 2 | `boss_abomination` | elevenlabs_music_v2 | 56 s, force_instrumental | 3.59 | 7fc7ef81-0066-417f-8ca6-7a623038496a | rejected: an 11 s quiet intro and a fade-out left only a 39.5 s loop |
 | 3 | `boss_knight` | elevenlabs_music_v2 | 56 s, force_instrumental | 3.59 | e619b42a-45aa-47f4-832f-03b7c7a646db | ok |
 | 4 | `boss_hollow` | elevenlabs_music_v2 | 56 s, force_instrumental | 3.59 | 0759e342-2237-4d7e-941b-0c9bda3e27ad | ok (fade-out tail cut) |
 | 5 | `boss_shared` | elevenlabs_music_v2 | 56 s, force_instrumental | 3.59 | 8d0e83b7-418e-4016-bbd1-8aface47e698 | ok (a 4 s near-silent break at 31-35 s was spliced out on the bar grid, 2 bars) |
 | 6 | `rival_crowe` | elevenlabs_music_v2 | 56 s, force_instrumental | 3.59 | cc5634f6-9bd2-442c-9cac-1c86f5b9514c | ok |
+| 7 | `boss_abomination` (retry) | elevenlabs_music_v2 | 58 s, force_instrumental | 3.71 | d05f8522-6d3a-4af2-87dc-e22c41392198 | ok (3 bars of drums, then the full wall: the drum bars come back as a breakdown each loop) |
 
 Two first submissions of #3 and #4 were refused by the rate limit (max 2 concurrent jobs, no charge)
 and resubmitted once the first jobs finished.
@@ -31,7 +32,7 @@ loop=true. No fade-out tails.
 | Track | BPM | Loop (source s) | Bars | Length | OGG size | Loudness | MUSIC_DB |
 |---|---|---|---|---|---|---|---|
 | boss_marcus | 89.9 | 10.66-53.34 | 16 | 42.7 s | 853 KB | -15.1 LUFS | -2.5 |
-| boss_abomination | 85.1 | 11.31-50.82 | 14 | 39.5 s | 752 KB | -14.1 LUFS | -3.5 |
+| boss_abomination (retry) | 85.1 | 2.84-53.65 | 18 | 50.8 s | 995 KB | -12.6 LUFS | -5.0 |
 | boss_knight | 94.0 | 2.87-53.93 | 20 | 51.1 s | 967 KB | -14.9 LUFS | -2.5 |
 | boss_hollow | 88.0 | 2.73-51.80 | 18 | 49.1 s | 941 KB | -13.6 LUFS | -4.0 |
 | boss_shared | 92.1 | 3.28-52.79 minus 30.00-35.21 | 17 | 44.3 s | 877 KB | -13.0 LUFS | -4.5 |
@@ -46,6 +47,7 @@ calling it final. Every request was sent with `force_instrumental`.
 3. **boss_knight:** Original dark cinematic boom-bap hip-hop instrumental, 94 BPM, no vocals, no lyrics. A swordsman's duel: sharp fast shamisen riffs as the lead hook, ringing steel blade-scrape textures and metallic percussion, hard kick and cracking snare, tight hi-hats, dusty vinyl crackle, deep 808 bass. Taiko hits on the turnarounds, a brief koto flourish, dark gothic strings and a cold synth pad underneath, vampire knight menace. Driving and precise, steady loopable groove start to finish, no intro build, no fade-out ending.
 4. **boss_hollow:** Original feral dark trap hip-hop instrumental, half-time feel at 88 BPM, no vocals, no lyrics. A werewolf pack leader in a moonlit swamp: pounding tribal taiko ensemble and rolling toms, booming kick, snapping snare, deep growling 808 bass, gritty vinyl noise. Eerie howling wind and wolf-like synth glides, breathy wild shakuhachi cries, plucked shamisen pattern, ominous gothic drones and tense low strings. Primal and savage, combat-ready, steady loopable groove start to finish, no intro build, no fade-out ending.
 5. **boss_shared:** Original dark cinematic boom-bap hip-hop instrumental, 92 BPM, no vocals, no lyrics. A battle theme for a lone sun-blooded swordsman hunting monsters in a rainy gothic port city: heavy kick and snare, crisp hi-hats, gritty vinyl crackle, deep 808 bass. A dark minor shamisen and koto hook, taiko hits, a shakuhachi phrase, ominous gothic synth pads and tense string ostinato. Urgent and driving, combat-ready, steady loopable groove start to finish, no intro build, no fade-out ending.
+7. **boss_abomination (retry, used):** Original brutal dark half-time trap hip-hop instrumental, 85 BPM feel, no vocals, no lyrics. Starts at full intensity on the very first downbeat and stays there: no quiet intro, no breakdown, no fade-out ending. Huge and monstrous: massive distorted 808 sub bass, crushing kick and slammed snare on every bar, thunderous taiko war drums and low toms, gritty vinyl texture and tape saturation. Detuned shamisen stabs, metallic anvil hits, a growling bowed-bass drone, ominous gothic organ and horror string clusters, low brass blasts. Relentless, heavy and combat-ready, one steady loopable groove from start to finish.
 6. **rival_crowe:** Original cold, restrained dark hip-hop instrumental, 86 BPM boom-bap, no vocals, no lyrics. A mirror-match duel in a flooded crypt: a lone mournful shakuhachi melody with lots of space over a hard dry kick and snare, sparse hi-hats, dusty vinyl crackle, deep sustained 808 bass. Faint koto harmonics, a single distant taiko hit, cold glassy gothic synth pad, dripping-water reverb, a quiet low cello drone. Tense, minimal and icy, steady loopable groove start to finish, no intro build, no fade-out ending.
 
 ## Where each plays (`game/scripts/audio/audio.gd`)

@@ -43,12 +43,12 @@ Generated on Higgsfield (9.9 credits; job ids in `docs/assets_r3/LEDGER.md`, pro
 - **Creature SFX (Mirelo):** `werewolf_roar`, `claw_swipe` (+16 dB), `pounce_whoosh`, `vampire_hiss` (a second `vamp_hiss` variant), `vampire_lunge_whoosh`, `boss_slam_impact`, `body_fall`; timed to the round-3 creature clips in `audio.gd`.
 
 ## Round 4: hip-hop boss music (2026-11-26)
-Generated on Higgsfield with `elevenlabs_music_v2` (`force_instrumental`, 56 s each, 21.54 credits; job ids, prompts and loop points in `docs/assets_r4/LEDGER.md`). Original instrumentals in one style: dark cinematic boom-bap / half-time trap (heavy kick and snare, vinyl grit, 808 bass) with shamisen, koto, taiko and shakuhachi over gothic synths and strings. Loop-cut on whole bars with a 0.6 s equal-power seam, no fade-out tails, OGG Vorbis q5 stereo 44.1 kHz, imported with loop=true.
+Generated on Higgsfield with `elevenlabs_music_v2` (`force_instrumental`, 56-58 s each, 25.25 credits with one retry; job ids, prompts and loop points in `docs/assets_r4/LEDGER.md`). Original instrumentals in one style: dark cinematic boom-bap / half-time trap (heavy kick and snare, vinyl grit, 808 bass) with shamisen, koto, taiko and shakuhachi over gothic synths and strings. Loop-cut on whole bars with a 0.6 s equal-power seam, no fade-out tails, OGG Vorbis q5 stereo 44.1 kHz, imported with loop=true.
 
 | File | Plays in | Character | Length |
 |---|---|---|---|
 | `music/boss_marcus.ogg` | Marcus Crane, the Velvet Fang | sleek crimson luxury: koto and shamisen hook, velvet strings, harpsichord, 90 BPM | 42.7 s |
-| `music/boss_abomination.ogg` | Seraphine's Abomination | brutal half-time trap: distorted 808, taiko war drums, anvils, organ, 85 BPM | 39.5 s |
+| `music/boss_abomination.ogg` | Seraphine's Abomination | brutal half-time trap: distorted 808, taiko war drums, anvils, organ, 85 BPM | 50.8 s |
 | `music/boss_knight.ogg` | Cassius Vane, Lucien's Blood Knight | duelist boom-bap: sharp shamisen riffs, steel scrapes, 94 BPM | 51.1 s |
 | `music/boss_hollow.ogg` | The Hollow Alpha | feral trap: tribal taiko, howling textures, wild shakuhachi, 88 BPM | 49.1 s |
 | `music/boss_shared.ogg` | field bosses and any boss without a theme | urgent boom-bap: shamisen and koto hook, taiko, string ostinato, 92 BPM | 44.3 s |
