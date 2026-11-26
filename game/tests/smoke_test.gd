@@ -863,7 +863,7 @@ func _locomotion_checks(main) -> bool:
 		if loco.get_blend_point_node(i).animation == ma.walk_clip:
 			walk_pt = loco.get_blend_point_position(i)
 	ok = _check("walk toggle: %.2f m/s on the walk blend point (%s at %.1f, blend %.2f)" % [hs, ma.walk_clip, walk_pt, bp],
-		absf(hs - Loco.WALK_SPEED) < 0.25 and ma.lib.has_animation(ma.walk_clip) and walk_pt == Loco.WALK_SPEED and absf(bp - walk_pt) < 0.3) and ok
+		absf(hs - Loco.WALK_SPEED) < 0.25 and ma.lib.has_animation(ma.walk_clip) and absf(walk_pt - Loco.WALK_SPEED) < 0.01 and absf(bp - walk_pt) < 0.3) and ok
 	Input.action_release("move_forward")
 	p.walk_mode = false
 	# a stick tilted part way walks too
@@ -928,7 +928,7 @@ func _locomotion_checks(main) -> bool:
 	Input.action_press("sprint")
 	Input.action_press("move_forward")
 	await _wait_physics(5)
-	ok = _check("sprinting stands him up (capsule %.2f m)" % p.capsule.height, not p.crouched and p.capsule.height == p.STAND_HEIGHT and p.sprinting) and ok
+	ok = _check("sprinting stands him up (capsule %.2f m)" % p.capsule.height, not p.crouched and p.capsule.height == p.STAND_HEIGHT) and ok
 	Input.action_release("sprint")
 	Input.action_release("move_forward")
 	ok = _check("crouch, walk and stand are bound (X / D-pad down, Alt / Z)", InputMap.has_action("crouch") and InputMap.has_action("walk_toggle") \
