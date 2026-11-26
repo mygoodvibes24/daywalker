@@ -1445,6 +1445,18 @@ func _audio_checks(main) -> bool:
 		if s == null or s.get_length() < 0.3 or float(l.duration) <= 0.0 or not dlg.speakers.has(l.speaker):
 			bad.append(id)
 	ok = _check("all %d dialogue lines have audio that loads %s" % [dlg.lines.size(), bad], bad.is_empty() and dlg.lines.size() >= 45) and ok
+	# Sol's re-recorded voice (asset round 4): every Sol line loads an Ogg Vorbis stream of a sane length
+	var sol_n := 0
+	var sol_bad := []
+	for id in dlg.lines:
+		var l: Dictionary = dlg.lines[id]
+		if l.speaker != "sol":
+			continue
+		sol_n += 1
+		var s = load(l.audio) if ResourceLoader.exists(l.audio) else null
+		if not (s is AudioStreamOggVorbis) or s.get_length() < 0.5 or s.get_length() > 6.0:
+			sol_bad.append(id)
+	ok = _check("all %d Sol lines load their voice %s" % [sol_n, sol_bad], sol_bad.is_empty() and sol_n >= 22) and ok
 	var missing := []
 	for n in audio.SFX:
 		for path in audio.SFX[n]:

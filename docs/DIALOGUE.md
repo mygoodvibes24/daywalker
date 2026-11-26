@@ -14,7 +14,7 @@ Rules: one voice channel, so lines never overlap (and a speaker never talks over
 
 | Speaker | Direction |
 |---|---|
-| Sol | low, calm, dry wit, a Southern edge |
+| Sol | deep, gravelly baritone; cold, clipped, controlled menace with dry wit; snaps into harsh, aggressive barks in combat (preset Gideon since round 4, see `docs/assets_r4/LEDGER.md`) |
 | Nia | smart, warm and wry, always on comms |
 | Count Lucien | charming, theatrical, old-world (working name; the critic report suggests a rename) |
 | Marcus Crane | Velvet Court duelist, smooth and vain |

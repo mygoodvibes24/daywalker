@@ -12,7 +12,7 @@ All audio in `game/assets/audio/` was generated for Daywalker through the Higgsf
 
 | Character | Preset voice | voice_id |
 |---|---|---|
-| Sol | Brooks | `c2acff45-84b2-4974-892d-89fa2d4e5598` |
+| Sol | Gideon (since round 4; was Brooks, `c2acff45-84b2-4974-892d-89fa2d4e5598`) | `1ad38ba4-9cc4-4f2f-9fde-b0fefdf67ae5` |
 | Nia | Naomi | `caeba733-3c17-43db-863e-69c7025512cd` |
 | Count Lucien | Alistair | `d9d5c263-f84e-4752-97b5-3750fcc6fd2f` |
 | Marcus Crane | Julian | `95429266-c0ac-4137-a209-63b8812b0f23` |
@@ -53,3 +53,6 @@ Generated on Higgsfield with `elevenlabs_music_v2` (`force_instrumental`, 38 s e
 | `music/boss_hollow.ogg` | The Hollow Alpha | feral tribal-industrial drums, growling 808, 92 BPM | 31.3 s |
 | `music/boss_shared.ogg` | field bosses and any boss without a theme | solid hunter theme: boom-bap, industrial arpeggio, techno pulse, 95 BPM | 30.3 s |
 | `music/rival_crowe.ogg` | Silas Crowe, the Pale Daywalker (Undercroft duel) | cold minimal techno-hip-hop, 90 BPM | 32.0 s |
+
+## Round 4: Sol's new voice (2026-11-26)
+Generated on Higgsfield with `elevenlabs_v4` and the preset voice **Gideon** (`1ad38ba4-9cc4-4f2f-9fde-b0fefdf67ae5`), 7.38 credits including tests. The owner asked for a more aggressive Sol. The new voice is a deep, gravelly baritone with controlled menace on the story lines and harsh barks in combat. It is an existing preset picked from a written brief; no real person's voice was cloned or imitated. All 22 Sol voice files (24 dialogue ids; `boss_knight_death` and `rival_death` share `bark_kill_1`) were replaced in place under the same names, with the subtitles unchanged. Each line was directed with an Eleven v4 audio tag (for example `[low, dry, deadpan]` or `[harsh, aggressive]`). Processing: silence trimmed, normalised to about -16.5 LUFS (lair lines) or -15.5 LUFS (barks), OGG Vorbis q2, mono 22.05 kHz. Job ids, tags and the voice selection method are in `docs/assets_r4/LEDGER.md`.
