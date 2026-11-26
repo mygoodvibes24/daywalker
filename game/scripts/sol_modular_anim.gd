@@ -2,7 +2,7 @@ extends RefCounted
 ## Animation for the modular Sol (res://assets/characters/sol/sol_modular.scn).
 ## Builds an AnimationTree over the scene's clip library:
 ##
-##   loco (BlendSpace1D idle 0 / walk 1.6 / run 4.6-7.5 / sprint 13 m/s) --+
+##   loco (BlendSpace1D idle 0 / walk 1.1 / run 4.6-7.5 / sprint 13 m/s) --+
 ##   crouch_loco (crouch_idle / crouch_walk; only once those clips are installed) -- crouch (Blend2)
 ##   stance (combat idle, looped) ----------------------- combat (Blend2: near enemies, standing)
 ##   jump (re-seeked on take-off) ----------------------- air (Blend2)
@@ -16,8 +16,8 @@ extends RefCounted
 ## coat simulation (process priority 100) always sees this frame's pose. A SwordWrist modifier on the
 ## skeleton keeps the blade from pointing at the sky in locomotion; it is eased off during moves.
 ##
-## Round 3 (locomotion): the walk is a real blend point (sol_locomotion.gd bakes a calm walk from the
-## run until a bought "walk" clip is installed); ArmPose (sol_arm_pose.gd) lets the empty right arm
+## Round 3 (locomotion): the walk is a real blend point (the bought "walk" clip, Casual_Walk; without it
+## sol_locomotion.gd bakes a stand-in from the run); ArmPose (sol_arm_pose.gd) lets the empty right arm
 ## hang and swing while the sword is sheathed; Crouch (sol_crouch_pose.gd) bends the pose into a
 ## crouch until "crouch_idle" / "crouch_walk" clips exist. Skeleton modifier order:
 ## Strafe, Crouch, ArmPose, DrawIK (sol_sheath.gd), SwordWrist.
@@ -88,7 +88,7 @@ func setup(model: Node) -> bool:
 	loco.max_space = 16.0
 	loco.sync = true # every point keeps time: the two run points stay in step
 	loco.add_blend_point(_clip("idle"), 0.0)
-	loco.add_blend_point(_clip(walk_clip), SolLoco.WALK_SPEED)
+	loco.add_blend_point(_clip_at(walk_clip, SolLoco.clip_rate(walk_clip, SolLoco.WALK_SPEED)), SolLoco.WALK_SPEED)
 	loco.add_blend_point(_clip("run"), SolLoco.RUN_POINT)
 	loco.add_blend_point(_clip("run"), 7.5)
 	loco.add_blend_point(_clip("sprint"), 13.0)
@@ -102,7 +102,7 @@ func setup(model: Node) -> bool:
 		cl.min_space = 0.0
 		cl.max_space = 8.0
 		cl.add_blend_point(_clip("crouch_idle"), 0.0)
-		cl.add_blend_point(_clip("crouch_walk"), SolLoco.CROUCH_SPEED)
+		cl.add_blend_point(_clip_at("crouch_walk", SolLoco.clip_rate("crouch_walk", SolLoco.CROUCH_SPEED)), SolLoco.CROUCH_SPEED)
 		bt.add_node("crouch_loco", cl)
 		bt.add_node("crouch", AnimationNodeBlend2.new())
 		bt.connect_node("crouch", 0, "loco_speed")
@@ -167,6 +167,14 @@ func setup(model: Node) -> bool:
 	tree.active = true
 	tree.set("parameters/hit_speed/scale", 1.6)
 	tree.set("parameters/loco_speed/scale", 1.0)
+	for space in ["loco", "crouch_loco"]:
+		if not bt.has_node(space):
+			continue
+		var bs := bt.get_node(space) as AnimationNodeBlendSpace1D
+		for i in bs.get_blend_point_count():
+			var n := bs.get_blend_point_node(i)
+			if n.has_meta("rate"):
+				tree.set("parameters/%s/%d/rate/scale" % [space, i], float(n.get_meta("rate")))
 	var skel := model.get_node_or_null("Skeleton3D") as Skeleton3D
 	if skel != null:
 		strafe = SolStrafe.new()
@@ -221,6 +229,21 @@ func _tame_root_yaw() -> void:
 			var keep := clampf(dev * YAW_KEEP, -deg_to_rad(YAW_MAX), deg_to_rad(YAW_MAX))
 			a.track_set_key_value(t, k, (Quaternion(Vector3.UP, keep - dev) * q).normalized())
 		a.set_meta("yaw_tamed", true)
+
+
+## A clip played at `rate` (a small blend tree: clip -> time scale), for a blend point whose clip has a
+## different pace from the ground speed it stands for.
+static func _clip_at(name: String, rate: float) -> AnimationRootNode:
+	if absf(rate - 1.0) < 0.02:
+		return _clip(name)
+	var t := AnimationNodeBlendTree.new()
+	t.add_node("clip", _clip(name))
+	var ts := AnimationNodeTimeScale.new()
+	t.add_node("rate", ts)
+	t.connect_node("rate", 0, "clip")
+	t.connect_node("output", 0, "rate")
+	t.set_meta("rate", rate) # the scale is a parameter: set after the tree is built (setup)
+	return t
 
 
 static func _clip(name: String) -> AnimationNodeAnimation:

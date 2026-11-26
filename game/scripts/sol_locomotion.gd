@@ -14,8 +14,12 @@ extends RefCounted
 ## the bounce mostly go. The same goes for "crouch_idle" / "crouch_walk" (sol_crouch_pose.gd is the
 ## stand-in).
 
-const WALK_SPEED := 1.6 # the walk: matches walk_proc's planted-foot speed (no foot slide)
-const CROUCH_SPEED := 1.5 # the crouch walk
+const WALK_SPEED := 1.1 # the walk (a slow, calm walk)
+const CROUCH_SPEED := 1.0 # the crouch walk
+## Each walk clip's own planted-foot speed (m/s): the clip plays at WALK_SPEED / this, so the feet don't
+## slide. "walk": Casual_Walk_inplace (library id 613, a slow stroll, ~1.4 s a stride); "walk_proc": the
+## stand-in baked below.
+const CLIP_SPEED := {"walk": 0.73, "walk_proc": 1.6, "crouch_walk": 1.0}
 const RUN_POINT := 4.6 # where the blend is all run (the run clip's own pace is ~3-4 m/s)
 const WALK_RATE := 0.62 # walk_proc plays the run's cycle at this share of its speed (1.18 s a cycle)
 const STICK_WALK := 0.55 # stick tilt up to here walks; full speed from STICK_RUN
@@ -48,6 +52,11 @@ static func speed_for_tilt(tilt: float, run: float, cap: float = INF) -> float:
 	if cap < INF:
 		v = minf(v, cap * clampf(tilt / STICK_WALK, 0.3, 1.0))
 	return v
+
+
+## The playback rate that matches clip `name` to the ground `speed`.
+static func clip_rate(name: String, speed: float) -> float:
+	return speed / float(CLIP_SPEED.get(name, speed))
 
 
 ## Adds "walk_proc" to the clip library (once; it is shared by every Sol). `skel` gives the rest pose.

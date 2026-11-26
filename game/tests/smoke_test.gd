@@ -862,7 +862,7 @@ func _locomotion_checks(main) -> bool:
 	var loco = ma.bt.get_node("loco")
 	var walk_pt := -1.0
 	for i in loco.get_blend_point_count():
-		if loco.get_blend_point_node(i).animation == ma.walk_clip:
+		if absf(loco.get_blend_point_position(i) - Loco.WALK_SPEED) < 0.01:
 			walk_pt = loco.get_blend_point_position(i)
 	ok = _check("walk toggle: %.2f m/s on the walk blend point (%s at %.1f, blend %.2f)" % [hs, ma.walk_clip, walk_pt, bp],
 		absf(hs - Loco.WALK_SPEED) < 0.25 and ma.lib.has_animation(ma.walk_clip) and absf(walk_pt - Loco.WALK_SPEED) < 0.01 and absf(bp - walk_pt) < 0.3) and ok

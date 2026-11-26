@@ -23,6 +23,7 @@ All on the same 24-joint Meshy rig of Sol's body. The build tool (`game/tools/bu
 | Weapon_Combo_2 | 241 | `sol_mod_anim_weapon_combo2.glb` | the combo for heavy blades (cleaver family), cut into 3 hits |
 | Combat_Stance | 89 | `sol_mod_anim_stance.glb` | combat idle with enemies within 10 m |
 | Right_Hand_Sword_Slash | 219 | `sol_mod_anim_quick_slash.glb` | sprint attack |
+| Casual_Walk_inplace | 613 | `sol_mod_anim_walk.glb` | the walk (bought 2026-11-26, job 0e725925-830a-44cd-82e5-70474d7877d4, 8 credits): a calm stroll, 4.2 s loop, planted foot ~0.73 m/s; played at 1.5x for the 1.1 m/s walk (`sol_locomotion.gd` CLIP_SPEED) |
 | Heavy_Hammer_Swing | 128 | `sol_mod_anim_hammer_swing.glb` | the Arsenal (round 4): cut into `hammer` (0.3-1.87 s, the full overhead wind-up, slam at 1.55 s) and `hammer_slam` (1.05-1.87 s, just the drop). War hammer chain finisher and heavy, the Leaping Slam art, the plunge landing, the greatsword / cleaver finishers |
 | Axe_Spin_Attack | 238 | `sol_mod_anim_axe_spin.glb` | the Arsenal: cut into `axe_spin` (0.1-1.6 s, a full turn, the sweep at 0.92 s) and `axe_sweep` (0.6-1.35 s, the cut alone). Scythe and halberd sweeps, the chain-whip's circle, the Whirlwind art |
 | Double_Blade_Spin | 91 | `sol_mod_anim_double_spin.glb` | the Arsenal: cut into `dspin` (0.2-1.9 s, a 1.9 m lunging flurry: right 0.45 / spin 0.85 / left 1.35 / right 1.55 s), `dspin_a` and `dspin_b` (its halves). Twin-stake chain hits 3-4 and heavy, the Crimson Flurry dash-through art |
@@ -32,29 +33,31 @@ model at 1.88 m; jobs d0dbe736 / 8f9f079f / 564f667d). Every other Arsenal move 
 (`game/scripts/items/arsenal_moves.gd` says which clip, window and speed each move uses). The build tool also adds
 a `BladeL` socket in the left fist for the twin stakes.
 
-## Locomotion stand-ins and the clips to buy next (round 3)
-Sol owns no walk or crouch clips. Until they are bought, code stands in for them:
-- **Walk:** `game/scripts/sol_locomotion.gd` `bake_walk()` builds `walk_proc` at load time from the run: it plays the run's cycle at 0.62 of its speed, pulls the legs toward the straight rest legs and the spine, head and arms toward the idle, and keeps 30% of the hips' bounce. It sits on the locomotion BlendSpace1D at `WALK_SPEED` (1.6 m/s, where its planted foot doesn't slide). A part-tilted stick or the walk toggle (Alt / Z) walks.
+## Locomotion: the walk, the empty arm, the crouch (round 3)
+The walk clip is bought (above). The crouch clips are not yet; code stands in for them:
+- **Walk:** the bought `walk` sits on the locomotion BlendSpace1D at `WALK_SPEED` (1.1 m/s), played at `WALK_SPEED / CLIP_SPEED["walk"]`. Without it, `game/scripts/sol_locomotion.gd` `bake_walk()` builds a stand-in `walk_proc` at load time from the run (the run's cycle at 0.62 of its speed, legs pulled toward the straight rest legs, spine, head and arms toward the idle, 30% of the hips' bounce). A part-tilted stick or the walk toggle (Alt / Z) walks.
 - **The empty right arm:** `game/scripts/sol_arm_pose.gd` mirrors the clip's free left arm onto the right one while the sword is sheathed, with the swing flipped so the arms alternate. Every clip Sol owns has a sword grip in the right hand, so this stays even after the clips below are bought (they have empty hands anyway).
 - **Crouch:** `game/scripts/sol_crouch_pose.gd` drops the hips 0.3 m, re-solves both legs with a two-bone IK so the feet stay where the clip put them, and leans the spine. The crouch walk is this pose over the walk.
 
-### What to buy (Meshy library via Higgsfield, 8 credits each, 24 credits for all three)
+### Crouch clips still to buy (Meshy library via Higgsfield, 8 credits each)
+The 2026-11-26 purchase stopped after the walk: the session's permission system declined the two crouch rigging calls, so they need the owner's go-ahead in a session that allows them.
 Pick the `_inplace` versions: the build strips drift from looped clips, but in-place clips need no stripping.
 
 | Clip | Library id | Install as | Notes |
 |---|---|---|---|
-| Casual_Walk_inplace | 613 | `sol_mod_anim_walk.glb` | the calm walk (root-motion version: 30). Alternatives: walking_2_inplace (692), Thoughtful_Walk (121) |
+| ~~Casual_Walk_inplace~~ | 613 | `sol_mod_anim_walk.glb` | bought and installed. Alternatives seen: walking_2_inplace (692, a feminine sway), Thoughtful_Walk (121) |
 | Cautious_Crouch_Walk_Forward_inplace | 616 | `sol_mod_anim_crouch_walk.glb` | the crouch walk (root-motion version: 524) |
 | CrouchLookAroundBow | 258 | `sol_mod_anim_crouch_idle.glb` | the only crouched idle in the library; its arms are posed for a bow. Optional: without it the game holds the crouch walk's first frame as the crouch idle (`SolLoco.ensure_crouch_idle`) |
 
-The library has no plain crouch idle (searched: crouch, sneak, kneel, the Idle category). If only one clip can be bought, buy the walk (613); the crouch can wait on the procedural pose.
+The library has no plain crouch idle (searched: crouch, sneak, kneel, the Idle category). Previews checked (frame strips of the library GIFs): Cautious_Crouch_Walk_Forward is a low sneak with the arms forward; CrouchLookAroundBow is a deeper squat than that walk, so the held first frame of the crouch walk may blend better as the crouch idle. Set `CLIP_SPEED["crouch_walk"]` to the bought clip's planted-foot speed.
 
 ### How to install
-1. Generate the clip on Sol's rig through Higgsfield (the same way the clips above were made: Sol's rigged body with `enable_animation=true` and the `animation_action_id` above). Check the cost first; each is 8 credits.
+1. Generate the clip on Sol's body through Higgsfield: `generate_3d` with `model: 3d_rigging`, `model_url` = Sol's body GLB (https://d2ol7oe51mr4n9.cloudfront.net/user_3M3cbVYOpQkCAbZXwwBloXVahos/1cc3de5d-2289-444d-8383-29ffe7f0fd64.glb), `height_meters: 1.88`, `enable_animation: true`, `animation_action_id` from the table. Preflight with `get_cost: true` (8 credits).
 2. Download the rigged GLB and strip it to the skeleton and clip: `godot --headless -s res://tools/strip_rig_glb.gd -- <download.glb> res://assets/characters/sol/sol_mod_anim_<name>.glb anim`, using the "Install as" name above (`walk`, `crouch_walk`, `crouch_idle`).
 3. Import (`godot --headless --import`), then rebuild the scene: `godot --headless -s res://tools/build_sol_modular.gd`. The build picks up every `sol_mod_anim_<name>.glb` by its name; `walk`, `crouch_idle` and `crouch_walk` are already in its `LOOPED` list (looped, drift stripped).
 4. Nothing else to change. `sol_modular_anim.gd` uses a clip named `walk` in place of `walk_proc` at the walk blend point. Once `crouch_walk` exists it adds a crouch BlendSpace1D (crouch idle 0 / crouch walk at `CROUCH_SPEED`) behind a Blend2 and turns the procedural crouch pose off.
-5. Tune `WALK_SPEED` / `CROUCH_SPEED` in `sol_locomotion.gd` to the new clips' planted-foot speed (watch the feet against the floor for sliding), then run the smoke test (it checks the walk blend point and the crouch).
+5. Measure the clip's planted-foot speed (sample the foot bones while they are on the floor) into `CLIP_SPEED` in `sol_locomotion.gd`; the clip then plays at the rate that matches `WALK_SPEED` / `CROUCH_SPEED`. Run the smoke test (it checks the walk blend point and the crouch).
+6. The rebuild also rewrites the four `sol_sword_*.scn` files byte-for-byte differently with the same content; restore them with git unless the swords changed. Textures are not re-exported, so `tools/sol_texture_fixes.py` doesn't need re-running.
 
 The 11 MB rig downloads stay out of the repo; `game/tools/strip_rig_glb.gd <src> <dst> anim` makes the ~50 KB skeleton-only files.
 

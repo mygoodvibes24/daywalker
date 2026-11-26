@@ -32,6 +32,8 @@ Negative prompt:
   Weapon_Combo_2, Combat_Stance, Right_Hand_Sword_Slash; see docs/animation_reference/README.md). On
   2026-11-18 Idle_02 (library id 11, same rig) was added as Sol's standing idle (`sol_mod_anim_idle02.glb`);
   the rig's original look-around idle is kept only as a long-idle fidget (`idle_look`).
+  On 2026-11-26 Casual_Walk_inplace (library id 613, same body, 8 credits) was added as the walk
+  (`sol_mod_anim_walk.glb`).
 - **What ships:** `sol_modular.scn` and the four `sol_sword_*.scn` scenes, plus the extracted texture maps
   (`sol_mod_*_Color/NormalGL/ORM_*`; VRAM compressed, 2048 px max for body, head and coat, 1024 px for the hands
   and swords). The runtime loads nothing else: the `.glb` files are build sources and are excluded from exports.
