@@ -1446,6 +1446,13 @@ func apply_quality() -> void:
 			continue
 		gi.visibility_range_begin = e[1] * k
 		gi.visibility_range_end = e[2] * k
+	# practical lights fade out past the view distance (each lit object pays per light it touches)
+	for l in find_children("*", "OmniLight3D", true, false):
+		var ol := l as OmniLight3D
+		ol.distance_fade_enabled = true
+		ol.distance_fade_begin = maxf(45.0, ol.omni_range * 2.5) * k
+		ol.distance_fade_length = 12.0
+		ol.distance_fade_shadow = ol.distance_fade_begin * 0.5
 	var fd := WQ.foliage_density()
 	for mm: MultiMesh in _q_foliage:
 		mm.visible_instance_count = -1 if fd >= 0.999 else ceili(mm.instance_count * fd)
@@ -1588,6 +1595,12 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 		if cell > 0.0:
 			var xz: PackedStringArray = group.split("|")[0].substr(1).split("_")
 			shift = Vector3((int(xz[0]) + 0.5) * cell, 0, (int(xz[1]) + 0.5) * cell)
+		# frame budget: a caster chunk's shadow is drawn from one merged single-surface proxy
+		# (positions + normals) instead of once per material surface (~10 per chunk)
+		var casts_group: bool = group.ends_with("|cast")
+		var sv := PackedVector3Array()
+		var sn := PackedVector3Array()
+		var si := PackedInt32Array()
 		for key in keys:
 			var bt: Batch = batches[key]
 			if bt.i.is_empty():
@@ -1597,6 +1610,12 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 					bt.v[k] -= shift
 			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, bt.arrays())
 			mesh.surface_set_material(mesh.get_surface_count() - 1, M[key.split("|")[1]])
+			if casts_group:
+				var base := sv.size()
+				sv.append_array(bt.v)
+				sn.append_array(bt.n)
+				for q in bt.i:
+					si.append(q + base)
 		for key in keys:
 			batches.erase(key)
 		if mesh.get_surface_count() == 0:
@@ -1605,6 +1624,24 @@ func _flush(prefix := "", parent: Node3D = null, offset := Vector3.ZERO) -> void
 		mi.name = "Chunk_" + group.replace("|", "_")
 		mi.mesh = mesh
 		if group.ends_with("nocast"):
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		elif mesh.get_surface_count() > 1 and not si.is_empty():
+			var arr := []
+			arr.resize(Mesh.ARRAY_MAX)
+			arr[Mesh.ARRAY_VERTEX] = sv
+			arr[Mesh.ARRAY_NORMAL] = sn
+			arr[Mesh.ARRAY_INDEX] = si
+			var smesh := ArrayMesh.new()
+			smesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+			var proxy := MeshInstance3D.new()
+			proxy.name = mi.name + "_shadow"
+			proxy.mesh = smesh
+			proxy.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+			proxy.position = shift if cell > 0.0 else Vector3.ZERO
+			if kind == "K":
+				proxy.visibility_range_end = main_range
+				proxy.visibility_range_end_margin = 10.0
+			(parent if parent else self).add_child(proxy)
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if cell > 0.0:
 			mi.position = shift
@@ -1950,6 +1987,8 @@ static func _wall_row(bt: Batch, f: Facade, y0: float, y1: float, holes: Array, 
 
 func _window_uv(style: String) -> Array:
 	var lit_p := 0.32 if style != "docks" else 0.15
+	if style == "velvet":
+		lit_p = 0.22 # sparse, warm (the grey grid of pale squares read as an office block)
 	var r := rng.randf()
 	if r < 0.025:
 		return [cell_uv(rng.randi() % 4, 2), true] # flickering
@@ -2035,6 +2074,17 @@ func _building(spec: Dictionary) -> float:
 			for k in n_cols + 1:
 				var pu := margin + bay * k
 				fbox(stone, f, pu - 0.18, gh, pu + 0.18, H + par + 0.6, 0.0, 0.16, tcol)
+			# V2 (critic R2, concept 03): crimson and magenta neon running up the outer piers of
+			# half the facades (merged into the neon batch: no extra draws)
+			if rng.randf() < 0.55 and n_cols >= 2:
+				var nb := _b("neon_flicker" if rng.randf() < 0.15 else "neon")
+				var nuv := neon_uv([0, 2, 0, 3][rng.randi() % 4])
+				var k0 := nb.v.size()
+				for pu: float in [margin, margin + bay * n_cols]:
+					fbox(nb, f, pu - 0.05, gh + 0.4, pu + 0.05, H - 0.9, 0.16, 0.24, Color.WHITE)
+				fbox(nb, f, margin, gh + 0.25, margin + bay * n_cols, gh + 0.33, 0.16, 0.24, Color.WHITE)
+				for q in range(k0, nb.v.size()):
+					nb.t[q] = nuv
 		# parapet + cornice
 		fq(wall, f, 0, H, f.w, H + par, 0.0, wcol)
 		var corn := tcol if style != "docks" else wcol * Color(0.8, 0.8, 0.8)
@@ -2231,8 +2281,9 @@ func _gallery(spec: Dictionary, f: Facade, levels: int) -> void:
 		var k1 := lace.v.size()
 		fbox(metal, f, u - 0.05, 0.0, u + 0.05, roof_y - 0.14, D - 0.15, D - 0.05, Color.WHITE, false)
 		_solid_uv(lace, k1)
-		# QA2 #8: the iron columns were ghosts (Sol, enemies and the camera passed through them)
-		post_collider(f.p(u, 0, D - 0.1), 0.09, roof_y)
+		# QA2 #8: the camera arm passed through the iron columns. They stop the camera only (a
+		# solid post every 2.6 m along each kerb broke the enemies' street paths in the smoke test)
+		cam_blocker(f.p(u, roof_y * 0.5, D - 0.1), Vector3(0.18, roof_y, 0.18), Basis(f.r, Vector3.UP, f.n))
 	# ... and the gallery decks stop the camera arm instead of letting it poke through the floor
 	cam_blocker(f.p(f.w * 0.5, gh - 0.07, D * 0.5), Vector3(f.w, 0.3, D), Basis(f.r, Vector3.UP, f.n))
 	# hanging ferns in baskets between the columns

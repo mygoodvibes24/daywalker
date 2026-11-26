@@ -156,6 +156,10 @@ static func estimate(root: Node, xf: Transform3D, fov := 70.0, far := 4000.0, sh
 		var local_aabb: AABB = gi.get_aabb()
 		if gi.has_meta("bounds"):
 			local_aabb = gi.get_meta("bounds") # MultiMeshes (map/world_quality.gd tag_bounds)
+		elif gi is MultiMeshInstance3D and local_aabb.size == Vector3.ZERO:
+			# a MultiMesh built without world_quality.tag_bounds(): the dummy renderer can't place
+			# it, so it is left out (cemetery.gd's grave MultiMeshes until its owner tags them)
+			continue
 		var aabb: AABB = gi.global_transform * local_aabb
 		var d := cam.distance_to(aabb.get_center())
 		if not _range_ok(gi, d):

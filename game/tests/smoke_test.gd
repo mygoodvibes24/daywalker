@@ -264,7 +264,7 @@ func _gameplay_checks(main) -> bool:
 	p.hp = 1e9
 	p.max_hp = 1e9
 	# all on streets (x or z on a multiple of 20), each with buildings in the way
-	var spots := [Vector3(40, 0.5, 52), Vector3(-20, 0.5, 48), Vector3(52, 0.5, -40), Vector3(-40, 0.5, -48),
+	var spots := [Vector3(40, 0.5, 52), Vector3(-20, 0.5, 48), Vector3(52, 0.5, -20), Vector3(-40, 0.5, -48),
 		Vector3(60, 0.5, 33), Vector3(33, 0.5, 60), Vector3(-60, 0.5, 32), Vector3(32, 0.5, -60)]
 	var pack: Array = []
 	for s in spots:
@@ -1971,7 +1971,8 @@ const BUDGET_SPOTS := [
 	["the Hollow arena", Vector3(10, 0, -122)], ["lake shore", Vector3(60, 0, -200)],
 	["docks yard", Vector3(-170, 0, -60)], ["Velvet Mile", Vector3(150, 0, 100)],
 	["Old Quarter street", Vector3(-30, 0, 50)], ["bayou", Vector3(185, 0, -105)],
-	["the plaza", Vector3(0, 0, 30)],
+	["the plaza", Vector3(0, 0, 30)], ["the plaza well", Vector3(6, 0, 10)],
+	["the cemetery dig site", Vector3(52, 0, 134)],
 ]
 const BUDGET_EST_DRAWS := 280
 const BUDGET_EST_TRIS := 900000
